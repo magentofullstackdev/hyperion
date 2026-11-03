@@ -3,7 +3,7 @@
     "description": "Hyperion Core: theme helpers, ESI infrastructure, asset manifest, HTMX configuration",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.1",
+    "version": "0.9.0-beta.2",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

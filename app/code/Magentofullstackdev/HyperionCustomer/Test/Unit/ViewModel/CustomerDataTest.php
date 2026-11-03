@@ -72,6 +72,25 @@ class CustomerDataTest extends TestCase
         self::assertSame('https://shop.test/customer/account/login/', $this->viewModel(true, null)->getLoginUrl());
     }
 
+    public function testAccountPageKeepsItsOwnRefererInsteadOfWrappingItself(): void
+    {
+        self::assertSame(
+            'https://shop.test/customer/account/login/referer/aHR0cHM6Ly9zaG9w/',
+            $this->viewModel(true, 'https://shop.test/customer/account/login/referer/aHR0cHM6Ly9zaG9w/')->getLoginUrl(),
+            'the login page passes its referer through'
+        );
+        self::assertSame(
+            'https://shop.test/customer/account/login/',
+            $this->viewModel(true, 'https://shop.test/customer/account/create/')->getLoginUrl(),
+            'an account page without a referer sends none'
+        );
+        self::assertSame(
+            'https://shop.test/customer/account/login/',
+            $this->viewModel(true, 'https://shop.test/it/customer/account/loginPost/')->getLoginUrl(),
+            'a store code prefix and the post action count as the account page too'
+        );
+    }
+
     public function testDashboardRedirectSettingWins(): void
     {
         self::assertSame(

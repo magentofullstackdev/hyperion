@@ -90,11 +90,12 @@ therefore visible to the checkout.
 | `braintree` | `payment-braintree-card`: hosted fields, device data, 3D Secure (frictionless and challenge) | verified against a Braintree sandbox: approved, declined, 3D Secure |
 | `braintree_cc_vault`, `braintree_paypal_vault` | `payment-braintree-vault` and the `*_vault` token list (`vault-tokens.ts`) | vault with and without CVV verified against the same sandbox |
 | `braintree_paypal` | `payment-braintree-paypal` | not tested (no PayPal account linked to the sandbox) |
+| `braintree_googlepay` | `payment-braintree-googlepay`: Google Pay button (Braintree `google-payment` + Google's `pay.js`, loaded on selection), owns Place Order, 3D Secure for cards that are not network tokenized, vault choice; `braintree_googlepay_vault` tokens through the card vault adapter | button and sheet request verified against the Braintree sandbox in `TEST` environment; the payment itself needs a Google account in a real browser and was not completed by the automated checks |
 | any other code | `payment-generic` | listed disabled with "Not supported by this checkout yet" |
 
 Hosted Pro, Payflow Pro / Link / Advanced, PayPal billing agreements,
-Payment Services, Apple Pay, Google Pay, Venmo, ACH and local payment
-methods have no renderer. With Hosted Pro active, `payment/hosted_pro/display_ec`
+Payment Services (Adobe), Apple Pay, Venmo, ACH and local payment methods
+have no renderer. Google Pay is supported through Braintree only. With Hosted Pro active, `payment/hosted_pro/display_ec`
 must be 1 for PayPal Express to be offered at all (core rule).
 
 Gateway renderers are loaded on demand: the offline renderer ships in the

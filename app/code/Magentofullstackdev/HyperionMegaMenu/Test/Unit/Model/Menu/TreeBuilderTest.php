@@ -121,6 +121,30 @@ class TreeBuilderTest extends TestCase
         self::assertSame(1, $children[1]['level']);
     }
 
+    public function testLiveSubcategoriesAlreadyAddedByHandAreNotRepeated(): void
+    {
+        $this->loader->method('load')->willReturn([
+            1 => $this->row(1, 0, 'category', '20', ['children_depth' => 2]),
+            2 => $this->row(2, 1, 'category', '21', ['title' => 'Tops by hand', 'dropdown_width' => 6]),
+            3 => $this->row(3, 2, 'category', '23', ['title' => 'Jackets by hand']),
+        ]);
+        $this->resolver->method('resolve')->willReturn(new Targets([
+            20 => $this->category(20, 'Women', '/women.html', 2, 1, [21, 22]),
+            21 => $this->category(21, 'Tops', '/tops.html', 3, 20, [23, 24]),
+            22 => $this->category(22, 'Bottoms', '/bottoms.html', 3, 20),
+            23 => $this->category(23, 'Jackets', '/jackets.html', 4, 21),
+            24 => $this->category(24, 'Tees', '/tees.html', 4, 21),
+        ]));
+        $tree = $this->builder()->build($this->group, 1, 0, SourceInterface::DEVICE_DESKTOP);
+        $children = $tree->nodes[0]['children'];
+
+        self::assertSame(['i2', 'c22'], array_column($children, 'id'), 'the live Tops folds into the manual one');
+        self::assertSame('Tops by hand', $children[0]['title']);
+        self::assertSame(6, $children[0]['width'], 'the manual item keeps its settings');
+        self::assertSame(['i3', 'c24'], array_column($children[0]['children'], 'id'), 'the live Jackets folds into the manual one, Tees is added');
+        self::assertSame(2, $children[0]['children'][1]['level']);
+    }
+
     public function testALoaderFailureYieldsAnEmptyTreeWithTheGroupTags(): void
     {
         $this->loader->method('load')->willThrowException(new \RuntimeException('db down'));

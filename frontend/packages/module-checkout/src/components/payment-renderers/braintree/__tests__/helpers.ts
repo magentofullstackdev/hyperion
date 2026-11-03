@@ -17,7 +17,12 @@ import type { CheckoutConfig } from '../../../../types/config.js';
 import type { Totals } from '../../../../types/totals.js';
 import { resetBraintreeClientsForTests } from '../client.js';
 import { setScriptLoaderForTests } from '../sdk.js';
-import type { HostedFieldsEvent, PayPalButtonsOptions } from '../types.js';
+import type {
+    GooglePayButtonOptions,
+    GooglePayPaymentDataRequest,
+    HostedFieldsEvent,
+    PayPalButtonsOptions,
+} from '../types.js';
 
 type Json = Record<string, unknown>;
 
@@ -89,6 +94,12 @@ export interface BraintreeDouble {
     /** Options of every `paypal.Buttons()` call, by funding source. */
     buttons: Map<string, PayPalButtonsOptions>;
     buttonRender: Mock;
+    googlePaymentCreate: Mock;
+    googlePayment: { createPaymentDataRequest: Mock; parseResponse: Mock; teardown: Mock };
+    /** The `PaymentsClient` double installed with `pay.js`. */
+    googlePay: { isReadyToPay: Mock; createButton: Mock; loadPaymentData: Mock; environment: string | null };
+    /** Options of the last `createButton()` call. */
+    googlePayButton: { options: GooglePayButtonOptions | null; element: HTMLButtonElement };
 }
 
 export function installBraintreeDouble(options: { eligible?: readonly string[] } = {}): BraintreeDouble {
@@ -126,19 +137,65 @@ export function installBraintreeDouble(options: { eligible?: readonly string[] }
         tokenizePayment: vi.fn(),
         teardown: vi.fn().mockResolvedValue(undefined),
     };
+    const googlePayment = {
+        createPaymentDataRequest: vi.fn((overrides: Partial<GooglePayPaymentDataRequest> = {}) => ({
+            apiVersion: 2,
+            apiVersionMinor: 0,
+            ...overrides,
+            allowedPaymentMethods: (overrides.allowedPaymentMethods ?? [{ type: 'CARD', parameters: {} }]).map((method) => ({
+                ...method,
+                tokenizationSpecification: { type: 'PAYMENT_GATEWAY', parameters: { gateway: 'braintree' } },
+            })),
+        })),
+        parseResponse: vi.fn(),
+        teardown: vi.fn().mockResolvedValue(undefined),
+    };
+    const googlePayButton: BraintreeDouble['googlePayButton'] = {
+        options: null,
+        element: document.createElement('button'),
+    };
+    const googlePay: BraintreeDouble['googlePay'] = {
+        isReadyToPay: vi.fn().mockResolvedValue({ result: true }),
+        createButton: vi.fn((buttonOptions: GooglePayButtonOptions) => {
+            googlePayButton.options = buttonOptions;
+            googlePayButton.element.addEventListener('click', buttonOptions.onClick);
+            return googlePayButton.element;
+        }),
+        loadPaymentData: vi.fn(),
+        environment: null,
+    };
+    const googlePaymentCreate = vi.fn().mockResolvedValue(googlePayment);
     const clientCreate = vi.fn().mockResolvedValue({ getVersion: () => '3.112.0' });
     const hostedFieldsCreate = vi.fn().mockResolvedValue(hostedFields);
     const dataCollectorCreate = vi.fn().mockResolvedValue({ deviceData: DEVICE_DATA });
     const threeDSecureCreate = vi.fn().mockResolvedValue(threeDSecure);
     const paypalCheckoutCreate = vi.fn().mockResolvedValue(paypalCheckout);
 
-    const loader = vi.fn(async (_src: string): Promise<void> => {
+    const loader = vi.fn(async (src: string): Promise<void> => {
+        if (src.includes('pay.google.com')) {
+            window.google = {
+                payments: {
+                    api: {
+                        PaymentsClient: class {
+                            public constructor(options: { environment: string }) {
+                                googlePay.environment = options.environment;
+                            }
+                            public isReadyToPay = googlePay.isReadyToPay;
+                            public createButton = googlePay.createButton;
+                            public loadPaymentData = googlePay.loadPaymentData;
+                        },
+                    },
+                },
+            };
+            return;
+        }
         window.braintree = {
             client: { create: clientCreate },
             hostedFields: { create: hostedFieldsCreate },
             dataCollector: { create: dataCollectorCreate },
             threeDSecure: { create: threeDSecureCreate },
             paypalCheckout: { create: paypalCheckoutCreate },
+            googlePayment: { create: googlePaymentCreate },
         };
     });
     setScriptLoaderForTests(loader);
@@ -156,6 +213,10 @@ export function installBraintreeDouble(options: { eligible?: readonly string[] }
         paypalCheckout,
         buttons,
         buttonRender,
+        googlePaymentCreate,
+        googlePayment,
+        googlePay,
+        googlePayButton,
     };
 }
 
@@ -164,5 +225,6 @@ export function uninstallBraintreeDouble(): void {
     resetBraintreeClientsForTests();
     delete window.braintree;
     delete window.paypal;
+    delete window.google;
     document.body.replaceChildren();
 }

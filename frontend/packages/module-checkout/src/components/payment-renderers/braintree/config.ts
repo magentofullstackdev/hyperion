@@ -7,6 +7,7 @@
  * Shapes follow the PHP providers of PayPal_Braintree 4.6:
  *   - `payment.braintree`          Model/Ui/ConfigProvider.php
  *   - `payment.braintree_paypal*`  Model/Ui/PayPal/ConfigProvider.php
+ *   - `payment.braintree_googlepay` Model/GooglePay/Ui/ConfigProvider.php
  *   - `payment.three_d_secure`     Model/Ui/ThreeDeeSecure/ConfigProvider.php
  *   - `payment.braintree_cc_vault` Model/Ui/Vault/ConfigProvider.php
  *   - `vault.<code>.is_enabled`    Magento_Vault Model/Ui/VaultConfigProvider.php
@@ -17,6 +18,8 @@ export const BRAINTREE_CODE = 'braintree';
 export const BRAINTREE_CC_VAULT_CODE = 'braintree_cc_vault';
 export const BRAINTREE_PAYPAL_CODE = 'braintree_paypal';
 export const BRAINTREE_PAYPAL_VAULT_CODE = 'braintree_paypal_vault';
+export const BRAINTREE_GOOGLEPAY_CODE = 'braintree_googlepay';
+export const BRAINTREE_GOOGLEPAY_VAULT_CODE = 'braintree_googlepay_vault';
 const THREE_D_SECURE_CODE = 'three_d_secure';
 
 export interface BraintreeCardConfig {
@@ -57,6 +60,19 @@ export interface BraintreePayPalConfig {
     vaultCode: string;
     style: PayPalButtonStyle;
     canSendLineItems: boolean;
+}
+
+export interface BraintreeGooglePayConfig {
+    isActive: boolean;
+    clientToken: string;
+    /** Google's environment names, derived by the provider from the Braintree one. */
+    environment: 'TEST' | 'PRODUCTION';
+    merchantId: string;
+    /** Google card network names (`VISA`, `MASTERCARD`, ...); empty = the gateway's defaults. */
+    cardTypes: readonly string[];
+    buttonColor: 'black' | 'white';
+    vaultCode: string;
+    priceIncludesTax: boolean;
 }
 
 export interface PayPalFundingConfig {
@@ -153,6 +169,22 @@ export function getBraintreePayPalConfig(): BraintreePayPalConfig | null {
         vaultCode: str(slice['vaultCode']) || BRAINTREE_PAYPAL_VAULT_CODE,
         style: buttonStyle(slice['style']),
         canSendLineItems: flag(slice['canSendLineItems']),
+    };
+}
+
+export function getBraintreeGooglePayConfig(): BraintreeGooglePayConfig | null {
+    const slice = paymentSlice(BRAINTREE_GOOGLEPAY_CODE);
+    if (!slice) return null;
+    return {
+        isActive: flag(slice['isActive']),
+        clientToken: str(slice['clientToken']),
+        environment: str(slice['environment']) === 'PRODUCTION' ? 'PRODUCTION' : 'TEST',
+        merchantId: str(slice['merchantId']),
+        cardTypes: stringList(slice['cardTypes']).map((type) => type.toUpperCase()),
+        // The provider's `btn_color` option: 1 is black, anything else white.
+        buttonColor: String(slice['btnColor']) === '1' ? 'black' : 'white',
+        vaultCode: str(slice['vaultCode']) || BRAINTREE_GOOGLEPAY_VAULT_CODE,
+        priceIncludesTax: flag(slice['priceIncludesTax']),
     };
 }
 

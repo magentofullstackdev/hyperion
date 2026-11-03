@@ -23,7 +23,7 @@ describe('Braintree SDK loader', () => {
 
     it('builds every script URL from the single pinned version', () => {
         expect(braintreeScriptUrl('client')).toBe(CLIENT_URL);
-        for (const name of ['hosted-fields', 'data-collector', 'three-d-secure', 'paypal-checkout'] as const) {
+        for (const name of ['hosted-fields', 'data-collector', 'three-d-secure', 'paypal-checkout', 'google-payment'] as const) {
             expect(braintreeScriptUrl(name)).toBe(
                 `https://js.braintreegateway.com/web/${BRAINTREE_SDK_VERSION}/js/${name}.min.js`
             );

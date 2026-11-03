@@ -1,6 +1,6 @@
 {
-  "_checkout-app-DW9Judp3.js": {
-    "file": "assets/checkout-app-DW9Judp3.js",
+  "_checkout-app-CQ9YpIXM.js": {
+    "file": "assets/checkout-app-CQ9YpIXM.js",
     "name": "checkout-app",
     "isDynamicEntry": true,
     "imports": [
@@ -11,97 +11,139 @@
       "src/components/payment-renderers/braintree/payment-braintree-paypal.ts",
       "src/components/payment-renderers/braintree/payment-braintree-vault.ts",
       "src/components/payment-renderers/braintree/payment-braintree-vault.ts",
+      "src/components/payment-renderers/braintree/payment-braintree-googlepay.ts",
+      "src/components/payment-renderers/braintree/payment-braintree-vault.ts",
       "src/components/payment-renderers/paypal/payment-paypal-express.ts",
       "src/components/payment-renderers/paypal/payment-paypal-express.ts",
       "src/store/login-action.ts"
     ]
   },
-  "_quote-DArtz96u.js": {
-    "file": "assets/quote-DArtz96u.js",
+  "_checkout-gate-DAk8D_hP.js": {
+    "file": "assets/checkout-gate-DAk8D_hP.js",
+    "name": "checkout-gate",
+    "imports": [
+      "src/main.ts"
+    ]
+  },
+  "_hosted-field-styles-B9VoKNxT.js": {
+    "file": "assets/hosted-field-styles-B9VoKNxT.js",
+    "name": "hosted-field-styles",
+    "imports": [
+      "src/main.ts"
+    ]
+  },
+  "_line-items-WxoMh-gB.js": {
+    "file": "assets/line-items-WxoMh-gB.js",
+    "name": "line-items",
+    "imports": [
+      "src/main.ts",
+      "_quote-1ZwGw7Nl.js"
+    ]
+  },
+  "_quote-1ZwGw7Nl.js": {
+    "file": "assets/quote-1ZwGw7Nl.js",
     "name": "quote",
     "imports": [
       "src/main.ts"
     ]
   },
-  "_three-d-secure-BF-vPgPN.js": {
-    "file": "assets/three-d-secure-BF-vPgPN.js",
+  "_three-d-secure-M-BlHL1t.js": {
+    "file": "assets/three-d-secure-M-BlHL1t.js",
     "name": "three-d-secure",
     "imports": [
       "src/main.ts",
-      "_quote-DArtz96u.js"
+      "_quote-1ZwGw7Nl.js"
     ]
   },
   "src/components/payment-renderers/braintree/payment-braintree-card.ts": {
-    "file": "assets/payment-braintree-card-CT0Ts2JN.js",
+    "file": "assets/payment-braintree-card-vURdc7Ea.js",
     "name": "payment-braintree-card",
     "src": "src/components/payment-renderers/braintree/payment-braintree-card.ts",
     "isDynamicEntry": true,
     "imports": [
       "src/main.ts",
-      "_checkout-app-DW9Judp3.js",
-      "_quote-DArtz96u.js",
-      "_three-d-secure-BF-vPgPN.js"
+      "_checkout-app-CQ9YpIXM.js",
+      "_quote-1ZwGw7Nl.js",
+      "_hosted-field-styles-B9VoKNxT.js",
+      "_three-d-secure-M-BlHL1t.js"
+    ]
+  },
+  "src/components/payment-renderers/braintree/payment-braintree-googlepay.ts": {
+    "file": "assets/payment-braintree-googlepay-I61wZ3sA.js",
+    "name": "payment-braintree-googlepay",
+    "src": "src/components/payment-renderers/braintree/payment-braintree-googlepay.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/main.ts",
+      "_checkout-app-CQ9YpIXM.js",
+      "_checkout-gate-DAk8D_hP.js",
+      "_quote-1ZwGw7Nl.js",
+      "_line-items-WxoMh-gB.js",
+      "_three-d-secure-M-BlHL1t.js"
     ]
   },
   "src/components/payment-renderers/braintree/payment-braintree-paypal.ts": {
-    "file": "assets/payment-braintree-paypal-BYvY0AYd.js",
+    "file": "assets/payment-braintree-paypal-B2T7XTyM.js",
     "name": "payment-braintree-paypal",
     "src": "src/components/payment-renderers/braintree/payment-braintree-paypal.ts",
     "isDynamicEntry": true,
     "imports": [
       "src/main.ts",
-      "_checkout-app-DW9Judp3.js",
-      "_quote-DArtz96u.js"
+      "_checkout-app-CQ9YpIXM.js",
+      "_quote-1ZwGw7Nl.js",
+      "_line-items-WxoMh-gB.js"
     ]
   },
   "src/components/payment-renderers/braintree/payment-braintree-vault.ts": {
-    "file": "assets/payment-braintree-vault-CA0Pehp4.js",
+    "file": "assets/payment-braintree-vault-CsexIe9B.js",
     "name": "payment-braintree-vault",
     "src": "src/components/payment-renderers/braintree/payment-braintree-vault.ts",
     "isDynamicEntry": true,
     "imports": [
       "src/main.ts",
-      "_checkout-app-DW9Judp3.js",
-      "_quote-DArtz96u.js",
-      "_three-d-secure-BF-vPgPN.js"
+      "_checkout-app-CQ9YpIXM.js",
+      "_quote-1ZwGw7Nl.js",
+      "_hosted-field-styles-B9VoKNxT.js",
+      "_three-d-secure-M-BlHL1t.js"
     ]
   },
   "src/components/payment-renderers/paypal/payment-paypal-express.ts": {
-    "file": "assets/payment-paypal-express-CVSmzpGN.js",
+    "file": "assets/payment-paypal-express-kvPEcriz.js",
     "name": "payment-paypal-express",
     "src": "src/components/payment-renderers/paypal/payment-paypal-express.ts",
     "isDynamicEntry": true,
     "imports": [
       "src/main.ts",
-      "_checkout-app-DW9Judp3.js"
+      "_checkout-app-CQ9YpIXM.js",
+      "_checkout-gate-DAk8D_hP.js"
     ]
   },
   "src/i18n/it_IT.json": {
-    "file": "assets/it_IT-5ntICi4a.js",
+    "file": "assets/it_IT-BvBJHaAt.js",
     "name": "it_IT",
     "src": "src/i18n/it_IT.json",
     "isDynamicEntry": true
   },
   "src/main.ts": {
-    "file": "assets/checkout-BMmec92X.js",
+    "file": "assets/checkout-CwuysbvX.js",
     "name": "checkout",
     "src": "src/main.ts",
     "isEntry": true,
     "dynamicImports": [
       "src/i18n/it_IT.json",
-      "_checkout-app-DW9Judp3.js"
+      "_checkout-app-CQ9YpIXM.js"
     ],
     "css": [
-      "assets/checkout-DQp9z3_9.css"
+      "assets/checkout-BbXIsIxw.css"
     ]
   },
   "src/store/login-action.ts": {
-    "file": "assets/login-action-pKt2nIsC.js",
+    "file": "assets/login-action-DycbnOPo.js",
     "name": "login-action",
     "src": "src/store/login-action.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_checkout-app-DW9Judp3.js",
+      "_checkout-app-CQ9YpIXM.js",
       "src/main.ts"
     ]
   }

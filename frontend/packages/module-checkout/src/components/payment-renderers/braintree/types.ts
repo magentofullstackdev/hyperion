@@ -190,12 +190,126 @@ export interface PayPalCheckoutModule {
     create(options: { client: BraintreeClient }): Promise<PayPalCheckoutInstance>;
 }
 
+export interface GooglePayDisplayItem {
+    label: string;
+    type: 'LINE_ITEM' | 'SUBTOTAL' | 'TAX';
+    price: string;
+}
+
+export interface GooglePayTransactionInfo {
+    currencyCode: string;
+    totalPrice: string;
+    totalPriceStatus: 'FINAL' | 'ESTIMATED';
+    totalPriceLabel?: string;
+    displayItems?: readonly GooglePayDisplayItem[];
+}
+
+export interface GooglePayCardParameters {
+    allowedCardNetworks?: readonly string[];
+    allowedAuthMethods?: readonly string[];
+    billingAddressRequired?: boolean;
+    billingAddressParameters?: { format?: 'MIN' | 'FULL'; phoneNumberRequired?: boolean };
+}
+
+export interface GooglePayAllowedPaymentMethod {
+    type: 'CARD';
+    parameters: GooglePayCardParameters;
+    tokenizationSpecification?: Record<string, unknown>;
+}
+
+/** The request `createPaymentDataRequest()` builds; `overrides` take the same shape. */
+export interface GooglePayPaymentDataRequest {
+    apiVersion: number;
+    apiVersionMinor: number;
+    allowedPaymentMethods: GooglePayAllowedPaymentMethod[];
+    transactionInfo?: GooglePayTransactionInfo;
+    merchantInfo?: { merchantId?: string; merchantName?: string };
+    emailRequired?: boolean;
+    shippingAddressRequired?: boolean;
+}
+
+export interface GooglePayPaymentData {
+    apiVersion: number;
+    apiVersionMinor: number;
+    paymentMethodData: {
+        type: string;
+        description?: string;
+        info?: { cardNetwork?: string; cardDetails?: string; billingAddress?: Record<string, unknown> };
+        tokenizationData: { type: string; token: string };
+    };
+    email?: string;
+}
+
+export interface GooglePaymentTokenizePayload {
+    nonce: string;
+    type?: string;
+    details: {
+        bin?: string;
+        cardType?: string;
+        lastFour?: string;
+        lastTwo?: string;
+        isNetworkTokenized?: boolean;
+        [key: string]: unknown;
+    };
+}
+
+export interface GooglePaymentInstance {
+    createPaymentDataRequest(overrides?: Partial<GooglePayPaymentDataRequest>): GooglePayPaymentDataRequest;
+    parseResponse(paymentData: GooglePayPaymentData): Promise<GooglePaymentTokenizePayload>;
+    teardown?: () => Promise<void>;
+}
+
+export interface GooglePaymentModule {
+    create(options: {
+        client: BraintreeClient;
+        googlePayVersion: 2;
+        googleMerchantId?: string;
+    }): Promise<GooglePaymentInstance>;
+}
+
 export interface BraintreeGlobal {
     client?: BraintreeClientModule;
     hostedFields?: HostedFieldsModule;
     dataCollector?: DataCollectorModule;
     threeDSecure?: ThreeDSecureModule;
     paypalCheckout?: PayPalCheckoutModule;
+    googlePayment?: GooglePaymentModule;
+}
+
+/** The parts of the Google Pay API (`pay.js`) the renderer calls. */
+export interface GooglePayButtonOptions {
+    onClick: (event: Event) => void;
+    buttonColor?: 'default' | 'black' | 'white';
+    buttonType?: 'book' | 'buy' | 'checkout' | 'donate' | 'order' | 'pay' | 'plain' | 'subscribe';
+    buttonSizeMode?: 'static' | 'fill';
+    buttonLocale?: string;
+    allowedPaymentMethods?: readonly GooglePayAllowedPaymentMethod[];
+}
+
+export interface GooglePayIsReadyToPayRequest {
+    apiVersion: number;
+    apiVersionMinor: number;
+    allowedPaymentMethods: readonly GooglePayAllowedPaymentMethod[];
+}
+
+export interface GooglePaymentsClient {
+    isReadyToPay(request: GooglePayIsReadyToPayRequest): Promise<{ result: boolean }>;
+    createButton(options: GooglePayButtonOptions): HTMLElement;
+    loadPaymentData(request: GooglePayPaymentDataRequest): Promise<GooglePayPaymentData>;
+}
+
+export interface GooglePayGlobal {
+    payments: {
+        api: {
+            PaymentsClient: new (options: { environment: 'TEST' | 'PRODUCTION' }) => GooglePaymentsClient;
+        };
+    };
+}
+
+/** `loadPaymentData()` rejects with this shape when the shopper closes the sheet. */
+export interface GooglePayError {
+    statusCode?: string;
+    statusMessage?: string;
 }
 
 export interface PayPalButtonsOptions {
@@ -221,5 +335,6 @@ declare global {
     interface Window {
         braintree?: BraintreeGlobal;
         paypal?: PayPalGlobal;
+        google?: GooglePayGlobal;
     }
 }

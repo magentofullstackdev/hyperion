@@ -93,6 +93,7 @@ describe('stored payment tokens', () => {
             'braintree',
             'braintree_paypal',
             'checkmo',
+            'braintree_googlepay',
         ]);
     });
 
@@ -100,7 +101,7 @@ describe('stored payment tokens', () => {
         const { vault: _tokens, ...paymentWithoutTokens } = installCheckoutConfig().payment;
         installCheckoutConfig({}, { payment: paymentWithoutTokens });
         const rows = buildPaymentRows(methods).map((row) => row.method.code);
-        expect(rows).toEqual(['braintree', 'braintree_paypal', 'checkmo']);
+        expect(rows).toEqual(['braintree', 'braintree_paypal', 'checkmo', 'braintree_googlepay']);
     });
 
     it('hides a gateway method whose config carries no client token', () => {
@@ -115,7 +116,7 @@ describe('stored payment tokens', () => {
         const rows = [...list.querySelectorAll('payment-method-row')];
         await Promise.all(rows.map((row) => row.updateComplete));
 
-        expect(rows).toHaveLength(6);
+        expect(rows).toHaveLength(7);
         expect(rows[0]?.textContent).toContain('Visa ending in 1111 (expires 12/2030)');
         expect(rows[1]?.textContent).toContain('Mastercard ending in 4444 (expires 03/2029)');
         expect(rows[2]?.textContent).toContain('PayPal account roni_cost@example.com');
@@ -126,7 +127,7 @@ describe('stored payment tokens', () => {
 
         expect(store.selectedPaymentMethod.get()).toBe('braintree_cc_vault');
         expect(store.paymentMethodData.get()['braintree_cc_vault']).toEqual({ public_hash: 'hash-mc-4444' });
-        expect(rows.map((row) => row.selected)).toEqual([false, true, false, false, false, false]);
+        expect(rows.map((row) => row.selected)).toEqual([false, true, false, false, false, false, false]);
         expect(rows[1]?.querySelector('payment-vault')).not.toBeNull();
         await vi.waitFor(() => expect(sdk.dataCollectorCreate).toHaveBeenCalled());
     });

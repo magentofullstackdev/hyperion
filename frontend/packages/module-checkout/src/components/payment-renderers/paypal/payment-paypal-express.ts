@@ -29,11 +29,11 @@ import { SignalWatcher } from '@lit-labs/signals';
 
 import { getStore } from '../../../store/index.js';
 import { flowActions } from '../../../store/flow-actions.js';
-import { initFlowSelectors } from '../../../store/flow-selectors.js';
 import type { PaypalExpressConfig } from '../../../types/config.js';
 import { t } from '../../../utils/i18n.js';
 import { navigateTo } from '../../../utils/navigate.js';
 import { resolveSameOriginUrl } from '../../../utils/safe-redirect.js';
+import { getCheckoutBlocker } from '../checkout-gate.js';
 import { registerPaymentRenderer } from '../registry.js';
 import { PaypalExpressError, authorizePaypalPayment, requestPaypalToken } from './api.js';
 import {
@@ -68,19 +68,6 @@ function messageOf(err: unknown): string {
 }
 
 /** Why the order cannot be paid yet, null when the checkout is complete. */
-export function getCheckoutBlocker(): string | null {
-    const store = getStore();
-    const selectors = initFlowSelectors();
-    if (!selectors.emailValid.get()) return t('Hyperion_Checkout::checkout_incomplete_email');
-    if (!selectors.shippingAddressValid.get()) return t('Hyperion_Checkout::checkout_incomplete_shipping_address');
-    if (!selectors.shippingMethodSelected.get()) return t('Hyperion_Checkout::checkout_incomplete_shipping_method');
-    if (!selectors.billingAddressValid.get()) return t('Hyperion_Checkout::checkout_incomplete_billing_address');
-    if (!selectors.agreementsAccepted.get()) return t('Hyperion_Checkout::checkout_incomplete_agreements');
-    const minimumOrder = store.minimumOrderError.get();
-    if (minimumOrder !== null) return minimumOrder;
-    if (store.totals.get() === null) return t('Hyperion_Checkout::checkout_incomplete_totals');
-    return null;
-}
 
 /** The message amount is the base grand total: the SDK is loaded for the base currency. */
 export function getPayLaterAmount(): string {
@@ -397,3 +384,5 @@ registerPaypalExpressRenderers();
 declare global {
     interface HTMLElementTagNameMap { 'payment-paypal-express': PaymentPaypalExpress; }
 }
+
+export { getCheckoutBlocker };

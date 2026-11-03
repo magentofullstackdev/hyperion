@@ -19,6 +19,8 @@ const LOADERS: Readonly<Record<string, () => Promise<unknown>>> = {
     braintree_paypal: () => import('./braintree/payment-braintree-paypal.js'),
     braintree_cc_vault: () => import('./braintree/payment-braintree-vault.js'),
     braintree_paypal_vault: () => import('./braintree/payment-braintree-vault.js'),
+    braintree_googlepay: () => import('./braintree/payment-braintree-googlepay.js'),
+    braintree_googlepay_vault: () => import('./braintree/payment-braintree-vault.js'),
     paypal_express: () => import('./paypal/payment-paypal-express.js'),
     payflow_express: () => import('./paypal/payment-paypal-express.js'),
 };

@@ -84,6 +84,20 @@ With that rule a `PURGE` sent through the public host answers 405 while
 purges from Magento (`cache:flush`, `cache:clean full_page`, product save)
 still reach Varnish. This was verified on the three test platforms.
 
+Give every `location` that proxies to Varnish response buffers above
+nginx's default (one memory page, usually 4k): a Magento response carries
+a `Content-Security-Policy` header of about 4 KB plus the session, form
+key and message cookies, and a failed login or an admin page answers
+`502 Bad Gateway` ("upstream sent too big header") with the default.
+Magento's own `nginx.conf.sample` raises the FastCGI buffers for the same
+reason; the TLS edge needs the proxy equivalent:
+
+```nginx
+proxy_buffer_size 32k;
+proxy_buffers 8 32k;
+proxy_busy_buffers_size 64k;
+```
+
 Magento side:
 
 ```bash

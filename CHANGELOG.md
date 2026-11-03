@@ -6,6 +6,15 @@ All notable changes to Hyperion are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0-beta.2] - 2026-11-03
+
+### Added
+- Checkout: Google Pay through Braintree (`braintree_googlepay`). The Braintree `google-payment` component and Google's `pay.js` load when the method is selected, `isReadyToPay` decides whether the official button renders, the sheet shows the order lines and total, a card that is not network tokenized goes through 3D Secure, and the button places the order (`payment_method_nonce`, `device_data`, `is_network_tokenized`, the vault choice). Cards stored through Google Pay (`braintree_googlepay_vault`) pay like stored Braintree cards.
+
+### Fixed
+- Header: the Sign in link rendered inside the header state fragment wrapped the login page's own URL as the referer when the fragment was requested from the login, create account or forgot password page, so every visit nested the previous referer once more (longer and longer URLs). An account page now passes the referer it already carries, or none, like core's own link.
+- Mega menu: a category item with "Live subcategories" listed a subcategory twice when the same category was also added by hand under the item (an imported tree with the live option switched on later showed every column twice). The live subcategory now folds into the manual item, which keeps its title, badge and width and gains the live levels below it.
+
 ## [0.9.0-beta.1] - 2026-11-03
 
 First public beta. See the README for supported Magento versions and

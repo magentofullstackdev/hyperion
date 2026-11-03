@@ -149,3 +149,12 @@ To,A
 "{title} (Incl. Tax)","{title} (IVA inclusa)"
 "{type} cards are not accepted. Please use another card.","Le carte {type} non sono accettate. Usa un'altra carta."
 "{type} ending in {last4} (expires {expiry})","{type} che termina con {last4} (scadenza {expiry})"
+"Pay with Google Pay. Your order is placed as soon as Google confirms the payment.","Paga con Google Pay. L'ordine viene confermato appena Google approva il pagamento."
+"Loading Google Pay...","Caricamento di Google Pay..."
+"Google Pay could not be loaded. Try again or choose another payment method.","Non è stato possibile caricare Google Pay. Riprova oppure scegli un altro metodo di pagamento."
+"Google Pay is not available in this browser. Please choose another payment method.","Google Pay non è disponibile in questo browser. Scegli un altro metodo di pagamento."
+"The Google Pay payment could not be completed. Please try again.","Non è stato possibile completare il pagamento con Google Pay. Riprova."
+"Pay with the Google Pay button to place your order.","Paga con il pulsante Google Pay per confermare l'ordine."
+Total,Totale
+Tax,Imposte
+Discount,Sconto

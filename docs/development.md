@@ -313,7 +313,7 @@ page cache key (customer group, store, currency).
    green, `pnpm -r publish --dry-run`, `composer validate` in every
    package, install from the tag in a clean Magento 2.4.8 and Mage-OS, run
    the end-to-end suite.
-3. Tag `v<version>` (for this release `v0.9.0-beta.1`) and push.
+3. Tag `v<version>` (for this release `v0.9.0-beta.2`) and push.
 4. Publish npm first or together with the tag: the child theme scaffold
    depends on the three packages at `^<version>`.
    `pnpm -r publish --access public` from `frontend/` (pnpm rewrites

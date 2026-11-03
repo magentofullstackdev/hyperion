@@ -10,11 +10,17 @@
  * into one unit carrying the row amount, and discount / shipping / tax /
  * store credit / gift card / gift wrapping travel as synthetic lines. PayPal
  * accepts at most 249 lines; above that none are sent.
+ *
+ * The Google Pay sheet shows the same breakdown as display items
+ * (`buildGooglePayDisplayItems`, port of `get-google-pay-line-items.js`):
+ * one row per line with its row amount, credits negative, prices with tax
+ * when the catalog prices include it.
  */
 import type { CartItem } from '../../../types/quote.js';
 import type { Totals } from '../../../types/totals.js';
+import { t } from '../../../utils/i18n.js';
 import { formatAmount } from './quote.js';
-import type { PayPalLineItem } from './types.js';
+import type { GooglePayDisplayItem, PayPalLineItem } from './types.js';
 
 const MAX_LINE_ITEMS = 249;
 const MAX_TEXT_LENGTH = 127;
@@ -81,5 +87,32 @@ export function buildPayPalLineItems(
     if (wrappingCard > 0) lines.push(synthetic('Printed Card', 'debit', wrappingCard));
     if (giftCards > 0) lines.push(synthetic('Gift Cards', 'credit', giftCards));
 
+    return lines.length > MAX_LINE_ITEMS ? [] : lines;
+}
+
+function displayItem(label: string, amount: number): GooglePayDisplayItem {
+    return { type: 'LINE_ITEM', label, price: formatAmount(amount) };
+}
+
+export function buildGooglePayDisplayItems(
+    items: readonly CartItem[],
+    totals: Totals | null,
+    priceIncludesTax: boolean
+): GooglePayDisplayItem[] {
+    if (!totals) return [];
+    const lines: GooglePayDisplayItem[] = [];
+    for (const item of items) {
+        if (item.parent_item_id !== null && item.parent_item_id !== undefined) continue;
+        const unit = toNumber(priceIncludesTax ? item.price_incl_tax : item.price) || toNumber(item.price);
+        if (unit === 0) continue;
+        lines.push(displayItem(item.name, unit * toNumber(item.qty)));
+    }
+    const discount = Math.abs(toNumber(totals['base_discount_amount']));
+    const shipping = toNumber(priceIncludesTax ? totals['base_shipping_incl_tax'] : totals['base_shipping_amount'])
+        || toNumber(totals['base_shipping_amount']);
+    const tax = toNumber(totals['base_tax_amount']);
+    if (discount > 0) lines.push(displayItem(t('Hyperion_Checkout::braintree_line_discount'), -discount));
+    if (shipping > 0) lines.push(displayItem(t('Hyperion_Checkout::shipping_heading'), shipping));
+    if (!priceIncludesTax && tax > 0) lines.push(displayItem(t('Hyperion_Checkout::braintree_line_tax'), tax));
     return lines.length > MAX_LINE_ITEMS ? [] : lines;
 }

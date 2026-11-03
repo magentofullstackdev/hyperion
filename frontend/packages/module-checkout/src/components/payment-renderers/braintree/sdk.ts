@@ -16,12 +16,15 @@
  * keeps the client in step with the server-side integration.
  *
  * The PayPal JS SDK is not loaded here: the Braintree `paypal-checkout`
- * component loads it itself through `loadPayPalSDK()`.
+ * component loads it itself through `loadPayPalSDK()`. The Google Pay API
+ * (`pay.js`) goes through the same script cache (`loadGooglePayLibrary()`).
  */
 import type {
     BraintreeClientModule,
     BraintreeGlobal,
     DataCollectorModule,
+    GooglePayGlobal,
+    GooglePaymentModule,
     HostedFieldsModule,
     PayPalCheckoutModule,
     ThreeDSecureModule,
@@ -37,6 +40,7 @@ export interface BraintreeModules {
     'data-collector': DataCollectorModule;
     'three-d-secure': ThreeDSecureModule;
     'paypal-checkout': PayPalCheckoutModule;
+    'google-payment': GooglePaymentModule;
 }
 
 export type BraintreeModuleName = keyof BraintreeModules;
@@ -48,7 +52,10 @@ const GLOBAL_KEYS: Readonly<Record<BraintreeModuleName, keyof BraintreeGlobal>> 
     'data-collector': 'dataCollector',
     'three-d-secure': 'threeDSecure',
     'paypal-checkout': 'paypalCheckout',
+    'google-payment': 'googlePayment',
 };
+
+export const GOOGLE_PAY_LIBRARY_URL = 'https://pay.google.com/gp/p/js/pay.js';
 
 export type ScriptLoader = (src: string) => Promise<void>;
 
@@ -102,6 +109,17 @@ export async function loadBraintreeModule<K extends BraintreeModuleName>(
         throw new BraintreeSdkLoadError(src);
     }
     return mod as BraintreeModules[K];
+}
+
+/** The Google Pay API, requested once; a failed load is evicted so the next attempt retries. */
+export async function loadGooglePayLibrary(): Promise<GooglePayGlobal> {
+    await loadScriptOnce(GOOGLE_PAY_LIBRARY_URL);
+    const google = window.google;
+    if (!google?.payments?.api?.PaymentsClient) {
+        pending.delete(GOOGLE_PAY_LIBRARY_URL);
+        throw new BraintreeSdkLoadError(GOOGLE_PAY_LIBRARY_URL);
+    }
+    return google;
 }
 
 /** Test-only: swap the script injector (pass `null` to restore it) and drop the cache. */

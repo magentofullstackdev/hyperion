@@ -104,14 +104,33 @@ class CustomerData implements ArgumentInterface
                 CustomerUrl::XML_PATH_CUSTOMER_STARTUP_REDIRECT_TO_DASHBOARD,
                 ScopeInterface::SCOPE_STORE
             );
-            if ($current !== null && !$toDashboard) {
-                $params[CustomerUrl::REFERER_QUERY_PARAM_NAME] = $this->urlEncoder->encode($current);
+            $referer = $current !== null && !$toDashboard ? $this->refererFor($current) : null;
+            if ($referer !== null) {
+                $params[CustomerUrl::REFERER_QUERY_PARAM_NAME] = $referer;
             }
             return $this->urlBuilder->getUrl(CustomerUrl::ROUTE_ACCOUNT_LOGIN, $params);
         } catch (\Throwable $e) {
             $this->logger->error('CustomerData::getLoginUrl -- ' . $e->getMessage());
             return '/customer/account/login';
         }
+    }
+
+    /**
+     * The encoded page to return to after the login. An account page (sign in,
+     * create, forgot password and their posts) is never that page: the link
+     * keeps the referer the page already carries, or none, like core's own
+     * link on the login page. Otherwise every header state request on the
+     * login page would wrap the previous referer once more.
+     */
+    private function refererFor(string $current): ?string
+    {
+        $path = (string) parse_url($current, PHP_URL_PATH);
+        if (preg_match('#/customer/account/(login|loginPost|create|createPost|forgotpassword|forgotpasswordpost)(/|$)#i', $path)) {
+            return preg_match('#/' . CustomerUrl::REFERER_QUERY_PARAM_NAME . '/([A-Za-z0-9_~-]+)#', $path, $match)
+                ? $match[1]
+                : null;
+        }
+        return $this->urlEncoder->encode($current);
     }
 
     /**

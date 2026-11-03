@@ -4,7 +4,7 @@ Guidance for AI coding assistants (Claude Code and others) working in this repos
 
 ## What this is
 
-Hyperion is a Magento 2 storefront theme plus a suite of eleven PHP modules. Frontend stack: Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2, served through Varnish with ESI. There is no RequireJS, jQuery or Knockout on the storefront. License MIT, version `0.9.0-beta.1`, one maintainer.
+Hyperion is a Magento 2 storefront theme plus a suite of eleven PHP modules. Frontend stack: Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2, served through Varnish with ESI. There is no RequireJS, jQuery or Knockout on the storefront. License MIT, version `0.9.0-beta.2`, one maintainer.
 
 Supported: Magento 2.4.7 to 2.4.9 and Mage-OS 2.3+ / 3.x, PHP `~8.3.0 || ~8.4.0 || ~8.5.0`, Node 22, pnpm 10. See `docs/compatibility.md`.
 

@@ -34,13 +34,13 @@ the Magento root:
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.1
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.1   # optional, see below
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.2
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.2   # optional, see below
 ```
 
 `minimum-stability beta` is needed while the release is a beta: the theme
-requires its modules at the exact version `0.9.0-beta.1`, and a stability
-flag on the root constraint (`^0.9.0-beta.1`) does not reach those
+requires its modules at the exact version `0.9.0-beta.2`, and a stability
+flag on the root constraint (`^0.9.0-beta.2`) does not reach those
 transitive requirements. `prefer-stable` keeps every other package on its
 stable release, and Magento projects already ship with it set. The step
 disappears with the first stable release.

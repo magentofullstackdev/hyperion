@@ -16,15 +16,33 @@
                 "unionpay": "UPD"
             },
             "countrySpecificCardTypes": {
-                "GB": ["VI", "MC"]
+                "GB": [
+                    "VI",
+                    "MC"
+                ]
             },
-            "availableCardTypes": ["AE", "VI", "MC", "DI", "JCB", "DN", "MI", "UPD"],
+            "availableCardTypes": [
+                "AE",
+                "VI",
+                "MC",
+                "DI",
+                "JCB",
+                "DN",
+                "MI",
+                "UPD"
+            ],
             "useCvv": true,
             "environment": "sandbox",
             "merchantId": "fixturemerchantid",
             "ccVaultCode": "braintree_cc_vault",
-            "style": { "shape": "rect", "color": "gold" },
-            "disabledFunding": { "card": false, "elv": false },
+            "style": {
+                "shape": "rect",
+                "color": "gold"
+            },
+            "disabledFunding": {
+                "card": false,
+                "elv": false
+            },
             "icons": {
                 "VI": {
                     "url": "https://hyperion.local/static/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/VI.png",
@@ -38,7 +56,10 @@
             "enabled": true,
             "challengeRequested": false,
             "thresholdAmount": 30,
-            "specificCountries": ["IT", "GB"],
+            "specificCountries": [
+                "IT",
+                "GB"
+            ],
             "ccVaultCode": "braintree_cc_vault",
             "useCvvVault": false,
             "ipAddress": "203.0.113.10"
@@ -57,8 +78,16 @@
             "locale": "it_IT",
             "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png",
             "vaultCode": "braintree_paypal_vault",
-            "paymentIcon": { "url": "", "width": 0, "height": 0 },
-            "style": { "label": "paypal", "color": "gold", "shape": "rect" },
+            "paymentIcon": {
+                "url": "",
+                "width": 0,
+                "height": 0
+            },
+            "style": {
+                "label": "paypal",
+                "color": "gold",
+                "shape": "rect"
+            },
             "isRequiredBillingAddress": "0",
             "canSendLineItems": true
         },
@@ -69,7 +98,11 @@
             "merchantName": "Hyperion Store",
             "merchantCountry": "IT",
             "locale": "it_IT",
-            "style": { "label": "credit", "color": "darkblue", "shape": "rect" },
+            "style": {
+                "label": "credit",
+                "color": "darkblue",
+                "shape": "rect"
+            },
             "isRequiredBillingAddress": "0",
             "canSendLineItems": true
         },
@@ -81,7 +114,11 @@
             "merchantCountry": "IT",
             "locale": "it_IT",
             "isMessageActive": false,
-            "style": { "label": "paypal", "color": "gold", "shape": "rect" },
+            "style": {
+                "label": "paypal",
+                "color": "gold",
+                "shape": "rect"
+            },
             "isRequiredBillingAddress": "0",
             "canSendLineItems": true
         },
@@ -90,7 +127,11 @@
                 "config": {
                     "code": "braintree_cc_vault",
                     "nonceUrl": "http://localhost:3000/braintree/payment/getnonce/",
-                    "details": { "type": "VI", "maskedCC": "1111", "expirationDate": "12/2030" },
+                    "details": {
+                        "type": "VI",
+                        "maskedCC": "1111",
+                        "expirationDate": "12/2030"
+                    },
                     "publicHash": "hash-visa-1111"
                 },
                 "component": "PayPal_Braintree/js/view/payment/method-renderer/vault"
@@ -99,7 +140,11 @@
                 "config": {
                     "code": "braintree_cc_vault",
                     "nonceUrl": "http://localhost:3000/braintree/payment/getnonce/",
-                    "details": { "type": "MC", "maskedCC": "4444", "expirationDate": "03/2029" },
+                    "details": {
+                        "type": "MC",
+                        "maskedCC": "4444",
+                        "expirationDate": "03/2029"
+                    },
                     "publicHash": "hash-mc-4444"
                 },
                 "component": "PayPal_Braintree/js/view/payment/method-renderer/vault"
@@ -109,21 +154,65 @@
                     "code": "braintree_paypal_vault",
                     "nonceUrl": "http://localhost:3000/braintree/payment/getNonce/",
                     "publicHash": "hash-paypal",
-                    "details": { "payerEmail": "roni_cost@example.com" }
+                    "details": {
+                        "payerEmail": "roni_cost@example.com"
+                    }
                 },
                 "component": "PayPal_Braintree/js/view/payment/method-renderer/paypal-vault"
             }
+        },
+        "braintree_googlepay": {
+            "isActive": true,
+            "isActiveShipping": false,
+            "environment": "TEST",
+            "clientToken": "eyJ2ZXJzaW9uIjoyLCJmaXh0dXJlIjoiaHlwZXJpb24ifQ==",
+            "merchantId": "testmode",
+            "cardTypes": [
+                "VISA",
+                "MASTERCARD",
+                "AMEX"
+            ],
+            "btnColor": "0",
+            "paymentMarkSrc": "https://hyperion.local/static/frontend/PayPal_Braintree/images/GooglePay_AcceptanceMark.png",
+            "vaultCode": "braintree_googlepay_vault",
+            "skipOrderReviewStep": true,
+            "priceIncludesTax": false,
+            "icons": [],
+            "multiCouponLimit": 0
         }
     },
     "vault": {
-        "braintree_cc_vault": { "is_enabled": true },
-        "braintree_paypal_vault": { "is_enabled": true }
+        "braintree_cc_vault": {
+            "is_enabled": true
+        },
+        "braintree_paypal_vault": {
+            "is_enabled": true
+        }
     },
     "paymentMethods": [
-        { "code": "braintree_cc_vault", "title": "Stored Cards" },
-        { "code": "braintree_paypal_vault", "title": "Stored Accounts (PayPal)" },
-        { "code": "braintree", "title": "Credit Card (Braintree)" },
-        { "code": "braintree_paypal", "title": "PayPal" },
-        { "code": "checkmo", "title": "Check / Money order" }
+        {
+            "code": "braintree_cc_vault",
+            "title": "Stored Cards"
+        },
+        {
+            "code": "braintree_paypal_vault",
+            "title": "Stored Accounts (PayPal)"
+        },
+        {
+            "code": "braintree",
+            "title": "Credit Card (Braintree)"
+        },
+        {
+            "code": "braintree_paypal",
+            "title": "PayPal"
+        },
+        {
+            "code": "checkmo",
+            "title": "Check / Money order"
+        },
+        {
+            "code": "braintree_googlepay",
+            "title": "Google Pay"
+        }
     ]
 }

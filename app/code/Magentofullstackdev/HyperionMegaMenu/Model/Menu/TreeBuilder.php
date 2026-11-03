@@ -108,13 +108,43 @@ class TreeBuilder
             $node['level'] = $level;
             $children = $this->assemble($id, $nodes, $byParent, $targets, $level + 1);
             if ($node['type'] === Item::TYPE_CATEGORY && $node['children_depth'] > 0) {
-                $children = array_merge($children, $this->liveChildren((int) $node['target'], $targets, $level + 1, $node['children_depth']));
+                $children = $this->mergeLive($children, $this->liveChildren((int) $node['target'], $targets, $level + 1, $node['children_depth']));
             }
             $node['children'] = $children;
             $result[] = $node;
         }
 
         return $result;
+    }
+
+    /**
+     * The live subcategories after the manual children. A live subcategory
+     * whose category a manual child already targets is folded into that
+     * child (its own live subcategories merged the same way), so a category
+     * is never listed twice at one level: the manual item keeps its title,
+     * badge and width, and still gains the live levels below it.
+     *
+     * @param array<int, array<string, mixed>> $manual
+     * @param array<int, array<string, mixed>> $live
+     * @return array<int, array<string, mixed>>
+     */
+    private function mergeLive(array $manual, array $live): array
+    {
+        foreach ($live as $liveNode) {
+            $merged = false;
+            foreach ($manual as $index => $manualNode) {
+                if ($manualNode['type'] === Item::TYPE_CATEGORY && $manualNode['target'] === $liveNode['target']) {
+                    $manual[$index]['children'] = $this->mergeLive($manualNode['children'], $liveNode['children']);
+                    $merged = true;
+                    break;
+                }
+            }
+            if (!$merged) {
+                $manual[] = $liveNode;
+            }
+        }
+
+        return $manual;
     }
 
     /**

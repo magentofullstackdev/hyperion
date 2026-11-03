@@ -3,7 +3,7 @@
     "description": "Hyperion default frontend theme: stateless, edge-cacheable Magento 2 storefront. Ships the JS/CSS bundle built from the frontend/ workspace of the repository (web/manifest.json + web/assets/).",
     "type": "magento2-theme",
     "license": "MIT",
-    "version": "0.9.0-beta.1",
+    "version": "0.9.0-beta.2",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

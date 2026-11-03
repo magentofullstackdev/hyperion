@@ -3,7 +3,7 @@
     "description": "Hyperion Customer: wishlist, compare and account fragments of the header state, order cancellation, Login as Customer banner",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.1",
+    "version": "0.9.0-beta.2",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

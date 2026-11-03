@@ -1,6 +1,6 @@
 {
     "name": "@magentofullstackdev/hyperion-shared",
-    "version": "0.9.0-beta.1",
+    "version": "0.9.0-beta.2",
     "description": "Shared design tokens, Tailwind preset, and base Lit element/mixins for the Hyperion Magento 2 theme suite. Consumed by @magentofullstackdev/hyperion-theme and @magentofullstackdev/hyperion-checkout.",
     "license": "MIT",
     "author": "Sergiu Ro <sergiu.ro@magentofullstack.dev>",

@@ -4,7 +4,9 @@
 /**
  * Braintree vault adapters + <payment-braintree-vault>.
  *
- * `braintree_cc_vault` follows core `method-renderer/vault.js`:
+ * `braintree_cc_vault` (and `braintree_googlepay_vault`, a card stored through
+ * Google Pay, which core handles with the same component) follows core
+ * `method-renderer/vault.js`:
  *   1. when the merchant enabled "CVV re-verification" for stored cards
  *      (`payment.braintree_cc_vault.cvvVerify`), a hosted CVV field is
  *      tokenized and sent to `braintree/payment/updatepaymentmethod`, which
@@ -30,8 +32,10 @@ import {
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
     BRAINTREE_CC_VAULT_CODE,
+    BRAINTREE_GOOGLEPAY_VAULT_CODE,
     BRAINTREE_PAYPAL_VAULT_CODE,
     getBraintreeCardConfig,
+    getBraintreeGooglePayConfig,
     isCcVaultCvvVerifyEnabled,
 } from './config.js';
 import {
@@ -212,7 +216,8 @@ if (!customElements.get('payment-braintree-vault')) {
 }
 
 export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
-    const authorization = getBraintreeCardConfig()?.clientToken ?? '';
+    // A Google Pay card stored without the card method active still needs a client token for 3D Secure.
+    const authorization = getBraintreeCardConfig()?.clientToken || getBraintreeGooglePayConfig()?.clientToken || '';
     if (isCcVaultCvvVerifyEnabled()) {
         if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
         await activeElement.verifyCvv(token);
@@ -232,6 +237,16 @@ export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promi
 export function registerBraintreeVaultAdapters(): void {
     registerVaultAdapter({
         code: BRAINTREE_CC_VAULT_CODE,
+        label: (token) => t('Hyperion_Checkout::vault_card_label', {
+            type: CARD_TYPE_NAMES[detail(token, 'type')] ?? detail(token, 'type'),
+            last4: detail(token, 'maskedCC'),
+            expiry: detail(token, 'expirationDate'),
+        }),
+        renderBody: (token) => html`<payment-braintree-vault .token=${token}></payment-braintree-vault>`,
+        beforePlaceOrder: braintreeCcVaultBeforePlaceOrder,
+    });
+    registerVaultAdapter({
+        code: BRAINTREE_GOOGLEPAY_VAULT_CODE,
         label: (token) => t('Hyperion_Checkout::vault_card_label', {
             type: CARD_TYPE_NAMES[detail(token, 'type')] ?? detail(token, 'type'),
             last4: detail(token, 'maskedCC'),

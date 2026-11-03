@@ -29,9 +29,10 @@
  *     reported why in `globalError`. `beforePlaceOrder` still runs first.
  *
  * Shipped renderers: the offline methods (`payment-offline`), Braintree
- * cards (`braintree`), Braintree PayPal (`braintree_paypal`), PayPal Express
- * (`paypal_express`, `payflow_express`) and stored payment tokens
- * (`*_vault` codes, see `vault-tokens.ts`).
+ * cards (`braintree`), Braintree PayPal (`braintree_paypal`), Braintree
+ * Google Pay (`braintree_googlepay`), PayPal Express (`paypal_express`,
+ * `payflow_express`) and stored payment tokens (`*_vault` codes, see
+ * `vault-tokens.ts`).
  *
  * Methods not in the registry fall through to `payment-generic`: when
  * a code is neither registered nor in the safe-for-generic allowlist,

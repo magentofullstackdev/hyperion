@@ -1,6 +1,6 @@
 # Known limitations
 
-State of 0.9.0-beta.1: 187 native storefront features of Magento Open
+State of 0.9.0-beta.2: 187 native storefront features of Magento Open
 Source were checked one by one against the theme, and the list below is
 what is left.
 Every default-configuration flow exercised by the end-to-end suite works
@@ -32,8 +32,8 @@ tested with this checkout.
 1. Image CAPTCHA for the checkout's inline login (core enables it after
    failed logins); the storefront login page has it.
 2. Persistent cart ("Remember Me"): renders core markup, never tested.
-3. Braintree: PayPal, express buttons on product / cart / mini-cart, Apple
-   Pay, Google Pay, saved payment methods page.
+3. Braintree: PayPal, express buttons on product / cart / mini-cart
+   (including the Google Pay ones), Apple Pay, saved payment methods page.
 4. Payment Services (Adobe): no renderer, no express buttons, no Pay Later
    message, stored cards list / delete only.
 5. Remaining PayPal methods: Hosted Pro, Payflow Pro / Link / Advanced,
