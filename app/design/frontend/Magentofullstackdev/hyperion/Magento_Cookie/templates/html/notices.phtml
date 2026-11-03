@@ -1,0 +1,68 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Cookie restriction mode notice (`web/cookie/cookie_restriction`).
+ *
+ * Rendered for everyone (the page is edge cached) and hidden until
+ * `src/js/lib/cookie-notice.js` decides on load: it stays hidden when the
+ * `user_allowed_save_cookie` cookie exists and the accept button writes
+ * that cookie the way core's `Magento_Cookie/js/notices.js` does. Without
+ * JavaScript the <noscript> paragraph carries the same message.
+ *
+ * @var \Magento\Cookie\Block\Html\Notices $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+use Magento\Cookie\Helper\Cookie as CookieHelper;
+
+/** @var CookieHelper $cookieHelper */
+$cookieHelper = $block->getData('cookieHelper');
+if (!$cookieHelper->isCookieRestrictionModeEnabled()) {
+    return;
+}
+$title = __('We use cookies to make your experience better.');
+$text = __('To comply with the new e-Privacy directive, we need to ask for your consent to set the cookies.');
+?>
+<div id="notice-cookie-block"
+     class="fixed bottom-0 inset-x-0 z-40 bg-inverted text-on-inverted border-t border-subtle shadow-lg"
+     role="region"
+     aria-label="<?= $escaper->escapeHtmlAttr(__('Cookie consent')) ?>"
+     hidden
+     data-hyperion-cookie-notice
+     data-cookie-name="<?= $escaper->escapeHtmlAttr(CookieHelper::IS_USER_ALLOWED_SAVE_COOKIE) ?>"
+     data-cookie-value="<?= $escaper->escapeHtmlAttr($cookieHelper->getAcceptedSaveCookiesWebsiteIds()) ?>"
+     data-cookie-lifetime="<?= $escaper->escapeHtmlAttr((string)$cookieHelper->getCookieRestrictionLifetime()) ?>"
+     data-no-cookies-url="<?= $escaper->escapeUrl($block->getUrl('cookie/index/noCookies')) ?>">
+    <div class="container mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+        <div class="text-sm leading-relaxed max-w-2xl">
+            <p class="font-semibold mb-1"><?= $escaper->escapeHtml($title) ?></p>
+            <p>
+                <?= $escaper->escapeHtml($text) ?>
+                <a href="<?= $escaper->escapeUrl($block->getPrivacyPolicyLink()) ?>"
+                   class="underline hover:no-underline ml-1">
+                    <?= $escaper->escapeHtml(__('Learn more')) ?>
+                </a>
+            </p>
+        </div>
+        <button type="button"
+                data-hyperion-cookie-allow
+                class="shrink-0 px-5 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg
+                       hover:bg-primary-hover transition-colors
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+            <?= $escaper->escapeHtml(__('Allow Cookies')) ?>
+        </button>
+    </div>
+</div>
+<noscript>
+    <div class="bg-inverted text-on-inverted text-sm px-4 py-3" role="region"
+         aria-label="<?= $escaper->escapeHtmlAttr(__('Cookie consent')) ?>">
+        <p class="container mx-auto">
+            <strong><?= $escaper->escapeHtml($title) ?></strong>
+            <?= $escaper->escapeHtml($text) ?>
+            <a href="<?= $escaper->escapeUrl($block->getPrivacyPolicyLink()) ?>" class="underline">
+                <?= $escaper->escapeHtml(__('Learn more')) ?>
+            </a>
+        </p>
+    </div>
+</noscript>

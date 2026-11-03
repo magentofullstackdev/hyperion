@@ -1,0 +1,46 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * One stored card row. Delete is a plain POST to `vault/cards/deleteaction`
+ * behind the site dialog (`data-hyperion-confirm`, entry.js) instead of
+ * core's RequireJS modal widget.
+ *
+ * @var \Magento\Vault\Block\AbstractCardRenderer $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+use Magento\Vault\Api\Data\PaymentTokenInterface;
+
+$last4 = (string) $block->getNumberLast4Digits();
+?>
+<tr data-hyperion-vault-card>
+    <td class="col card-number">
+        <?= $escaper->escapeHtml(__('ending')) ?> <span class="font-mono font-semibold"><?= $escaper->escapeHtml($last4) ?></span>
+    </td>
+    <td class="col card-expire"><?= $escaper->escapeHtml((string) $block->getExpDate()) ?></td>
+    <td class="col card-type">
+        <?php if ($block->getIconUrl()): ?>
+            <img src="<?= $escaper->escapeUrl($block->getIconUrl()) ?>"
+                 width="<?= (int) $block->getIconWidth() ?>"
+                 height="<?= (int) $block->getIconHeight() ?>"
+                 alt=""
+                 class="inline-block h-6 w-auto">
+        <?php endif; ?>
+    </td>
+    <td class="col actions text-right">
+        <form action="<?= $escaper->escapeUrl($block->getUrl('vault/cards/deleteaction')) ?>"
+              method="post"
+              class="inline"
+              data-hyperion-confirm="<?= $escaper->escapeHtmlAttr(__('Are you sure you want to delete this card: %1?', $last4)) ?>">
+            <?= $block->getBlockHtml('formkey') ?>
+            <input type="hidden" name="<?= /* @noEscape */ PaymentTokenInterface::PUBLIC_HASH ?>"
+                   value="<?= $escaper->escapeHtmlAttr($block->getToken()->getPublicHash()) ?>">
+            <button type="submit"
+                    class="text-sm font-medium text-error hover:underline underline-offset-2"
+                    data-hyperion-vault-delete>
+                <?= $escaper->escapeHtml(__('Delete')) ?>
+            </button>
+        </form>
+    </td>
+</tr>

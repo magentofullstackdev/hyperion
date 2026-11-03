@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    "Edit" of a cart line: core's checkout/cart/configure renders the product
+    page (this handle updates catalog_product_view, the per type handles
+    update catalog_product_view_type_*) with the quote item's buy request as
+    the product's preconfigured values. The Hyperion product template reads
+    HyperionCatalog\ViewModel\CartConfigure for the request and posts the
+    form to checkout/cart/updateItemOptions instead of the cart add.
+
+    The page renders the item's options and quantity, so it must not reach
+    the full page cache: an empty cacheable="false" child keeps it private
+    (the product view block skips its own block cache in configure mode).
+    Core's RequireJS module for the page is dropped from the head.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <remove src="Magento_Checkout::js/view/configure/product-customer-data.js"/>
+        <!-- The per type configure handles add two more RequireJS modules. -->
+        <remove src="Magento_ConfigurableProduct::js/configurable-customer-data.js"/>
+        <remove src="Magento_Swatches::js/configurable-customer-data.js"/>
+    </head>
+    <body>
+        <attribute name="class" value="page-cart-configure"/>
+        <!-- Core's configure page pieces that only emit RequireJS / x-magento-init markup. -->
+        <referenceBlock name="checkout_cart_configure_head_components" remove="true"/>
+        <referenceBlock name="checkout.cart.item.configure.block" remove="true"/>
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.cart.configure.private"
+                   cacheable="false"/>
+        </referenceBlock>
+    </body>
+</page>

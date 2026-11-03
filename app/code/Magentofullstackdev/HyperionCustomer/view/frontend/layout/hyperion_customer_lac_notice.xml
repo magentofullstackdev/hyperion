@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the "Login as Customer" banner.
+
+    Registered on HyperionCore's HeaderStatePool (etc/frontend/di.xml), so
+    it rides along the single `hyperion/header/state` request every page
+    issues. The block renders the `#hyperion-lac-notice` placeholder
+    (theme Magento_LoginAsCustomerFrontendUi::html/notices.phtml) as an
+    out-of-band swap only when the session is an admin impersonation, and
+    nothing otherwise. cacheable="false": session-bound.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCustomer\Block\LoginAsCustomer\Notice"
+               name="hyperion.customer.lac.notice"
+               template="Magentofullstackdev_HyperionCustomer::login-as-customer/notice.phtml"
+               cacheable="false"/>
+    </body>
+</page>

@@ -1,0 +1,38 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Product attributes edited with PageBuilder, "Product - Full Width" page
+ * layout: the title keeps the site container, the content spans the page so
+ * its rows size themselves.
+ *
+ * @var \Magento\PageBuilder\Block\Catalog\Block\Product\View\Attributes $block
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$additional = $block->getAdditionalData();
+if (!$additional) {
+    return;
+}
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\ProductView $productView */
+$productView = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductView::class);
+$product = $block->getProduct();
+?>
+<div class="pagebuilder-attributes-wrapper">
+    <?php foreach ($additional as $data): ?>
+        <div class="product-full-width-section py-8">
+            <div class="container mx-auto px-4">
+                <h2 class="text-2xl font-bold text-secondary tracking-tight mb-6">
+                    <?= $escaper->escapeHtml(__($data['label'])) ?>
+                </h2>
+            </div>
+            <div class="pagebuilder-attribute-wrapper">
+                <?= /* @noEscape */ $productView->renderAttributeValue(
+                    $product,
+                    (string) $data['value'],
+                    (string) $data['code']
+                ) ?>
+            </div>
+        </div>
+    <?php endforeach; ?>
+</div>

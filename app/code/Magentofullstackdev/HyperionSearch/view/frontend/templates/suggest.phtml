@@ -1,0 +1,187 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion search autocomplete.
+ *
+ * Swapped into `#header-search-suggestions` by HTMX. Two columns from the
+ * `lg` breakpoint (sidebar: recent searches, popular searches, categories;
+ * main: a 4-column product grid), one vertical stack below it where the
+ * same product items render as a compact list: one fragment serves every
+ * device, so Varnish shares it. The recent searches live in the shopper's
+ * localStorage (lib/search-history.js fills the hidden section after the
+ * swap): the server HTML stays session-agnostic. Semantic color tokens
+ * only, so the dropdown follows the theme.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magentofullstackdev\HyperionSearch\ViewModel\Suggest $suggest */
+$suggest = $block->getData('suggest');
+$query = $suggest->getQuery();
+$terms = $suggest->getTerms();
+$categories = $suggest->getCategories();
+$products = $suggest->getProducts();
+$total = $suggest->getTotalProductCount();
+$remaining = $suggest->getRemainingProductCount();
+// Add to Cart on the desktop cards follows the listing tiles: purchase allowed
+// (catalog mode) and "Add to Cart from Listing Page" on.
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+$productList = $canPurchase ? $viewModels->optional(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductList::class) : null;
+$showCart = $productList ? $productList->canAddToCartFromListing() : false;
+$sectionTitle = 'mb-2 text-sm font-bold text-secondary';
+$sideLink = 'block truncate text-sm text-secondary hover:text-primary focus:outline-none focus-visible:text-primary transition-colors';
+$cartButton = 'inline-flex w-full items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold '
+    . 'text-on-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary transition-colors';
+?>
+<?php if (!$suggest->isQueryLongEnough()): ?>
+    <?php /* Nothing to suggest: the dropdown collapses instead of flashing a banner. */ ?>
+<?php elseif (!$suggest->hasResults()): ?>
+    <div class="rounded-lg border border-subtle bg-surface p-4 text-sm text-muted shadow-sm" role="status">
+        <?= $escaper->escapeHtml(__('No products match "%1".', $query)) ?>
+    </div>
+<?php else: ?>
+    <div class="rounded-lg border border-subtle bg-surface shadow-lg overflow-hidden divide-y divide-subtle
+                lg:flex lg:items-stretch lg:divide-y-0 lg:divide-x"
+         data-hyperion-search-suggest
+         role="group"
+         aria-label="<?= $escaper->escapeHtmlAttr(__('Search suggestions')) ?>">
+
+        <?php /* Sidebar. CSS (_components.css) hides it while every section is hidden:
+                no recent searches, no terms, no categories. */ ?>
+        <aside class="lg:w-64 xl:w-72 shrink-0 p-4 space-y-5" data-hyperion-suggest-aside>
+            <section data-hyperion-recent-searches hidden>
+                <h3 class="<?= /* @noEscape */ $sectionTitle ?>"><?= $escaper->escapeHtml(__('Recent Searches')) ?></h3>
+                <ul class="flex flex-wrap gap-2" data-hyperion-recent-searches-list></ul>
+            </section>
+
+            <?php if ($terms): ?>
+                <section data-hyperion-suggest-section="terms">
+                    <h3 class="<?= /* @noEscape */ $sectionTitle ?>"><?= $escaper->escapeHtml(__('Popular Searches')) ?></h3>
+                    <ul class="space-y-1">
+                        <?php foreach ($terms as $term): ?>
+                            <li>
+                                <a href="<?= $escaper->escapeUrl($term['url']) ?>" class="<?= /* @noEscape */ $sideLink ?>">
+                                    <?= /* @noEscape -- escaped by highlight() */ $suggest->highlight($term['title']) ?>
+                                    <?php if ($term['num_results'] > 0): ?>
+                                        <span class="ml-1 text-xs text-muted"
+                                              aria-label="<?= $escaper->escapeHtmlAttr(__('%1 results', $term['num_results'])) ?>">
+                                            (<?= (int) $term['num_results'] ?>)
+                                        </span>
+                                    <?php endif; ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php endif; ?>
+
+            <?php if ($categories): ?>
+                <section data-hyperion-suggest-section="categories">
+                    <h3 class="<?= /* @noEscape */ $sectionTitle ?>"><?= $escaper->escapeHtml(__('Categories')) ?></h3>
+                    <ul class="space-y-1">
+                        <?php foreach ($categories as $category): ?>
+                            <li>
+                                <a href="<?= $escaper->escapeUrl($category['url']) ?>" class="<?= /* @noEscape */ $sideLink ?>">
+                                    <?= /* @noEscape -- escaped by highlight() */ $suggest->highlight($category['path']) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php endif; ?>
+        </aside>
+
+        <section class="flex-1 min-w-0 p-4"
+                 data-hyperion-suggest-section="products"
+                 data-hyperion-suggest-shown="<?= (int) count($products) ?>"
+                 data-hyperion-suggest-total="<?= (int) $total ?>">
+            <div class="flex items-center justify-between gap-2 mb-4">
+                <h3 class="text-sm font-bold text-secondary">
+                    <?= $escaper->escapeHtml(__('Products')) ?>
+                    <span class="font-normal text-muted">(<?= (int) $total ?>)</span>
+                </h3>
+                <a href="<?= $escaper->escapeUrl($suggest->getSearchResultUrl()) ?>"
+                   class="inline-flex items-center rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary
+                          hover:bg-primary hover:text-on-primary focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                   data-hyperion-suggest-view-all>
+                    <?= $escaper->escapeHtml($remaining > 0 ? __('View All (+%1)', $remaining) : __('View All')) ?>
+                </a>
+            </div>
+
+            <?php if ($products): ?>
+                <ul class="divide-y divide-subtle lg:divide-y-0 lg:grid lg:grid-cols-4 lg:gap-4" data-hyperion-suggest-products>
+                    <?php foreach ($products as $product): ?>
+                        <?php
+                        $productId = (int) ($product['id'] ?? 0);
+                        $productUrl = $escaper->escapeUrl((string) $product['url']);
+                        $saleable = !empty($product['saleable']);
+                        ?>
+                        <li class="flex items-center gap-3 py-2 lg:flex-col lg:items-stretch lg:py-0"
+                            data-hyperion-product-id="<?= (int) $productId ?>">
+                            <a href="<?= /* @noEscape -- escaped above */ $productUrl ?>"
+                               class="shrink-0 flex items-center justify-center overflow-hidden rounded-lg bg-surface-raised
+                                      w-14 h-14 p-1 lg:w-full lg:h-auto lg:aspect-square lg:p-2 lg:mb-2"
+                               tabindex="-1" aria-hidden="true">
+                                <?php if (!empty($product['image'])): ?>
+                                    <img src="<?= $escaper->escapeUrl((string) $product['image']) ?>"
+                                         alt=""
+                                         class="max-w-full max-h-full object-contain"
+                                         width="240" height="300"
+                                         loading="lazy" decoding="async">
+                                <?php endif; ?>
+                            </a>
+                            <div class="flex-1 min-w-0 lg:flex lg:flex-col lg:flex-1">
+                                <a href="<?= /* @noEscape -- escaped above */ $productUrl ?>"
+                                   class="line-clamp-2 text-sm text-secondary hover:text-primary focus:outline-none
+                                          focus-visible:text-primary transition-colors">
+                                    <?= /* @noEscape -- escaped by highlight() */ $suggest->highlight((string) $product['name']) ?>
+                                </a>
+                                <span class="flex flex-wrap items-center gap-2 mt-1">
+                                    <span class="text-sm font-bold text-secondary"><?= $escaper->escapeHtml((string) $product['price_formatted']) ?></span>
+                                    <?php if ($suggest->isSkuMatch($product)): ?>
+                                        <span class="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-mono text-primary"
+                                              data-hyperion-suggest-sku>
+                                            <?= $escaper->escapeHtml((string) $product['sku']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </span>
+                                <?php if ($showCart && $saleable && $productId > 0): ?>
+                                    <div class="hidden lg:block mt-auto pt-3">
+                                        <?php if (!empty($product['buy_from_list'])): ?>
+                                            <?php $cartUrl = $escaper->escapeUrl($block->getUrl('checkout/cart/add', ['product' => $productId])); ?>
+                                            <form action="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                                                  method="post"
+                                                  hx-post="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                                                  hx-target="#hyperion-notification"
+                                                  hx-swap="outerHTML"
+                                                  hx-select="#hyperion-notification"
+                                                  class="flex">
+                                                <?php /* Filled from the cookie by entry.js after the swap (the fragment is public). */ ?>
+                                                <input type="hidden" name="form_key" value="">
+                                                <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                                                <input type="hidden" name="qty" value="1">
+                                                <button type="submit" class="<?= /* @noEscape */ $cartButton ?>">
+                                                    <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <a href="<?= /* @noEscape -- escaped above */ $productUrl ?>" class="<?= /* @noEscape */ $cartButton ?>">
+                                                <?= $escaper->escapeHtml(__('Select Options')) ?>
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <p class="text-sm text-muted" role="status">
+                    <?= $escaper->escapeHtml(__('No products match "%1".', $query)) ?>
+                </p>
+            <?php endif; ?>
+        </section>
+    </div>
+<?php endif; ?>

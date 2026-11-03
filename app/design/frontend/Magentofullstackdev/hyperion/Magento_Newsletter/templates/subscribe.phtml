@@ -1,0 +1,49 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion newsletter subscribe form -- plain HTML POST, no KO / RequireJS.
+ *
+ * Heading + description live in the parent template (footer.phtml) so this
+ * file emits only the form. Semantic tokens; the form is sized to look
+ * good both on the dark inverted footer surface AND on a regular surface
+ * if dropped elsewhere.
+ *
+ * @var \Magento\Newsletter\Block\Subscribe $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<form class="w-full"
+      action="<?= $escaper->escapeUrl($block->getFormActionUrl()) ?>"
+      method="post"
+      id="newsletter-validate-detail"
+      aria-label="<?= $escaper->escapeHtmlAttr(__('Subscribe to Newsletter')) ?>">
+
+    <?= $block->getBlockHtml('formkey') ?>
+
+    <div class="flex flex-col sm:flex-row gap-2">
+        <label for="newsletter-subscribe" class="sr-only">
+            <?= $escaper->escapeHtml(__('Email address')) ?>
+        </label>
+        <input type="email"
+               name="email"
+               id="newsletter-subscribe"
+               required
+               autocomplete="email"
+               placeholder="<?= $escaper->escapeHtmlAttr(__('Enter your email')) ?>"
+               class="flex-1 min-w-0 px-4 py-2.5 text-sm rounded-lg
+                      bg-surface/10 border border-subtle-inverted text-on-inverted
+                      placeholder:text-on-inverted-muted
+                      focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"/>
+        <button type="submit"
+                class="shrink-0 px-5 py-2.5 text-sm font-semibold rounded-lg
+                       bg-primary text-on-primary hover:bg-primary-hover
+                       focus:outline-none focus:ring-2 focus:ring-primary
+                       transition-colors">
+            <?= $escaper->escapeHtml(__('Subscribe')) ?>
+        </button>
+    </div>
+
+    <?php /* The reCAPTCHA notice (and the v2 widget) under the field, not between the lead and the field. */ ?>
+    <?= $block->getChildHtml('recaptcha') ?>
+</form>

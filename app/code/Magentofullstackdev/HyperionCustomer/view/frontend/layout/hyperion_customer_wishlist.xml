@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the customer wishlist header fragment.
+
+    Rendered by /hyperion/header/state (HeaderStatePool, registered in
+    etc/frontend/di.xml) and re-rendered out of band by the wishlist
+    HTMX action plugins; block "hyperion.customer.wishlist.fragment".
+
+    cacheable="false" is mandatory - wishlist item counts are session-specific
+    and must not be served from the full-page cache.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCustomer\Block\Wishlist\Fragment"
+               name="hyperion.customer.wishlist.fragment"
+               template="Magentofullstackdev_HyperionCustomer::wishlist/fragment.phtml"
+               cacheable="false">
+            <arguments>
+                <argument name="customer_data_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCustomer\ViewModel\CustomerData</argument>
+            </arguments>
+        </block>
+    </body>
+</page>

@@ -1,0 +1,151 @@
+"%1 (Excl. Tax)","%1 (IVA esclusa)"
+"%1 (Incl. Tax)","%1 (IVA inclusa)"
+"Accept the terms and conditions before paying.","Accetta i termini e le condizioni prima di pagare."
+"Add New Address","Aggiungi nuovo indirizzo"
+"Add gift options","Aggiungi opzioni regalo"
+Apply,Applica
+"Authorise the payment with PayPal, then place your order.","Autorizza il pagamento con PayPal, poi conferma l'ordine."
+"Authorise the payment with the PayPal button before placing your order.","Autorizza il pagamento con il pulsante PayPal prima di confermare l'ordine."
+"Billing Address","Indirizzo di fatturazione"
+"Calculating shipping…","Calcolo della spedizione…"
+Cancel,Annulla
+"Card number","Numero della carta"
+Checking…,"Verifica in corso…"
+Checkout,Cassa
+City,Città
+Close,Chiudi
+Company,Azienda
+"Complete the billing address before paying.","Completa l'indirizzo di fatturazione prima di pagare."
+"Complete the shipping address before paying.","Completa l'indirizzo di spedizione prima di pagare."
+Contact,Contatti
+"Continue as guest","Continua come ospite"
+Country,Paese
+"Coupon Code","Codice promozionale"
+"Coupon code applied","Codice promozionale applicato"
+Dismiss,Chiudi
+"Each address line must be shorter than 50 characters for card verification. Please update the address and try again.","Per la verifica della carta ogni riga dell'indirizzo deve avere meno di 50 caratteri. Aggiorna l'indirizzo e riprova."
+"Email Address","Indirizzo email"
+"Enable Lit Checkout","Abilita il checkout Lit"
+"Enter a shipping address to see rates.","Inserisci un indirizzo per vedere le tariffe."
+"Enter a valid card number.","Inserisci un numero di carta valido."
+"Enter a valid email address before paying.","Inserisci un indirizzo email valido prima di pagare."
+"Enter a valid expiry date.","Inserisci una data di scadenza valida."
+"Enter a valid security code.","Inserisci un codice di sicurezza valido."
+"Enter your card details to continue.","Inserisci i dati della carta per continuare."
+"Expiry date","Data di scadenza"
+Fax,Fax
+"First Name",Nome
+From,Da
+General,Generale
+"Gift message for the whole order","Messaggio regalo per tutto l'ordine"
+"Gift message for {name}","Messaggio regalo per {name}"
+"Have a promo code?","Hai un codice promozionale?"
+"Hide gift options","Nascondi opzioni regalo"
+Hyperion,Hyperion
+"Hyperion Checkout","Hyperion Checkout"
+"Hyperion Theme","Hyperion Theme"
+"Hyperion_Checkout Vite manifest not found. Looked at: (a) pub/static/%1 (b) app/%2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`.","Manifest Vite di Hyperion_Checkout non trovato. Percorsi controllati: (a) pub/static/%1 (b) app/%2. Esegui `npm run build:checkout` in /frontend e `bin/magento setup:static-content:deploy -f`."
+"Hyperion_Checkout manifest is missing a CSS asset for entry ""%1"".","Nel manifest di Hyperion_Checkout manca la risorsa CSS per la voce ""%1""."
+"Hyperion_Checkout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend.","Nel manifest di Hyperion_Checkout manca la voce ""%1"". Esegui `npm run build:checkout` in /frontend."
+"Last Name",Cognome
+"Loading PayPal...","Caricamento di PayPal..."
+"Loading the secure card form...","Caricamento del modulo sicuro della carta..."
+Loading…,Caricamento…
+MM/YY,MM/AA
+"Magentofullstackdev_HyperionCheckout Vite manifest not found. Looked at: (a) pub/static/%1 (b) %2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`.","Manifest Vite di Magentofullstackdev_HyperionCheckout non trovato. Percorsi controllati: (a) pub/static/%1 (b) %2. Esegui `npm run build:checkout` in /frontend e `bin/magento setup:static-content:deploy -f`."
+"Magentofullstackdev_HyperionCheckout manifest is missing a CSS asset for entry ""%1"".","Nel manifest di Magentofullstackdev_HyperionCheckout manca la risorsa CSS per la voce ""%1""."
+"Magentofullstackdev_HyperionCheckout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend.","Nel manifest di Magentofullstackdev_HyperionCheckout manca la voce ""%1"". Esegui `npm run build:checkout` in /frontend."
+Message,Messaggio
+"Middle Name/Initial","Secondo nome"
+"Minimum order amount is not met.","Importo minimo dell'ordine non raggiunto."
+"My billing and shipping address are the same","Fatturazione uguale a spedizione"
+"Name Prefix",Titolo
+"Name Suffix",Suffisso
+"Not supported by this checkout yet","Non ancora supportato da questo checkout"
+"Order Summary","Riepilogo ordine"
+Password,Password
+"Pay with the PayPal button to complete your order.","Paga con il pulsante PayPal per completare l'ordine."
+PayPal,PayPal
+"PayPal account {email}","Account PayPal {email}"
+"PayPal could not be loaded. Try again or choose another payment method.","Non è stato possibile caricare PayPal. Riprova oppure scegli un altro metodo di pagamento."
+"PayPal payment authorised by {email}. Place your order to complete it.","Pagamento PayPal autorizzato da {email}. Conferma l'ordine per completarlo."
+"PayPal payment authorised. Place your order to complete it.","Pagamento PayPal autorizzato. Conferma l'ordine per completarlo."
+Payment,Pagamento
+"Payment Method","Metodo di pagamento"
+"Payment methods","Metodi di pagamento"
+"Phone Number",Telefono
+"Place Order","Effettua l'ordine"
+"Please enter a valid email address.","Inserisci un indirizzo email valido."
+"Please select",Seleziona
+"Please select a country.","Seleziona un paese."
+"Please sign in or create an account to continue.","Accedi o crea un account per continuare."
+"Processing your order…","Elaborazione dell'ordine in corso…"
+"Provided Zip/Postal Code seems to be invalid. Example: {example}.","Il CAP inserito non sembra valido. Esempio: {example}."
+"Purchase Order Number","Numero ordine d'acquisto"
+Qty,Qtà
+Remove,Rimuovi
+"Save gift message","Salva messaggio regalo"
+"Save in address book","Salva nella mia rubrica"
+"Save this PayPal account for future purchases","Salva questo account PayPal per i prossimi acquisti"
+"Save this card for future purchases","Salva questa carta per i prossimi acquisti"
+"Security code (CVV)","Codice di sicurezza (CVV)"
+"See our shipping policy","Consulta la nostra politica di spedizione"
+"Select a payment method before paying.","Seleziona un metodo di pagamento prima di pagare."
+"Select a region","Seleziona una provincia"
+"Select a shipping method before paying.","Seleziona un metodo di spedizione prima di pagare."
+"Select a shipping method to continue.","Seleziona un metodo di spedizione per continuare."
+"Select one of your stored payment methods.","Seleziona uno dei tuoi metodi di pagamento salvati."
+Shipping,Spedizione
+"Shipping Address","Indirizzo di spedizione"
+"Shipping Method","Metodo di spedizione"
+"Shipping methods","Metodi di spedizione"
+"Shipping policy","Politica di spedizione"
+"Sign In",Accedi
+"Sign in to existing account","Accedi a un account esistente"
+"Sign-in failed. Check your email and password.","Accesso non riuscito. Controlla email e password."
+"Signed in","Accesso eseguito"
+"Some card details are not valid. Check the highlighted fields.","Alcuni dati della carta non sono validi. Controlla i campi evidenziati."
+"Something went wrong with your PayPal payment. Please try again later.","Si è verificato un problema con il pagamento PayPal. Riprova più tardi."
+"Something went wrong. Please try again.","Qualcosa è andato storto. Riprova."
+State/Province,Provincia
+"Street Address","Via e numero"
+"Street address line {n}","Indirizzo riga {n}"
+"Terms and Conditions","Termini e condizioni"
+"The PayPal payment could not be authorised. Please try again.","Non è stato possibile autorizzare il pagamento con PayPal. Riprova."
+"The PayPal payment was cancelled. You can try again or choose another payment method.","Il pagamento PayPal è stato annullato. Puoi riprovare oppure scegliere un altro metodo di pagamento."
+"The gift message couldn't be saved. Please try again.","Impossibile salvare il messaggio regalo. Riprova."
+"The gift message has been removed.","Il messaggio regalo è stato rimosso."
+"The gift message has been saved.","Il messaggio regalo è stato salvato."
+"The payment form is still loading. Please wait a moment and try again.","Il modulo di pagamento è ancora in caricamento. Attendi un momento e riprova."
+"The payment service could not be reached. Check your connection and try again.","Impossibile raggiungere il servizio di pagamento. Controlla la connessione e riprova."
+"The secure payment form could not be loaded. Try again or choose another payment method.","Non è stato possibile caricare il modulo di pagamento sicuro. Riprova oppure scegli un altro metodo di pagamento."
+"The security code could not be verified. Check it and try again.","Non è stato possibile verificare il codice di sicurezza. Controllalo e riprova."
+"The selected shipping method is not available for this address.","Il metodo di spedizione selezionato non è disponibile per questo indirizzo."
+"This card is already stored in your account. Pick it from your stored cards or use another one.","Questa carta è già salvata nel tuo account. Selezionala tra le carte salvate oppure usane un'altra."
+"This is a required field.","Campo obbligatorio."
+"This payment method ({code}) is not yet supported in the new checkout. Please contact support.","Questo metodo di pagamento ({code}) non è ancora supportato. Contatta l'assistenza."
+"This promo code is not valid.","Questo codice promozionale non è valido."
+To,A
+"Try again",Riprova
+"Updating rates…","Aggiornamento tariffe…"
+"Use another PayPal account","Usa un altro account PayPal"
+"VAT Number","Partita IVA"
+"We can't estimate the shipping right now. Please try again.","Al momento non è possibile calcolare la spedizione. Riprova."
+"We couldn't initialise the checkout. Please refresh the page.","Non è stato possibile inizializzare la cassa. Ricarica la pagina."
+"What is PayPal?","Che cos'è PayPal?"
+"When enabled, the /checkout page renders the Hyperion Lit one-step
+                        checkout. When disabled, stock Magento Knockout checkout is served.
+                        Flush cache after changing this setting.","Se abilitato, la pagina /checkout mostra il checkout in un passaggio di Hyperion basato su Lit. Se disabilitato, viene servito il checkout Knockout standard di Magento. Svuota la cache dopo aver modificato questa impostazione."
+"When enabled, the /checkout page renders the Hyperion Lit one-step checkout. When disabled, stock Magento Knockout checkout is served. Flush cache after changing this setting.","Se abilitato, la pagina /checkout mostra il checkout in un passaggio di Hyperion basato su Lit. Se disabilitato, viene servito il checkout Knockout standard di Magento. Svuota la cache dopo aver modificato questa impostazione."
+"You have an existing account. Sign in or continue as a guest.","Hai già un account. Accedi o continua come ospite."
+"You will be redirected to PayPal to complete your payment.","Verrai reindirizzato su PayPal per completare il pagamento."
+"Your card could not be processed. Check the details or use another card.","Non è stato possibile elaborare la carta. Controlla i dati oppure usa un'altra carta."
+"Your card could not be verified. Please try again with another form of payment.","Non è stato possibile verificare la carta. Riprova con un altro metodo di pagamento."
+"Your order total changed. Please authorise the payment with PayPal again.","Il totale dell'ordine è cambiato. Autorizza di nuovo il pagamento con PayPal."
+"Your order total is still being calculated. Please wait a moment and try again.","Il totale dell'ordine è ancora in fase di calcolo. Attendi un momento e riprova."
+"Your stored payment method could not be used. Please choose another payment method.","Non è stato possibile usare il metodo di pagamento salvato. Scegli un altro metodo di pagamento."
+"Zip/Postal Code",CAP
+"{title} (Excl. Tax)","{title} (IVA esclusa)"
+"{title} (Incl. Tax)","{title} (IVA inclusa)"
+"{type} cards are not accepted. Please use another card.","Le carte {type} non sono accettate. Usa un'altra carta."
+"{type} ending in {last4} (expires {expiry})","{type} che termina con {last4} (scadenza {expiry})"

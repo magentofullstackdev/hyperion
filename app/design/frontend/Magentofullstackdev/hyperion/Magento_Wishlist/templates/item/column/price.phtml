@@ -1,0 +1,16 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: configured price (child price renderer).
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Cart $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<div class="text-sm">
+    <?php foreach ($block->getChildNames() as $childName): ?>
+        <?= /* @noEscape */ $block->getLayout()->renderElement($childName, false) ?>
+    <?php endforeach; ?>
+</div>

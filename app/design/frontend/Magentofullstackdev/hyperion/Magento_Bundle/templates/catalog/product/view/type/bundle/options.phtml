@@ -1,0 +1,179 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Bundle options, server-rendered inside the PDP add-to-cart form.
+ *
+ * Field contract is Magento's own (Magento\Bundle\Model\Product\Type::
+ * prepareForCartAdvanced): `bundle_option[<optionId>]` = selection id
+ * (array of ids for checkbox / multi), `bundle_option_qty[<optionId>]` =
+ * quantity when the selection allows the shopper to change it.
+ * <hyperion-bundle-options> only keeps the running total up to date; the
+ * form submits fine without JavaScript.
+ *
+ * @var \Magento\Bundle\Block\Catalog\Product\View\Type\Bundle $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$product = $block->getProduct();
+$options = $block->getOptions();
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\BundleOptions $vm */
+$vm = $block->getData('bundle_options_view_model');
+if (!$product || !$options || $vm === null) {
+    return;
+}
+$basePrice = $vm->getBasePrice($product);
+$inputClass = 'w-full px-4 py-2.5 text-sm border border-subtle rounded-lg bg-surface text-secondary'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+// "Your Customization" lines of the initial selection, rendered here with the
+// geometry <hyperion-bundle-options> uses (one `li` per chosen selection,
+// `qty x name` and the line price): the component rewrites them from the same
+// data on upgrade, so the list has its final height from the first frame
+// (an empty list filled on upgrade shifted the add to cart row by 52px).
+$summaryLines = [];
+$qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.');
+?>
+<hyperion-bundle-options class="block space-y-5"
+                         data-base-price="<?= $escaper->escapeHtmlAttr((string) $basePrice) ?>"
+                         data-currency="<?= $escaper->escapeHtmlAttr($vm->getCurrencyCode()) ?>"
+                         data-locale="<?= $escaper->escapeHtmlAttr($vm->getLocale()) ?>">
+    <?php foreach ($options as $option): ?>
+        <?php
+        /** @var \Magento\Bundle\Model\Option $option */
+        $optionId = (int) $option->getOptionId();
+        $selections = $option->getSelections() ?: [];
+        if ($selections === []) {
+            continue;
+        }
+        $type = (string) $option->getType();
+        $required = (bool) $option->getRequired();
+        $fieldId = 'bundle-option-' . $optionId;
+        // Editing a cart or wish list item: its buy request decides what is chosen (an empty list
+        // when the shopper skipped the option); otherwise the admin defaults.
+        $preselected = $vm->getPreselectedSelectionIds($product, $option);
+        $isChosen = static fn ($selection): bool => $preselected === null
+            ? (int) $selection->getIsDefault() === 1
+            : in_array((string) (int) $selection->getSelectionId(), $preselected, true);
+        $canChangeQty = false;
+        $defaultQty = 1.0;
+        foreach ($selections as $selection) {
+            if ((int) $selection->getSelectionCanChangeQty() === 1) {
+                $canChangeQty = true;
+            }
+            if ($isChosen($selection)) {
+                $defaultQty = (float) $selection->getSelectionQty() ?: 1.0;
+            }
+        }
+        $defaultQty = $vm->getPreselectedQty($product, $option) ?? $defaultQty;
+        foreach ($selections as $selection) {
+            if (!$isChosen($selection)) {
+                continue;
+            }
+            $selectionQty = (float) $selection->getSelectionQty() ?: 1.0;
+            $selectionPrice = $vm->getSelectionPrice($product, $selection);
+            // A changeable quantity scales the selection price like the component does.
+            $lineQty = $canChangeQty && ($type === 'select' || $type === 'radio') ? $defaultQty : $selectionQty;
+            $summaryLines[] = [
+                'name' => (string) $selection->getName(),
+                'qty' => $lineQty,
+                'price' => $selectionPrice * ($lineQty / $selectionQty),
+            ];
+        }
+        ?>
+        <fieldset class="space-y-2" data-hyperion-bundle-option="<?= (int) $optionId ?>" data-hyperion-bundle-can-change-qty="<?= $canChangeQty ? '1' : '0' ?>">
+            <legend class="text-sm font-medium text-secondary">
+                <?= $escaper->escapeHtml((string) $option->getTitle()) ?>
+                <?php if ($required): ?>
+                    <span class="text-error" aria-hidden="true">*</span>
+                <?php endif; ?>
+            </legend>
+
+            <?php if ($type === 'select' || $type === 'multi'): ?>
+                <label for="<?= $escaper->escapeHtmlAttr($fieldId) ?>" class="sr-only">
+                    <?= $escaper->escapeHtml((string) $option->getTitle()) ?>
+                </label>
+                <select id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                        name="bundle_option[<?= (int) $optionId ?>]<?= $type === 'multi' ? '[]' : '' ?>"
+                        class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                        <?= /* @noEscape -- constant attribute text */ $type === 'multi' ? 'multiple size="' . min(6, count($selections)) . '"' : '' ?>
+                        <?= /* @noEscape -- constant attribute text */ $required ? 'required' : '' ?>>
+                    <?php if ($type === 'select'): ?>
+                        <option value=""><?= $escaper->escapeHtml(__('Choose a selection...')) ?></option>
+                    <?php endif; ?>
+                    <?php foreach ($selections as $selection): ?>
+                        <?php $price = $vm->getSelectionPrice($product, $selection); ?>
+                        <option value="<?= (int) $selection->getSelectionId() ?>"
+                                data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                                data-qty="<?= $escaper->escapeHtmlAttr((string) ((float) $selection->getSelectionQty() ?: 1)) ?>"
+                                data-name="<?= $escaper->escapeHtmlAttr((string) $selection->getName()) ?>"
+                                <?= /* @noEscape -- constant attribute text */ $isChosen($selection) ? 'selected' : '' ?>>
+                            <?= $escaper->escapeHtml((string) $selection->getName()) ?>
+                            <?= $escaper->escapeHtml('+ ' . $vm->format($price)) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+            <?php else: ?>
+                <?php /* radio | checkbox */ ?>
+                <?php $isCheckbox = $type === 'checkbox'; ?>
+                <div class="flex flex-col gap-2">
+                    <?php if (!$isCheckbox && !$required): ?>
+                        <label class="flex items-center gap-2 text-sm text-secondary">
+                            <input type="radio" name="bundle_option[<?= (int) $optionId ?>]" value="" data-price="0"
+                                   class="accent-primary"
+                                   <?= /* @noEscape -- constant attribute text */ $preselected === [] ? 'checked' : '' ?>>
+                            <?= $escaper->escapeHtml(__('None')) ?>
+                        </label>
+                    <?php endif; ?>
+                    <?php foreach ($selections as $selection): ?>
+                        <?php $price = $vm->getSelectionPrice($product, $selection); ?>
+                        <label class="flex items-center gap-2 text-sm text-secondary">
+                            <input type="<?= $isCheckbox ? 'checkbox' : 'radio' ?>"
+                                   name="bundle_option[<?= (int) $optionId ?>]<?= $isCheckbox ? '[]' : '' ?>"
+                                   value="<?= (int) $selection->getSelectionId() ?>"
+                                   data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                                   data-qty="<?= $escaper->escapeHtmlAttr((string) ((float) $selection->getSelectionQty() ?: 1)) ?>"
+                                   data-name="<?= $escaper->escapeHtmlAttr((string) $selection->getName()) ?>"
+                                   class="accent-primary"
+                                   <?= /* @noEscape -- constant attribute text */ $isChosen($selection) ? 'checked' : '' ?>
+                                   <?= /* @noEscape -- constant attribute text */ $required && !$isCheckbox ? 'required' : '' ?>>
+                            <span><?= $escaper->escapeHtml((string) $selection->getName()) ?></span>
+                            <span class="text-muted"><?= $escaper->escapeHtml('+ ' . $vm->format($price)) ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($canChangeQty && ($type === 'select' || $type === 'radio')): ?>
+                <label class="flex items-center gap-3 text-xs text-muted">
+                    <?= $escaper->escapeHtml(__('Qty')) ?>
+                    <input type="number"
+                           name="bundle_option_qty[<?= (int) $optionId ?>]"
+                           value="<?= $escaper->escapeHtmlAttr((string) $defaultQty) ?>"
+                           min="1"
+                           inputmode="numeric"
+                           data-hyperion-bundle-qty="<?= (int) $optionId ?>"
+                           class="w-20 px-2 py-1 text-sm rounded-lg bg-surface border border-subtle text-secondary
+                                  focus:outline-none focus:ring-2 focus:ring-primary">
+                </label>
+            <?php endif; ?>
+        </fieldset>
+    <?php endforeach; ?>
+
+    <div class="border-t border-subtle pt-3 space-y-2 text-sm" data-hyperion-bundle-summary>
+        <p class="text-muted font-medium"><?= $escaper->escapeHtml(__('Your Customization')) ?></p>
+        <ul class="space-y-1 text-secondary" data-hyperion-bundle-summary-list aria-live="polite">
+            <?php foreach ($summaryLines as $line): ?>
+                <li class="flex items-center justify-between gap-3">
+                    <span><?= $escaper->escapeHtml($qtyText($line['qty']) . ' x ' . $line['name']) ?></span>
+                    <span class="text-muted"><?= $escaper->escapeHtml($vm->format($line['price'])) ?></span>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+        <p class="flex items-center justify-between pt-2 border-t border-subtle">
+            <span class="text-muted"><?= $escaper->escapeHtml(__('Price as configured')) ?></span>
+            <strong class="text-lg text-secondary" data-hyperion-bundle-total aria-live="polite"><?= $escaper->escapeHtml($vm->format($basePrice)) ?></strong>
+        </p>
+    </div>
+</hyperion-bundle-options>

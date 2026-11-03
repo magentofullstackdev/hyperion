@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PageBuilder "Category - Full Width" page layout, Hyperion version.
+
+    This REPLACES the core file (override/base): core moves `columns.top` and
+    `category.view.container` out of the columns, but Hyperion removes the
+    first and renders the category blocks as children of
+    `hyperion.category.view` (Magento_Catalog/layout/catalog_category_view.xml),
+    so the core moves had nothing to act on and the description stayed inside
+    the site container.
+
+    Same mechanism, Hyperion's blocks: the title, the category image, the
+    description and the CMS block are moved out of `main.content` into a
+    wrapper under `page.wrapper` that sits between the page top and the
+    columns. The title and the image keep the site container; the description
+    and the CMS block get the page width, so PageBuilder rows size themselves
+    (full-bleed rows span the viewport; contained and full-width rows get the
+    container width and gutters from _pagebuilder.css, keyed on the
+    `page-main-full-width` class, which therefore goes on the wrapper). The
+    layered navigation and the product grid stay in the 2columns-left columns
+    with the site container. `category/view.phtml` prints these blocks with
+    getChildHtml(), which returns nothing once they are moved, so nothing is
+    rendered twice and the template needs no knowledge of the layout.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="2columns-left"/>
+    <referenceContainer name="page.wrapper">
+        <container name="hyperion.category.top" htmlTag="div"
+                   htmlClass="category-full-width page-main-full-width"
+                   after="page.top">
+            <container name="hyperion.category.top.title" htmlTag="div"
+                       htmlClass="container mx-auto px-4 pt-6 pb-6"/>
+            <container name="hyperion.category.top.image" htmlTag="div"
+                       htmlClass="container mx-auto px-4"
+                       after="hyperion.category.top.title"/>
+        </container>
+    </referenceContainer>
+    <move element="category.title" destination="hyperion.category.top.title"/>
+    <move element="category.image" destination="hyperion.category.top.image"/>
+    <move element="category.description" destination="hyperion.category.top" after="hyperion.category.top.image"/>
+    <move element="category.cms" destination="hyperion.category.top" after="category.description"/>
+</layout>

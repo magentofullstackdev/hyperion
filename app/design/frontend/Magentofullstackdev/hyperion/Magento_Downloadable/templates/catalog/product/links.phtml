@@ -1,0 +1,117 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion "Downloads" list -- downloadable-product purchaseable links.
+ *
+ * Rendered by Magentofullstackdev\Catalog's PDP template via
+ *   $block->getChildHtml('type_downloadable_options')
+ * inside the add-to-cart form so the `links[]` checkboxes post along
+ * with the cart add.
+ *
+ * Behavior parity with the vendor Magento_Downloadable links.phtml:
+ *   * When links ARE "purchased separately" the shopper picks from
+ *     checkboxes, each with its own price rendered via the
+ *     `product.price.link` child block.
+ *   * When they are NOT purchased separately the list renders as
+ *     plain titles so the shopper sees what they'll receive.
+ *   * A "sample" link appears inline when the admin attached a
+ *     preview file to the link (distinct from the global trailers
+ *     list emitted by samples.phtml).
+ *
+ * The `data-mage-init` and `#links_all` select-all behavior from
+ * Luma is dropped -- Hyperion uses plain server HTML; multiple links
+ * can still be selected independently and any required-one-checkbox
+ * validation falls through to the native Cart\Add controller error
+ * message surfaced by the HTMX add-to-cart response fragment.
+ *
+ * Links sold separately carry their price in `data-price`, and the list
+ * sits in <hyperion-custom-options>, so ticking a link moves the PDP price
+ * (core does this with the `downloadable` RequireJS widget).
+ *
+ * @var \Magento\Downloadable\Block\Catalog\Product\Links $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$linksPurchasedSeparately = $block->getLinksPurchasedSeparately();
+$isRequired = $block->getLinkSelectionRequired();
+if (!$block->getProduct()->isSaleable() || !$block->hasLinks()) {
+    return;
+}
+$links = $block->getLinks();
+$priceVm = $viewModels->require(CustomOptions::class);
+$linkPrices = $linksPurchasedSeparately ? (json_decode((string) $block->getJsonConfig(), true)['links'] ?? []) : [];
+?>
+<hyperion-custom-options class="block"
+                         data-base-price="<?= $escaper->escapeHtmlAttr((string) $priceVm->getBasePrice($block->getProduct())) ?>"
+                         data-currency="<?= $escaper->escapeHtmlAttr($priceVm->getCurrencyCode()) ?>"
+                         data-locale="<?= $escaper->escapeHtmlAttr($priceVm->getLocale()) ?>"
+                         data-price-target="#hyperion-product-price">
+<section class="space-y-2" aria-labelledby="hyperion-downloadable-links-title">
+
+    <h2 id="hyperion-downloadable-links-title"
+        class="text-sm font-bold uppercase tracking-wider text-secondary">
+        <?= $escaper->escapeHtml($block->getLinksTitle()) ?>
+        <?php if ($linksPurchasedSeparately && $isRequired): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+            <span class="sr-only"><?= $escaper->escapeHtml(__('(required)')) ?></span>
+        <?php endif; ?>
+    </h2>
+
+    <ul role="list"
+        class="divide-y divide-subtle border border-subtle rounded-lg overflow-hidden bg-surface"
+        id="downloadable-links-list"
+        data-container-for="downloadable-links">
+        <?php foreach ($links as $link): ?>
+            <li class="px-4 py-3" data-role="link">
+                <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer
+                              <?= $linksPurchasedSeparately ? '' : 'cursor-default' ?>">
+                    <?php if ($linksPurchasedSeparately): ?>
+                        <input type="checkbox"
+                               name="links[]"
+                               id="links_<?= $escaper->escapeHtmlAttr($link->getId()) ?>"
+                               value="<?= $escaper->escapeHtmlAttr($link->getId()) ?>"
+                               data-price="<?= $escaper->escapeHtmlAttr((string) ($linkPrices[$link->getId()]['finalPrice'] ?? 0)) ?>"
+                               <?php if ($isRequired): ?>
+                                   required
+                                   aria-describedby="hyperion-downloadable-links-title"
+                               <?php endif; ?>
+                               <?= $escaper->escapeHtml($block->getLinkCheckedValue($link)) ?>
+                               class="h-4 w-4 shrink-0 rounded border-subtle text-primary
+                                      focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?php else: ?>
+                        <svg class="w-4 h-4 shrink-0 text-muted"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M9 12l2 2 4-4M7.835 4.697A3.42 3.42 0 001.946 7.25c-.34.586-.315 1.306.079 1.871.394.566 1.06.879 1.751.827m0 0A9 9 0 003.75 12c0 4.97 4.03 9 9 9s9-4.03 9-9a9 9 0 00-.026-.699"/>
+                        </svg>
+                    <?php endif; ?>
+
+                    <span class="flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span class="font-medium">
+                            <?= $escaper->escapeHtml($link->getTitle()) ?>
+                        </span>
+
+                        <?php if ($link->getSampleFile() || $link->getSampleUrl()): ?>
+                            <a class="text-xs text-primary hover:text-primary-hover underline"
+                               href="<?= $escaper->escapeUrl($block->getLinkSampleUrl($link)) ?>"
+                               <?= $block->getIsOpenInNewWindow() ? 'target="_blank" rel="noopener"' : '' ?>>
+                                <?= $escaper->escapeHtml(__('sample')) ?>
+                            </a>
+                        <?php endif; ?>
+
+                        <?php if ($linksPurchasedSeparately): ?>
+                            <span class="ml-auto text-sm font-semibold text-secondary">
+                                <?= /* @noEscape */ $block->getLinkPrice($link) ?>
+                            </span>
+                        <?php endif; ?>
+                    </span>
+                </label>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</section>
+</hyperion-custom-options>

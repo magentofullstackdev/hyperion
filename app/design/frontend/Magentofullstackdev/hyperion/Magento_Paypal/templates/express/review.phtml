@@ -1,0 +1,198 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * PayPal Express Checkout review page.
+ *
+ * Left: shipping address, shipping method, payment and the items. Right:
+ * totals, agreements and Place Order. Choosing a shipping method posts
+ * to paypal/express/saveShippingMethod, which answers with the `details`
+ * block again: the items, and the totals as an out-of-band swap.
+ * <hyperion-paypal-review> keeps Place Order disabled while there is no
+ * shipping method or a request is running.
+ *
+ * @var \Magento\Paypal\Block\Express\Review $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magento\Paypal\ViewModel\PaypalFundingSourceDataProvider|null $fundingSource */
+$fundingSource = $block->getData('PaypalFundingSourceDataProvider');
+$shippingAddress = $block->getShippingAddress();
+$details = $block->getChildBlock('details');
+$formKey = $block->getFormKey();
+$cardClass = 'bg-surface rounded-xl border border-subtle shadow-sm p-5';
+$titleClass = 'text-xs font-bold uppercase tracking-wider text-muted mb-3';
+// The block escapes the method title and wraps the price in a <span>: neither fits an <option>.
+$rateLabelOf = static function ($rate) use ($block): string {
+    $price = trim(strip_tags((string) $block->renderShippingRateOption($rate, '%2$s%3$s')));
+    return trim((string) $rate->getMethodTitle()) . ($price !== '' ? ' - ' . $price : '');
+};
+$editClass = 'mt-3 inline-block text-sm font-medium text-primary hover:underline'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary rounded';
+?>
+<hyperion-paypal-review class="block container mx-auto px-4 py-6 lg:py-10">
+    <h1 class="text-2xl md:text-3xl font-bold text-secondary tracking-tight mb-6">
+        <?= $escaper->escapeHtml(__('Review Order')) ?>
+    </h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
+        <div class="flex flex-col gap-6 min-w-0">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <?php if ($shippingAddress): ?>
+                    <section class="<?= $escaper->escapeHtmlAttr($cardClass) ?>"
+                             aria-labelledby="hyperion-review-address-title">
+                        <h2 id="hyperion-review-address-title"
+                            class="<?= $escaper->escapeHtmlAttr($titleClass) ?>">
+                            <?= $escaper->escapeHtml(__('Shipping Address')) ?>
+                        </h2>
+                        <address class="not-italic text-sm leading-relaxed text-secondary">
+                            <?= $escaper->escapeHtml($block->renderAddress($shippingAddress), ['br']) ?>
+                        </address>
+                        <?php if ($block->getCanEditShippingAddress()): ?>
+                            <a href="<?= $escaper->escapeUrl($block->getEditUrl()) ?>"
+                               class="<?= $escaper->escapeHtmlAttr($editClass) ?>">
+                                <?= $escaper->escapeHtml(__('Edit')) ?>
+                            </a>
+                        <?php endif; ?>
+                    </section>
+
+                    <section class="<?= $escaper->escapeHtmlAttr($cardClass) ?>"
+                             aria-labelledby="hyperion-review-method-title">
+                        <h2 id="hyperion-review-method-title"
+                            class="<?= $escaper->escapeHtmlAttr($titleClass) ?>">
+                            <?= $escaper->escapeHtml(__('Shipping Method')) ?>
+                        </h2>
+                        <?php $groups = $block->getShippingRateGroups(); ?>
+                        <?php $currentRate = $block->getCurrentShippingRate(); ?>
+                        <?php if ($block->canEditShippingMethod() && $groups): ?>
+                            <form method="post"
+                                  id="hyperion-paypal-shipping-form"
+                                  action="<?= $escaper->escapeUrl($block->getShippingMethodSubmitUrl()) ?>"
+                                  hx-post="<?= $escaper->escapeUrl($block->getShippingMethodSubmitUrl()) ?>"
+                                  hx-trigger="change"
+                                  hx-vals='{"isAjax": "1"}'
+                                  hx-target="#hyperion-paypal-review-items"
+                                  hx-swap="outerHTML"
+                                  data-review-shipping-form>
+                                <input type="hidden" name="form_key"
+                                       value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
+                                <label for="hyperion-paypal-shipping-method" class="sr-only">
+                                    <?= $escaper->escapeHtml(__('Shipping Method')) ?>
+                                </label>
+                                <select name="shipping_method"
+                                        id="hyperion-paypal-shipping-method"
+                                        required
+                                        data-review-shipping
+                                        class="w-full px-3 py-2 text-sm rounded-lg bg-surface border border-subtle
+                                               text-secondary focus:outline-none focus:ring-2 focus:ring-primary
+                                               focus:border-primary">
+                                    <?php if (!$currentRate): ?>
+                                        <option value="">
+                                            <?= $escaper->escapeHtml(__('Please select a shipping method...')) ?>
+                                        </option>
+                                    <?php endif; ?>
+                                    <?php foreach ($groups as $code => $rates): ?>
+                                        <?php $carrierName = (string) $block->getCarrierName($code); ?>
+                                        <optgroup label="<?= $escaper->escapeHtmlAttr($carrierName) ?>">
+                                            <?php foreach ($rates as $rate): ?>
+                                                <?php $rateLabel = $rateLabelOf($rate); ?>
+                                                <?php $rateValue = (string) $block->renderShippingRateValue($rate); ?>
+                                                <option value="<?= $escaper->escapeHtmlAttr($rateValue) ?>"
+                                                    <?= $currentRate === $rate ? ' selected' : '' ?>>
+                                                    <?= $escaper->escapeHtml($rateLabel) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </optgroup>
+                                    <?php endforeach; ?>
+                                </select>
+                                <p class="mt-2 text-xs text-muted" role="status" hidden data-review-updating>
+                                    <?= $escaper->escapeHtml(__('Updating the order totals...')) ?>
+                                </p>
+                            </form>
+                        <?php elseif ($currentRate): ?>
+                            <p class="text-sm text-secondary">
+                                <?= $escaper->escapeHtml($rateLabelOf($currentRate)) ?>
+                            </p>
+                        <?php else: ?>
+                            <p class="text-sm text-error" data-review-no-rates>
+                                <?= $escaper->escapeHtml(
+                                    __('Sorry, no quotes are available for this order right now.')
+                                ) ?>
+                            </p>
+                        <?php endif; ?>
+                    </section>
+                <?php endif; ?>
+
+                <section class="<?= $escaper->escapeHtmlAttr($cardClass) ?>"
+                         aria-labelledby="hyperion-review-payment-title">
+                    <h2 id="hyperion-review-payment-title" class="<?= $escaper->escapeHtmlAttr($titleClass) ?>">
+                        <?= $escaper->escapeHtml(__('Payment Method')) ?>
+                    </h2>
+                    <p class="text-sm font-medium text-secondary">
+                        <?= $escaper->escapeHtml(
+                            $fundingSource?->getPaypalFundingSource() ?? $block->getPaymentMethodTitle()
+                        ) ?>
+                    </p>
+                    <p class="text-sm text-muted break-all"><?= $escaper->escapeHtml($block->getEmail()) ?></p>
+                    <?php if ($block->getEditUrl()): ?>
+                        <a href="<?= $escaper->escapeUrl($block->getEditUrl()) ?>"
+                           class="<?= $escaper->escapeHtmlAttr($editClass) ?>">
+                            <?= $escaper->escapeHtml(__('Edit Payment Information')) ?>
+                        </a>
+                    <?php endif; ?>
+                </section>
+            </div>
+
+            <section class="<?= $escaper->escapeHtmlAttr($cardClass) ?>"
+                     aria-labelledby="hyperion-review-items-title">
+                <div class="flex items-baseline justify-between gap-4 mb-3">
+                    <h2 id="hyperion-review-items-title" class="text-base font-bold text-secondary">
+                        <?= $escaper->escapeHtml(__('Items in Your Shopping Cart')) ?>
+                    </h2>
+                    <a href="<?= $escaper->escapeUrl($block->getUrl('checkout/cart')) ?>"
+                       class="text-sm font-medium text-primary hover:underline
+                              focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                        <?= $escaper->escapeHtml(__('Edit Shopping Cart')) ?>
+                    </a>
+                </div>
+                <?= $details ? $details->setData('part', 'items')->toHtml() : '' ?>
+            </section>
+        </div>
+
+        <aside class="bg-surface rounded-xl border border-subtle shadow-sm p-6 lg:sticky lg:top-24"
+               aria-labelledby="hyperion-review-summary-title">
+            <h2 id="hyperion-review-summary-title"
+                class="text-base font-bold text-secondary uppercase tracking-wider mb-4">
+                <?= $escaper->escapeHtml(__('Summary')) ?>
+            </h2>
+
+            <?= $details ? $details->setData('part', 'totals')->toHtml() : '' ?>
+
+            <form method="post"
+                  id="hyperion-paypal-review-form"
+                  action="<?= $escaper->escapeUrl($block->getPlaceOrderUrl()) ?>"
+                  class="mt-6 space-y-4"
+                  data-review-form>
+                <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
+                <?= $block->getChildHtml('agreements') ?>
+                <button type="submit"
+                        data-review-submit
+                        class="block w-full py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center
+                               text-sm bg-primary text-on-primary shadow-sm hover:bg-primary-hover
+                               hover:shadow-md transition-all focus:outline-none focus:ring-2
+                               focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                    <?= $escaper->escapeHtml(__('Place Order')) ?>
+                </button>
+                <p class="text-center text-xs text-muted" role="status" hidden data-review-submitting>
+                    <?= $escaper->escapeHtml(__('Submitting order information...')) ?>
+                </p>
+                <?php if ($shippingAddress && !$currentRate): ?>
+                    <p class="text-center text-xs text-muted" data-review-hint>
+                        <?= $escaper->escapeHtml(__('Please select a shipping method...')) ?>
+                    </p>
+                <?php endif; ?>
+            </form>
+        </aside>
+    </div>
+</hyperion-paypal-review>

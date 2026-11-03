@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Legacy ViteAssets wiring lived here; it has been superseded by the
+    Magentofullstackdev_HyperionCore::head/scripts.phtml block in default.xml (Task 10), which
+    loads HTMX via HtmxConfig and the Vite entry via AssetManifest. This
+    file is kept intentionally minimal - head-level <remove src> directives
+    for Luma assets live in default.xml alongside the positive asset loads
+    so all Luma-removal declarations are co-located.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head/>
+</page>

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <update handle="hyperion_sales_totals"/>
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+        <!-- The print header (Magento_Theme::html/print/header.phtml) owns the heading and the order date -->
+        <referenceBlock name="sales.order.print">
+            <arguments>
+                <argument name="show_order_date" xsi:type="boolean">false</argument>
+            </arguments>
+        </referenceBlock>
+        <move element="sales.order.print.info" destination="sales.order.print" as="info"/>
+    </body>
+</page>

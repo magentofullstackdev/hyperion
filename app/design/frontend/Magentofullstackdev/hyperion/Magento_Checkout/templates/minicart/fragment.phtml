@@ -1,0 +1,208 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Mini-cart ESI fragment -- returned bare by the HTMX controller and also
+ * embedded inline by the ESI fallback renderer. Must NOT contain any
+ * <html>, <head>, <body>, or <!doctype> chrome.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Minicart\Fragment $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CartData $cartData */
+$cartData = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CartData::class);
+?>
+<section class="flex flex-col divide-y divide-subtle"
+         aria-label="<?= $escaper->escapeHtmlAttr(__('Your cart')) ?>">
+
+    <header class="flex items-center justify-between p-4">
+        <h2 class="font-semibold text-secondary">
+            <?= $escaper->escapeHtml(__('Your cart')) ?>
+        </h2>
+        <span class="text-sm text-muted" aria-live="polite">
+            <?= $escaper->escapeHtml(__('%1 items', $block->getItemCount())) ?>
+        </span>
+    </header>
+
+    <?php if ($block->getItemCount() === 0): ?>
+
+        <div class="p-6 text-center text-muted">
+            <?php /* A quote or totals read that failed answers 0 items: say so instead of "empty". */ ?>
+            <?= $escaper->escapeHtml($cartData->hasLoadFailure()
+                ? __('Unable to load cart details right now. Please refresh the page.')
+                : __('Your cart is empty.')) ?>
+        </div>
+
+    <?php else: ?>
+
+        <?php /* The quantity steppers below post to core's checkout/cart/updatePost (the cart page's
+                "Update Cart" action, answered for HTMX by HyperionCore's UpdatePostPlugin). */ ?>
+        <ul role="list" class="flex flex-col divide-y divide-subtle max-h-80 overflow-y-auto"
+            data-hyperion-minicart-update-url="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/updatePost')) ?>">
+            <?php foreach ($block->getItems() as $item): ?>
+                <li class="flex gap-3 p-4"
+                    data-hyperion-minicart-item
+                    data-item-id="<?= (int) $item['id'] ?>">
+
+                    <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                       class="shrink-0 w-16 h-16 rounded overflow-hidden bg-surface-raised
+                              border border-subtle
+                              focus:outline-none focus:ring-2 focus:ring-primary">
+                        <img src="<?= $escaper->escapeUrl($item['image_url']) ?>"
+                             alt="<?= $escaper->escapeHtmlAttr($item['name']) ?>"
+                             loading="lazy"
+                             class="w-full h-full object-cover">
+                    </a>
+
+                    <div class="flex-1 min-w-0">
+                        <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                           class="block text-sm font-medium text-secondary line-clamp-2
+                                  hover:text-primary
+                                  focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                            <?= $escaper->escapeHtml($item['name']) ?>
+                        </a>
+
+                        <?php if (!empty($item['options'])): ?>
+                            <dl class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted">
+                                <?php foreach ($item['options'] as $optLabel => $optValue): ?>
+                                    <div class="flex gap-1">
+                                        <dt><?= $escaper->escapeHtml($optLabel) ?>:</dt>
+                                        <dd><?= $escaper->escapeHtml((string) $optValue) ?></dd>
+                                    </div>
+                                <?php endforeach; ?>
+                            </dl>
+                            <?php /* Core's configure page (cart line "Edit"), a plain link: the drawer is a shadow root. */ ?>
+                            <a href="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/configure', [
+                                'id' => (int) $item['id'],
+                                'product_id' => (int) $item['product_id'],
+                            ])) ?>"
+                               data-hyperion-minicart-edit
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('Edit %1', $item['name'])) ?>"
+                               class="mt-1 inline-block text-xs text-muted hover:text-primary
+                                      underline-offset-2 hover:underline
+                                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                <?= $escaper->escapeHtml(__('Edit')) ?>
+                            </a>
+                        <?php endif; ?>
+
+                        <?php if (!empty($item['fpt'])): ?>
+                            <ul class="mt-1 text-xs text-muted" data-hyperion-fpt>
+                                <?php foreach ($item['fpt'] as $fpt): ?>
+                                    <li>
+                                        <?= $escaper->escapeHtml($fpt['title']) ?>:
+                                        <?= $escaper->escapeHtml($fpt['row_amount_display']) ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+
+                        <div class="mt-1 flex items-center justify-between gap-2">
+                            <?php /* Quantity stepper -- handled by hyperion-mini-cart.js like Remove
+                                    (htmx.ajax POST of cart[<id>][qty], the response refreshes the badge,
+                                    the toast and, on the cart page, the item list; the drawer refetches).
+                                    Shadow root: no hx-* attributes. */ ?>
+                            <?php $qty = (int) $item['qty']; ?>
+                            <div class="inline-flex items-stretch rounded border border-subtle text-sm"
+                                 role="group"
+                                 aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $item['name'])) ?>">
+                                <button type="button"
+                                        data-hyperion-minicart-qty-step="-1"
+                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Decrease quantity')) ?>"
+                                        <?= $qty <= 1 ? 'disabled' : '' ?>
+                                        class="px-2 rounded-l text-muted hover:text-primary hover:bg-surface-raised
+                                               disabled:opacity-40 disabled:hover:text-muted disabled:hover:bg-transparent
+                                               focus:outline-none focus:ring-2 focus:ring-primary">&minus;</button>
+                                <input type="number"
+                                       data-hyperion-minicart-qty
+                                       name="qty"
+                                       value="<?= (int) $qty ?>"
+                                       min="1"
+                                       step="1"
+                                       inputmode="numeric"
+                                       aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $item['name'])) ?>"
+                                       class="w-10 py-0.5 text-center text-secondary bg-surface border-x border-subtle
+                                              [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none
+                                              [&::-webkit-outer-spin-button]:appearance-none
+                                              focus:outline-none focus:ring-2 focus:ring-primary">
+                                <button type="button"
+                                        data-hyperion-minicart-qty-step="1"
+                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Increase quantity')) ?>"
+                                        class="px-2 rounded-r text-muted hover:text-primary hover:bg-surface-raised
+                                               disabled:opacity-40
+                                               focus:outline-none focus:ring-2 focus:ring-primary">+</button>
+                            </div>
+                            <p class="text-sm font-medium text-secondary">
+                                <?= $escaper->escapeHtml($item['row_total_display']) ?>
+                            </p>
+                        </div>
+
+                        <?php /* What core attached to the line (stock validator): a quantity the stock
+                                refused is saved all the same, the stepper's answer says so here. */ ?>
+                        <?php foreach ($item['messages'] ?? [] as $message): ?>
+                            <p class="mt-1 text-xs font-medium <?= $message['type'] === 'error' ? 'text-error' : 'text-muted' ?>"
+                               data-hyperion-minicart-item-message>
+                                <?= $escaper->escapeHtml($message['text']) ?>
+                            </p>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <?php /* Remove -- handled by hyperion-mini-cart.js (confirm dialog,
+                            then POST checkout/cart/delete through htmx.ajax so the
+                            header badge, the toast and, on the cart page, the item
+                            list all refresh from the same response). This markup
+                            lives in the drawer's shadow root, so no hx-* attributes:
+                            HTMX does not scan shadow trees. */ ?>
+                    <button type="button"
+                            data-hyperion-minicart-remove
+                            data-remove-url="<?= $escaper->escapeUrl($item['remove_url']) ?>"
+                            aria-label="<?= $escaper->escapeHtmlAttr(__('Remove %1 from cart', $item['name'])) ?>"
+                            title="<?= $escaper->escapeHtmlAttr(__('Remove')) ?>"
+                            class="shrink-0 self-start -mr-1 p-1 rounded text-muted hover:text-error
+                                   focus:outline-none focus:ring-2 focus:ring-error transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+
+                </li>
+            <?php endforeach; ?>
+        </ul>
+
+        <footer class="p-4 flex flex-col gap-3 bg-surface-raised">
+            <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">
+                    <?= $escaper->escapeHtml(__('Subtotal')) ?>
+                </span>
+                <span class="font-semibold text-secondary">
+                    <?= $escaper->escapeHtml($block->getSubtotalHtml()) ?>
+                </span>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <a href="<?= $escaper->escapeUrl($block->getCheckoutUrl()) ?>"
+                   class="w-full inline-flex items-center justify-center px-4 py-2
+                          bg-primary text-on-primary rounded
+                          hover:bg-primary-hover
+                          focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+                </a>
+                <a href="<?= $escaper->escapeUrl($block->getCartUrl()) ?>"
+                   class="w-full inline-flex items-center justify-center px-4 py-2
+                          bg-surface border border-subtle text-secondary rounded
+                          hover:border-primary hover:text-primary
+                          focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?= $escaper->escapeHtml(__('View and Edit Cart')) ?>
+                </a>
+            </div>
+
+            <?php /* PayPal smart buttons (theme Magento_Paypal/layout/hyperion_checkout_minicart.xml) */ ?>
+            <?= $block->getChildHtml('paypal_buttons') ?>
+        </footer>
+
+    <?php endif; ?>
+
+</section>

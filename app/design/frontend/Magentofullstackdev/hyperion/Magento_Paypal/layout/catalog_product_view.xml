@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal on the product page.
+
+    Core attaches its shortcut buttons and the "near the button" Pay Later
+    message to product.info.addtocart, which the Hyperion product page does
+    not render. The Hyperion block is a child of the product view and is
+    printed under the Add to Cart button. It holds no session data (the
+    product view is block cached): the token is asked for on click.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="braintree.credit" remove="true"/>
+        <referenceBlock name="product.info.addtocart.paypalButton" remove="true"/>
+        <referenceBlock name="product.info.addtocart.additional.paypalButton" remove="true"/>
+        <referenceBlock name="product.info.addtocart.paylater" remove="true"/>
+        <referenceBlock name="product.info.addtocart.additional.paylater" remove="true"/>
+
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.paypal.product.buttons"
+                   as="paypal_buttons"
+                   template="Magento_Paypal::hyperion/buttons.phtml">
+                <arguments>
+                    <argument name="context" xsi:type="string">product</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

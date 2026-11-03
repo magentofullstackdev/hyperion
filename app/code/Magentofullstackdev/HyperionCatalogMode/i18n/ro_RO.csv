@@ -1,0 +1,7 @@
+"Allowed Customer Groups","Grupuri de clienți permise"
+"Catalog Mode","Mod catalog"
+"Customer groups that may still purchase. Leave NOT LOGGED IN out to require a login before buying. With no group selected nobody can buy.","Grupurile de clienți care pot cumpăra în continuare. Exclude NEAUTENTIFICAT pentru a cere autentificarea înainte de cumpărare. Fără niciun grup selectat, nimeni nu poate cumpăra."
+"Enable Catalog Mode","Activează modul catalog"
+"Please log in to purchase items.","Autentifică-te pentru a cumpăra produse."
+"Visitors outside the allowed customer groups browse the catalog with prices but cannot buy: Add to Cart buttons, PayPal buttons, reorder and the mini-cart are not rendered, and the cart and checkout routes redirect to the login page. Flush the page cache after changing these settings.","Vizitatorii din afara grupurilor de clienți permise răsfoiesc catalogul cu prețuri, dar nu pot cumpăra: butoanele Adaugă în coș, butoanele PayPal, recomandarea și mini-coșul nu sunt afișate, iar rutele coșului și ale finalizării comenzii redirecționează către pagina de autentificare. Golește cache-ul paginilor după modificarea acestor setări."
+"Your account is not allowed to purchase items.","Contul tău nu are permisiunea de a cumpăra produse."

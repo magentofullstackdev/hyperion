@@ -1,0 +1,26 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Share Wish List": submits the outer form with `save_and_share`, the
+ * update controller saves the pending changes and redirects to
+ * `wishlist/index/share`. Hidden once the sharing e-mail limit is reached.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Button $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$wishlist = $block->getWishlist();
+if (!$wishlist->getItemsCount() || $wishlist->getShared() >= $block->getConfig()->getSharingEmailLimit()) {
+    return;
+}
+?>
+<button type="submit"
+        name="save_and_share"
+        value="1"
+        class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
+               bg-surface border border-subtle text-secondary
+               hover:border-primary hover:text-primary transition-colors
+               focus:outline-none focus:ring-2 focus:ring-primary">
+    <?= $escaper->escapeHtml(__('Share Wish List')) ?>
+</button>

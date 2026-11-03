@@ -1,0 +1,23 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: product name, followed by the child blocks of
+ * this column (the selected options list is moved here by the layout).
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Info $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = $block->getItem();
+?>
+<h3 class="text-sm md:text-base font-medium text-secondary line-clamp-2">
+    <a href="<?= $escaper->escapeUrl($block->getProductUrl($item)) ?>"
+       class="hover:text-primary transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+        <?= $escaper->escapeHtml($item->getProduct()->getName()) ?>
+    </a>
+</h3>
+<?php foreach ($block->getChildNames() as $childName): ?>
+    <?= /* @noEscape */ $block->getLayout()->renderElement($childName, false) ?>
+<?php endforeach; ?>

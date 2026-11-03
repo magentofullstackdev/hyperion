@@ -1,0 +1,7 @@
+"Allowed Customer Groups","Tilladte kundegrupper"
+"Catalog Mode","Katalogtilstand"
+"Customer groups that may still purchase. Leave NOT LOGGED IN out to require a login before buying. With no group selected nobody can buy.","Kundegrupper, der stadig må købe. Udelad NOT LOGGED IN for at kræve login før køb. Uden valgte grupper kan ingen købe."
+"Enable Catalog Mode","Aktivér katalogtilstand"
+"Please log in to purchase items.","Log ind for at købe varer."
+"Visitors outside the allowed customer groups browse the catalog with prices but cannot buy: Add to Cart buttons, PayPal buttons, reorder and the mini-cart are not rendered, and the cart and checkout routes redirect to the login page. Flush the page cache after changing these settings.","Besøgende uden for de tilladte kundegrupper ser kataloget med priser, men kan ikke købe: Læg i kurv-knapper, PayPal-knapper, Genbestil og minikurven vises ikke, og kurv- og kasseruterne omdirigerer til loginsiden. Ryd sidecachen efter ændring af disse indstillinger."
+"Your account is not allowed to purchase items.","Din konto må ikke købe varer."

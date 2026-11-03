@@ -1,0 +1,54 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion advanced search results: criteria summary + product list.
+ *
+ * @var \Magento\CatalogSearch\Block\Advanced\Result $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+// The list must render first: it applies the filters the counters below read.
+$productList = $block->getProductListHtml();
+$resultCount = (int) $block->getResultCount();
+$criteria = array_merge(...array_values(array_map(
+    static fn ($side) => $side ?: [],
+    $block->getSearchCriterias()
+)));
+$linkClass = 'font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline';
+?>
+<div class="mb-8">
+    <p class="text-sm text-muted font-medium tracking-wider uppercase">
+        <?= $escaper->escapeHtml(__('Catalog Advanced Search')) ?>
+    </p>
+    <h1 class="mt-1 text-3xl font-bold text-secondary tracking-tight">
+        <?= $escaper->escapeHtml(
+            $resultCount === 1 ? __('%1 item found', $resultCount) : __('%1 items found', $resultCount)
+        ) ?>
+    </h1>
+
+    <?php if ($criteria): ?>
+        <ul class="mt-4 flex flex-wrap gap-2 text-sm">
+            <?php foreach ($criteria as $criterion): ?>
+                <li class="px-3 py-1 rounded-full bg-surface-raised border border-subtle text-secondary">
+                    <span class="font-semibold"><?= $escaper->escapeHtml(__($criterion['name'])) ?>:</span>
+                    <?= $escaper->escapeHtml($criterion['value']) ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    <?php endif; ?>
+
+    <p class="mt-4 text-sm text-muted">
+        <?php if ($resultCount): ?>
+            <?= $escaper->escapeHtml(__("Don't see what you're looking for?")) ?>
+        <?php else: ?>
+            <?= $escaper->escapeHtml(__('We can\'t find any items matching these search criteria.')) ?>
+        <?php endif; ?>
+        <a href="<?= $escaper->escapeUrl($block->getFormUrl()) ?>" class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+            <?= $escaper->escapeHtml(__('Modify your search.')) ?>
+        </a>
+    </p>
+</div>
+
+<?php if ($resultCount): ?>
+    <?= /* @noEscape */ $productList ?>
+<?php endif; ?>

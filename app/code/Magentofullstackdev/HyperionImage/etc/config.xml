@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion_image>
+            <general>
+                <enabled>1</enabled>
+                <conversion_mode>queue</conversion_mode><!-- queue | sync -->
+                <invalidate_on_batch_end>1</invalidate_on_batch_end>
+                <max_pixels>40000000</max_pixels><!-- 0 disables the limit -->
+            </general>
+            <webp>
+                <enabled>1</enabled>
+                <quality>82</quality>
+                <skip_if_larger>1</skip_if_larger>
+            </webp>
+            <avif>
+                <enabled>0</enabled>
+                <quality>75</quality>
+                <skip_if_larger>1</skip_if_larger>
+            </avif>
+            <encoder>
+                <preference>auto</preference><!-- auto | imagick | gd -->
+            </encoder>
+        </hyperion_image>
+    </default>
+</config>

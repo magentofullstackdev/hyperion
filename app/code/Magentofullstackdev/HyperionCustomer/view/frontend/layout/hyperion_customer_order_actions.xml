@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the order status + actions row.
+
+    Rendered by Controller\Order\Cancel through HyperionCore's
+    FragmentRenderer with `order`, `show_actions` and `oob` as block data,
+    so a cancellation swaps `#hyperion-order-actions` out-of-band on the
+    order view page. cacheable="false": the row is session-bound.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCustomer\Block\Order\Actions"
+               name="hyperion.customer.order.actions"
+               template="Magentofullstackdev_HyperionCustomer::order/actions.phtml"
+               cacheable="false"/>
+    </body>
+</page>

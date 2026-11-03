@@ -1,0 +1,578 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion widget styling.
+ *
+ * Magento's Content > Widgets system (widget_instance) renders CMS blocks
+ * into layout containers. Hyperion's Luma-authored CMS blocks ship with
+ * `blocks-promo` markup that Luma styles via its own LESS tree -- we don't
+ * load that, so without dedicated rules the tiles render as a stack of
+ * unstyled blocks with image + text fragments.
+ *
+ * This file provides a Tailwind-flavoured replacement using semantic
+ * tokens (bg-surface / text-secondary / text-primary / ...). It covers:
+ *
+ *   1. `.widget.block-static-block`   -- widget wrapper spacing
+ *   2. `.blocks-promo`                -- responsive tile grid
+ *   3. `.block-promo`                 -- individual promo tile
+ *        `.content` overlay, `.info` subtitle, `.title` headline,
+ *        `.action.more[.button|.icon]` CTA variants
+ *   4. `.content-heading`             -- admin-authored section heading
+ *
+ * The Magento-native `Magento_CatalogWidget::product/widget/content/
+ * grid.phtml` widget already renders through Hyperion's product tile, so
+ * it doesn't need styling here.
+ */
+
+/* --- 1. Widget wrapper ----------------------------------------- */
+
+.widget.block-static-block,
+.widget.block-cms-link,
+.widget.block-products-list {
+    display: block;
+    margin-bottom: 2.5rem;
+}
+
+/* --- 2a. Neutralise Luma-legacy /media/styles.css rules ------ */
+/*
+ * The Magento admin ships a `design/head/includes` config that pulls
+ * `/media/styles.css` into <head>. That file contains Luma's legacy
+ * `.blocks-promo` theming -- `float: left`, clearfix `:before/:after`
+ * that inject anonymous grid items, per-tile hardcoded pixel heights
+ * (`.home-pants { height: 664px }`), etc. These conflict with the
+ * Hyperion Tailwind-flavoured grid below and cause the first grid
+ * column in row 1 to render empty.
+ *
+ * We explicitly null those rules out at equal or higher specificity
+ * so the grid + our tile rules below can take over cleanly without
+ * needing to touch the admin config or the shipped media file.
+ */
+
+.blocks-promo .block-promo-wrapper::before,
+.blocks-promo .block-promo-wrapper::after {
+    content: none;
+    display: none;
+}
+
+.blocks-promo .block-promo-wrapper .block-promo {
+    float: none;
+    border-right: 0;
+    width: auto;
+}
+
+/* Luma sets per-tile hardcoded pixel heights -- strip them so our
+   uniform grid-cell height rule below governs. */
+.blocks-promo .home-main,
+.blocks-promo .home-pants,
+.blocks-promo .home-t-shirts,
+.blocks-promo .home-erin,
+.blocks-promo .home-performance,
+.blocks-promo .home-eco {
+    height: auto;
+    max-width: none;
+    min-height: 0;
+}
+
+/* `.home-t-shirts` uses `display: table` on desktop in the Luma
+   stylesheet -- forces it out of the grid flow. */
+.blocks-promo .home-t-shirts,
+.blocks-promo .home-t-shirts .content,
+.blocks-promo .home-t-shirts .image {
+    display: revert;
+}
+
+/* Revert Luma's absolute-positioned `.content` overlay -- we re-apply
+   our own positioning rules in section 3 below, but without this the padding
+   / width / top / left from Luma fights our rules. */
+.blocks-promo .block-promo .content {
+    position: revert;
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    padding: 0;
+    background-color: transparent;
+}
+
+/* --- 2b. blocks-promo tile grid --------------------------------- */
+
+.blocks-promo {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+@media (min-width: 768px) {
+    .blocks-promo {
+        gap: 1.25rem;
+    }
+}
+
+/* The hero tile (full-width feature) */
+.blocks-promo > .block-promo.home-main,
+.blocks-promo > .block-promo:first-child {
+    grid-column: 1 / -1;
+}
+
+/* The inner wrapper that groups the smaller secondary tiles into a 3-col
+   grid on md+ screens. Luma keeps these side-by-side inside a nested
+   flex container; we give them their own grid so they line up cleanly. */
+.blocks-promo .block-promo-wrapper {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+@media (min-width: 640px) {
+    .blocks-promo .block-promo-wrapper {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .blocks-promo .block-promo-wrapper {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* --- 3. Individual promo tile ---------------------------------- */
+/*
+ * Tile layout strategy:
+ *   - Every tile is a fixed aspect-ratio box (4/3 small, 21/9 hero) so
+ *     the grid looks even regardless of how much copy the admin writes.
+ *   - The image is position:absolute/object-fit:cover, filling the box.
+ *   - A subtle gradient scrim sits above the image.
+ *   - The `.content` card is position:absolute, anchored bottom-left
+ *     (or center-left on the hero), so it overlaps the photo the way
+ *     Luma's original design did.
+ */
+
+.blocks-promo .block-promo {
+    position: relative;
+    display: block;
+    /*
+     * Width must be explicit: <a> is inline by default and grid items
+     * default to min-width:auto which lets them shrink to the intrinsic
+     * width of their (tall, portrait) background image.
+     *
+     * Height is explicit for the same reason: `aspect-ratio` is
+     * inconsistently applied when the tile contains an absolutely-
+     * positioned <img> whose natural aspect is very different from the
+     * target ratio -- some browser configurations treat the image's
+     * intrinsic height as a floor and the tile stretches taller than
+     * 4:3. Fixed height avoids the ambiguity entirely.
+     */
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 260px;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background-color: rgb(var(--color-surface-raised));
+    color: inherit;
+    text-decoration: none;
+    isolation: isolate;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+@media (min-width: 768px) {
+    .blocks-promo .block-promo {
+        height: 300px;
+    }
+}
+
+.blocks-promo .block-promo:focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+}
+
+.blocks-promo .block-promo:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.22);
+}
+
+/* Hero tile -- taller / banner-wide so the imagery reads as a cover. */
+.blocks-promo > .block-promo.home-main,
+.blocks-promo > .block-promo:first-child {
+    height: 320px;
+}
+
+@media (min-width: 768px) {
+    .blocks-promo > .block-promo.home-main,
+    .blocks-promo > .block-promo:first-child {
+        height: 460px;
+    }
+}
+
+/* Full-bleed background image. Luma ships the image as a direct
+   descendant OR wrapped in `<span class="image"><img></span>`. */
+/* HyperionImage's HtmlImageRewriter wraps a CMS <img> in <picture> as soon
+   as its WebP / AVIF companion exists, so the image may also be
+   `<picture><img></picture>` or `<span class="image"><picture><img></picture></span>`:
+   the wrapper takes the full bleed box and the image fills it. */
+.blocks-promo .block-promo > img,
+.blocks-promo .block-promo > .image,
+.blocks-promo .block-promo > picture {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+}
+
+.blocks-promo .block-promo > .image > picture {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.blocks-promo .block-promo > .image > img,
+.blocks-promo .block-promo > picture > img,
+.blocks-promo .block-promo > .image > picture > img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Gradient scrim so the overlay copy stays legible over any photo. */
+.blocks-promo .block-promo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0)    0%,
+        rgba(0, 0, 0, 0.05) 55%,
+        rgba(0, 0, 0, 0.35) 100%
+    );
+    pointer-events: none;
+}
+
+/* The overlay card holding info / title / CTA. */
+.blocks-promo .block-promo > .content {
+    position: absolute;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    max-width: 22rem;
+    background-color: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(2px);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.18);
+}
+
+/* Hero places its content card higher + larger. */
+.blocks-promo > .block-promo.home-main > .content,
+.blocks-promo > .block-promo:first-child > .content {
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    max-width: 26rem;
+    padding: 1.5rem 1.75rem;
+    gap: 0.5rem;
+}
+
+/* Respect Luma's .bg-white class that sometimes lives on .content. */
+.blocks-promo .block-promo > .content.bg-white {
+    background-color: rgba(255, 255, 255, 0.95);
+}
+
+.blocks-promo .block-promo .info {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgb(var(--color-muted));
+}
+
+.blocks-promo .block-promo .title {
+    font-size: 1.375rem;
+    font-weight: 800;
+    line-height: 1.15;
+    color: rgb(var(--color-secondary));
+    letter-spacing: -0.01em;
+}
+
+.blocks-promo > .block-promo.home-main .title,
+.blocks-promo > .block-promo:first-child .title {
+    font-size: 1.875rem;
+}
+
+@media (min-width: 768px) {
+    .blocks-promo > .block-promo.home-main .title,
+    .blocks-promo > .block-promo:first-child .title {
+        font-size: 2.25rem;
+    }
+}
+
+/* CTA link -- arrow-style default, filled-button variant, icon variant. */
+.blocks-promo .block-promo .action.more {
+    margin-top: 0.5rem;
+    align-self: flex-start;
+    padding: 0.5rem 0;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: rgb(var(--color-primary));
+    border: none;
+    background: transparent;
+    text-transform: none;
+    transition: color 150ms ease, transform 150ms ease;
+}
+
+.blocks-promo .block-promo .action.more.icon::after {
+    content: " \2192"; /* the arrow; a doubled backslash printed the escape as text */
+    display: inline-block;
+    margin-left: 0.35rem;
+    transition: transform 150ms ease;
+}
+
+.blocks-promo .block-promo:hover .action.more {
+    color: rgb(var(--color-primary-hover));
+}
+
+.blocks-promo .block-promo:hover .action.more.icon::after {
+    transform: translateX(3px);
+}
+
+/* Filled-button variant -- used on the hero tile's CTA. */
+.blocks-promo .block-promo .action.more.button {
+    padding: 0.625rem 1.25rem;
+    margin-top: 0.75rem;
+    background-color: rgb(var(--color-primary));
+    color: rgb(var(--color-on-primary));
+    border-radius: 0.375rem;
+    box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.3);
+}
+
+.blocks-promo .block-promo:hover .action.more.button {
+    color: rgb(var(--color-on-primary));
+    background-color: rgb(var(--color-primary-hover));
+}
+
+/* --- 4. Admin-authored section heading ------------------------ */
+/* Rendered by Luma-era static blocks between widgets; gives the
+   "Hot Sellers / Here is what's trending" zone proper hierarchy. */
+.content-heading {
+    text-align: center;
+    margin: 2.5rem 0 1.5rem;
+}
+
+.content-heading .title {
+    display: block;
+    font-size: 1.875rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: rgb(var(--color-secondary));
+    letter-spacing: -0.01em;
+}
+
+.content-heading .info {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.9375rem;
+    color: rgb(var(--color-muted));
+}
+
+/* --- 5. Luma "Left Menu" category blocks ------------------------
+   The sample data mounts CMS blocks with `.categories-menu` (subcategory
+   link lists per parent) into `sidebar.main` of the top-level categories.
+   Styled like the layered navigation cards next to them. */
+
+.sidebar .categories-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.sidebar .categories-menu > .title {
+    display: block;
+    padding: 0.75rem 1rem 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgb(var(--color-secondary));
+    background: rgb(var(--color-surface));
+    border: 1px solid rgb(var(--color-subtle));
+    border-bottom: 0;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.sidebar .categories-menu > .items {
+    margin: 0 0 0.5rem;
+    padding: 0.25rem 0.5rem 0.5rem;
+    list-style: none;
+    background: rgb(var(--color-surface));
+    border: 1px solid rgb(var(--color-subtle));
+    border-top: 0;
+    border-radius: 0 0 0.5rem 0.5rem;
+}
+
+.sidebar .categories-menu > .items .item a {
+    display: block;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: rgb(var(--color-secondary));
+}
+
+.sidebar .categories-menu > .items .item a:hover {
+    color: rgb(var(--color-primary));
+    background: rgb(var(--color-surface-raised));
+}
+
+
+/* --- 5b. CMS tables on a phone -----------------------------------
+   A CMS page prints its own HTML straight into `.column.main` (core's
+   Magento\Cms\Block\Page renders the filtered content and uses no
+   template, so there is no theme wrapper around it). A table wider than a
+   phone (the sample Customer Service page's shipping table, the cookie
+   `table.data-table` of the privacy policy page) widened the page. Below md
+   the table is a block that scrolls inside its own box; from md on nothing
+   changes, the desktop tables keep their table layout. `.cms-content` is
+   the wrapper class of the Luma sample pages, also used by static blocks
+   rendered outside a CMS page. */
+
+@media (max-width: 767px) {
+    body.cms-page-view .column.main table,
+    .cms-content table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+}
+
+
+/* --- 6. Luma sample "Privacy Policy" page ------------------------
+   The sample CMS page `privacy-policy-cookie-restriction-mode` holds the
+   policy text (`.privacy-policy-content`) and a `.block-collapsible-nav`
+   section menu whose title core toggles with a RequireJS widget. The menu
+   is a card above the text below md, collapsed behind its title until
+   lib/collapsible-nav.js (entry.js) marks the title `active`; from md on it
+   is a sticky aside next to the text and the title a plain heading. */
+
+.cms-content.privacy-policy {
+    display: grid;
+    /* The implicit `1fr` column is minmax(auto, 1fr): the longest unbreakable
+       run of the policy text would widen it past the container on a narrow
+       phone (360px); a zero minimum keeps the column inside. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+}
+
+.cms-content.privacy-policy > .block-collapsible-nav {
+    order: -1;
+    min-width: 0;
+}
+
+.cms-content.privacy-policy > .privacy-policy-content {
+    min-width: 0;
+}
+
+.block-collapsible-nav {
+    background: rgb(var(--color-surface));
+    border: 1px solid rgb(var(--color-subtle));
+    border-radius: 0.75rem;
+}
+
+.block-collapsible-nav > .title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgb(var(--color-secondary));
+}
+
+.block-collapsible-nav > .title[role='button'] {
+    cursor: pointer;
+    border-radius: 0.75rem;
+}
+
+.block-collapsible-nav > .title[role='button']:focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: -2px;
+}
+
+/* Chevron, only while the title is a button (narrow viewports). */
+.block-collapsible-nav > .title[role='button']::after {
+    content: '';
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform var(--hyperion-motion-fast, 120ms) ease;
+}
+
+.block-collapsible-nav > .title.active::after {
+    transform: translateY(25%) rotate(-135deg);
+}
+
+.block-collapsible-nav > .block-collapsible-content {
+    padding: 0.25rem 0.5rem 0.75rem;
+    border-top: 1px solid rgb(var(--color-subtle));
+}
+
+.block-collapsible-nav .items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.block-collapsible-nav .items .item a {
+    display: block;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: rgb(var(--color-secondary));
+    text-decoration: none;
+}
+
+.block-collapsible-nav .items .item a:hover,
+.block-collapsible-nav .items .item.current a {
+    color: rgb(var(--color-primary));
+    background: rgb(var(--color-surface-raised));
+}
+
+@media (max-width: 767.98px) {
+    .block-collapsible-nav > .block-collapsible-content {
+        display: none;
+    }
+
+    .block-collapsible-nav > .title.active + .block-collapsible-content {
+        display: block;
+    }
+}
+
+@media (min-width: 768px) {
+    .cms-content.privacy-policy {
+        grid-template-columns: minmax(0, 1fr) 18rem;
+    }
+
+    .cms-content.privacy-policy > .block-collapsible-nav {
+        order: 2;
+        position: sticky;
+        top: 1.5rem;
+    }
+}

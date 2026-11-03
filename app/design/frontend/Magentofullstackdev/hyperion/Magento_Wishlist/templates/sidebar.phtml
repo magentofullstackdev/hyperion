@@ -1,0 +1,37 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Wishlist sidebar (block `hyperion.wishlist.sidebar` in `sidebar.additional`,
+ * config `wishlist/general/show_in_sidebar`).
+ *
+ * FPC-safe: this template holds URLs and labels only. The items come from
+ * the header-state wishlist fragment (`data-hyperion-wishlist-summary` on
+ * `#hyperion-wishlist-count`, see lib/list-state.js), so the sidebar costs
+ * no request of its own and stays hidden for guests and empty wishlists.
+ * Remove posts to `wishlist/index/remove` over HTMX (the plugin answers
+ * with the toast and the refreshed fragment); Add to Cart is a plain POST
+ * to `wishlist/index/cart`, which may redirect to the configure page.
+ *
+ * Renders nothing when the wishlist feature is off (`wishlist/general/active`);
+ * the block's `ifconfig` covers `wishlist/general/show_in_sidebar`.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+if (!$viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductList::class)->isWishlistEnabled()) {
+    return;
+}
+?>
+<hyperion-wishlist-sidebar class="block"
+                           wishlist-url="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
+                           remove-url="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/remove')) ?>"
+                           cart-url="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/cart')) ?>"
+                           heading="<?= $escaper->escapeHtmlAttr(__('My Wish List')) ?>"
+                           cart-label="<?= $escaper->escapeHtmlAttr(__('Add to Cart')) ?>"
+                           remove-label="<?= $escaper->escapeHtmlAttr(__('Remove This Item')) ?>"
+                           view-label="<?= $escaper->escapeHtmlAttr(__('Go to Wish List')) ?>"
+                           confirm-label="<?= $escaper->escapeHtmlAttr(__('Remove this item from your wish list?')) ?>"
+                           hidden></hyperion-wishlist-sidebar>

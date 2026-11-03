@@ -1,0 +1,51 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Hyperion override of Magento_ReCaptchaFrontendUi::recaptcha.phtml.
+ *
+ * Magento's per-form modules (ReCaptchaCustomer, ReCaptchaContact,
+ * ReCaptchaNewsletter, ReCaptchaReview, ...) mount this block inside the
+ * form's `form.additional.info` container whenever the form is enabled
+ * in Stores > Configuration > Security > Google reCAPTCHA Storefront. The
+ * core template renders a Knockout component; this one renders the
+ * <hyperion-recaptcha> Lit element, which mints the token on submit and
+ * writes it into the `g-recaptcha-response` field the backend observers
+ * read. Nothing else changes server-side.
+ *
+ * @var \Magento\ReCaptchaUi\Block\ReCaptcha $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$formKey = (string) $block->getData('recaptcha_for');
+$recaptcha = $viewModels->optional(\Magentofullstackdev\HyperionCore\ViewModel\Recaptcha::class);
+$config = $recaptcha !== null && $formKey !== '' ? $recaptcha->getClientConfig($formKey) : [];
+if ($config === []) {
+    return;
+}
+?>
+<hyperion-recaptcha class="block"
+                    site-key="<?= $escaper->escapeHtmlAttr($config['siteKey']) ?>"
+                    type="<?= $escaper->escapeHtmlAttr($config['type']) ?>"
+                    action="<?= $escaper->escapeHtmlAttr($config['action']) ?>"
+                    badge="<?= $escaper->escapeHtmlAttr($config['badge']) ?>"
+                    theme="<?= $escaper->escapeHtmlAttr($config['theme']) ?>"
+                    size="<?= $escaper->escapeHtmlAttr($config['size']) ?>"
+                    hl="<?= $escaper->escapeHtmlAttr($config['hl']) ?>">
+    <input type="hidden" name="g-recaptcha-response" value="" data-hyperion-recaptcha-token>
+    <?php /* Widget host: used by the v2 checkbox (visible) and v2 invisible (badge) modes. */ ?>
+    <div data-hyperion-recaptcha-widget class="empty:hidden"></div>
+    <?php if ($config['type'] === 'v3'): ?>
+        <?php /* Colour from _components.css: muted on a light surface, on-inverted-muted
+                inside a `.bg-inverted` band (the footer newsletter form), both above 4.5:1. */ ?>
+        <p class="text-xs" data-hyperion-recaptcha-legal>
+            <?= $escaper->escapeHtml(__('This site is protected by reCAPTCHA and the Google')) ?>
+            <a href="https://policies.google.com/privacy" class="underline" rel="noopener" target="_blank"><?= $escaper->escapeHtml(__('Privacy Policy')) ?></a>
+            <?= $escaper->escapeHtml(__('and')) ?>
+            <a href="https://policies.google.com/terms" class="underline" rel="noopener" target="_blank"><?= $escaper->escapeHtml(__('Terms of Service')) ?></a>
+            <?= $escaper->escapeHtml(__('apply.')) ?>
+        </p>
+    <?php endif; ?>
+</hyperion-recaptcha>

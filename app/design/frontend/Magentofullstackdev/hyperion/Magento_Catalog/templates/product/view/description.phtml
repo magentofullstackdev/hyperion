@@ -1,0 +1,22 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion product description.
+ *
+ * The description is merchant HTML; it goes through the catalog output helper
+ * (directives, store filter) exactly as core renders it, never as raw data.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Description $block
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$product = $block->getProduct();
+$productView = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductView::class);
+$description = $productView->renderAttributeValue($product, (string) $product->getDescription(), 'description');
+?>
+
+<?php if ($description !== ''): ?>
+    <div class="prose prose-sm max-w-none text-secondary leading-relaxed">
+        <?= /* @noEscape */ $description ?>
+    </div>
+<?php endif; ?>

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    CMS homepage layout override (cms_index_index handle).
+
+    The homepage is entirely content-managed via PageBuilder / WYSIWYG.
+    The Hyperion theme renders it through the standard Magento_Cms block
+    chain without any KO-bound Luma widgets.
+
+    page.main.title is removed because the homepage CMS page configures its
+    own H1 inside the content body; the outer title block would produce a
+    duplicate heading and degrade SEO / WCAG heading hierarchy.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Suppress the auto-generated page-level H1 wrapper for the home
+             page; the CMS content itself controls its own heading structure. -->
+        <referenceBlock name="page.main.title" remove="true"/>
+    </body>
+</page>

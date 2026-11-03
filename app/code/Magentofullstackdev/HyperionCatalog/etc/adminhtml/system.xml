@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="hyperion">
+            <group id="catalog">
+                <field id="max_active_filters" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Maximum Active Filters per Request</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>Category pages, the layered navigation fragment and search results refuse a request that activates more filter attributes than this (HTTP 400, noindex): combinatorial filter URLs are a bot pattern. Unknown query parameters are always dropped. 0 disables the limit.</comment>
+                </field>
+                <field id="infinite_scroll" translate="label comment" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Infinite Scroll</label>
+                    <source_model>Magentofullstackdev\HyperionCatalog\Model\Config\Source\InfiniteScroll</source_model>
+                    <comment>How category listings and search results load the next pages: the pager (Disabled), a Load more button that appends the next page under the products, or automatically when the visitor reaches the end of the products. A category can override it in its Display Settings (Infinite Scroll). Flush the page cache after changing it.</comment>
+                </field>
+                <field id="infinite_scroll_auto_pages" translate="label comment" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Automatic Loads Before the Button</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>In the automatic mode, after this many pages loaded on scroll the Load more button appears instead, so the footer stays reachable. 0 loads every page automatically.</comment>
+                    <depends>
+                        <field id="infinite_scroll">scroll</field>
+                    </depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

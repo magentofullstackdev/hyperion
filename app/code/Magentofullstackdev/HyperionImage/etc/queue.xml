@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/queue.xsd">
+    <!--
+        Legacy combined broker - points at the `magento-db` exchange so
+        the broker entry agrees with `queue_topology.xml`. The XSD
+        (queue_base.xsd / brokerType) accepts `topic`, `type`, `exchange`
+        on `<broker>` and only `name`/`consumer`/`handler` on `<queue>`
+        - there is no `connection` attribute on `<queue>`, so the
+        consumer-side `connection="db"` lives in `queue_consumer.xml`.
+    -->
+    <broker topic="hyperion.image.convert" exchange="magento-db" type="db">
+        <queue name="hyperion.image.convert"
+               consumer="hyperion.image.convert"
+               handler="Magentofullstackdev\HyperionImage\Queue\Consumer::process"/>
+    </broker>
+</config>

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion override for the LogoutSuccess page.
+
+    Goals:
+      1. Remove the breadcrumbs block. Magento's default crumb generator
+         falls back to the camelCased URL action when no explicit label is
+         provided, producing the cosmetic regression "Customer Account
+         LogoutSuccess" right under the header. There is no useful
+         navigation context on a logout-success farewell page.
+      2. Remove the page-title block. The core layout sets it to "You are
+         signed out" but it renders outside Hyperion's main container so
+         it visually clips at the viewport edge. The Hyperion template
+         override at Magento_Customer::logout.phtml renders the same
+         heading inline, inside the centred container.
+      3. Keep `layout="1column"`.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="breadcrumbs" remove="true"/>
+        <referenceBlock name="page.main.title" remove="true"/>
+    </body>
+</page>

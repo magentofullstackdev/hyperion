@@ -1,0 +1,13 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Fallback for option groups without a renderer of their own: title only.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options\Type\DefaultType $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<p class="text-sm font-medium text-secondary">
+    <?= $escaper->escapeHtml($block->getOption()->getTitle()) ?>
+</p>

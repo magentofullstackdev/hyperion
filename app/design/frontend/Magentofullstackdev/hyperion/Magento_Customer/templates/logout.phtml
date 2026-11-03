@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion override for the LogoutSuccess page body.
+ *
+ * Replaces the core RequireJS-driven redirect with a vanilla setTimeout
+ * (RequireJS is removed from Hyperion, so the core template's auto-
+ * redirect never fired). Adds a centred container, body copy, and a
+ * "Continue shopping" CTA so the page reads as a proper farewell rather
+ * than two unstyled lines flush against the viewport edge.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+$homeUrl = $block->getUrl();
+$script = 'setTimeout(function () { window.location.href = '
+    . json_encode($homeUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES)
+    . '; }, 5000);';
+?>
+<div class="container mx-auto px-4 py-16 text-center max-w-2xl">
+    <h1 class="text-3xl md:text-4xl font-bold text-primary mb-4"><?= $escaper->escapeHtml(__('You are signed out')) ?></h1>
+    <p class="text-base text-secondary"><?= $escaper->escapeHtml(__('You have signed out and will go to our homepage in 5 seconds.')) ?></p>
+    <p class="mt-6">
+        <a href="<?= $escaper->escapeUrl($homeUrl) ?>"
+           class="inline-flex items-center px-6 py-3 rounded-md bg-primary text-on-primary font-semibold hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Continue shopping')) ?>
+        </a>
+    </p>
+</div>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

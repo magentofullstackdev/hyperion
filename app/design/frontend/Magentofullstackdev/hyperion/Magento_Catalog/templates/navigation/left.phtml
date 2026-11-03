@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Subcategory navigation of a category without layered navigation (the
+ * `catalog_category_view_type_default` handle: static-block landing pages,
+ * non-anchor categories). Same card as the layered navigation filters
+ * (Magento_LayeredNavigation::layer/view-sidebar.phtml).
+ *
+ * @var \Magento\Catalog\Block\Navigation $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\Locale\LocaleFormatter $localeFormatter
+ */
+if (!$block->getCategory()) {
+    return;
+}
+$categories = $block->getCurrentChildCategories();
+$count = is_array($categories) ? count($categories) : $categories->count();
+if (!$count) {
+    return;
+}
+?>
+<nav aria-label="<?= $escaper->escapeHtmlAttr(__('Category')) ?>" class="mb-6" data-hyperion-category-nav>
+    <h2 class="text-sm font-bold uppercase tracking-wider text-secondary mb-4">
+        <?= $escaper->escapeHtml(__('Shop By')) ?>
+    </h2>
+    <details class="group bg-surface border border-subtle rounded-lg" open>
+        <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide text-secondary select-none">
+            <span><?= $escaper->escapeHtml(__('Category')) ?></span>
+            <svg class="w-4 h-4 text-muted transition-transform group-open:rotate-180"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </summary>
+        <ol class="border-t border-subtle px-1 py-1">
+            <?php /** @var \Magento\Catalog\Model\Category $category */ ?>
+            <?php foreach ($categories as $category): ?>
+                <?php if (!$category->getIsActive()) {
+                    continue;
+                } ?>
+                <?php $isCurrent = $block->isCategoryActive($category); ?>
+                <li>
+                    <a href="<?= $escaper->escapeUrl($block->getCategoryUrl($category)) ?>"
+                       class="flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm
+                              <?= $isCurrent ? 'bg-primary/10 text-primary font-medium' : 'text-secondary hover:bg-surface-raised hover:text-primary' ?>"
+                       <?= $isCurrent ? 'aria-current="page"' : '' ?>>
+                        <span><?= $escaper->escapeHtml($category->getName()) ?></span>
+                        <span class="text-xs text-muted tabular-nums">
+                            <?= $escaper->escapeHtml($localeFormatter->formatNumber((int) $category->getProductCount())) ?>
+                        </span>
+                    </a>
+                </li>
+            <?php endforeach; ?>
+        </ol>
+    </details>
+</nav>

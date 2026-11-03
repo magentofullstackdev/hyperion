@@ -1,0 +1,47 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist items grid: PLP-style cards built from the native
+ * column chain.
+ *
+ * Every card renders the enabled child columns of this block in layout
+ * order (image, name + selected options, rating, price, comment, qty +
+ * add to cart, edit / remove), so a column added by another module shows
+ * up inside the card body without touching this template. The image
+ * column is full-bleed on top of the card; every other column goes into
+ * the padded body. The empty state is rendered by view.phtml.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Items $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$columns = $block->getColumns();
+$items = $block->getItems();
+?>
+<?php if (count($items)): ?>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <?php foreach ($items as $item): ?>
+            <article class="flex flex-col bg-surface border border-subtle rounded-xl overflow-hidden
+                            hover:shadow-lg hover:border-primary/30 transition-all"
+                     data-hyperion-wishlist-item
+                     id="wishlist-item-<?= (int) $item->getId() ?>">
+                <?php foreach ($columns as $column): ?>
+                    <?php if ($column instanceof \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Image): ?>
+                        <?= $column->setItem($item)->toHtml() ?>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+                <div class="flex flex-col gap-3 p-4 flex-1">
+                    <?php foreach ($columns as $column): ?>
+                        <?php if (!$column instanceof \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Image): ?>
+                            <?= $column->setItem($item)->toHtml() ?>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
+<?php foreach ($columns as $column): ?>
+    <?= $column->getAdditionalHtml() ?>
+<?php endforeach; ?>

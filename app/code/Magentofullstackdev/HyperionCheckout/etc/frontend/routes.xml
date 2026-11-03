@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Routes for Magentofullstackdev_HyperionCheckout.
+
+    `hyperion` frontName owns the header mini-cart HTMX endpoints that
+    were kept from the previous iteration (Controller/Minicart/*).
+
+    `checkout` is overridden so `Magentofullstackdev\HyperionCheckout\Controller\Index\Index`
+    is resolved before `Magento\Checkout\Controller\Index\Index`. The
+    Hyperion controller renders the Lit mount shell. Full action name
+    remains `checkout_index_index`, so the shared layout handle keeps
+    merging cleanly across modules.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <route id="hyperion" frontName="hyperion">
+            <module name="Magentofullstackdev_HyperionCheckout"/>
+        </route>
+        <route id="checkout" frontName="checkout">
+            <module name="Magentofullstackdev_HyperionCheckout" before="Magento_Checkout"/>
+        </route>
+    </router>
+</config>

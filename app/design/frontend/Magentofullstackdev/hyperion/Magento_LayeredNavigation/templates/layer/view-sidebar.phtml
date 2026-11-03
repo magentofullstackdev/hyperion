@@ -1,0 +1,69 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion layered navigation -- vertical sidebar accordions.
+ * Used for 2columns-left, 2columns-right, 3columns category layouts.
+ *
+ * @var \Magento\LayeredNavigation\Block\Navigation $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$filters = $block->getFilters();
+$filterIndex = 0;
+?>
+<?php if ($block->canShowBlock()): ?>
+    <div role="search" aria-label="<?= $escaper->escapeHtmlAttr(__('Product filters')) ?>">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-secondary mb-4">
+            <?= $escaper->escapeHtml(__('Shop By')) ?>
+        </h2>
+
+        <?php $stateHtml = $block->getChildHtml('state'); ?>
+        <?php if ($stateHtml): ?>
+            <?= /* @noEscape */ $stateHtml ?>
+        <?php endif; ?>
+
+        <?php
+        // Identify the "default-open" filter: prefer Category if present, else fall back
+        // to the first non-empty filter in the list.
+        $defaultOpenVar = null;
+        foreach ($filters as $f) {
+            if (!$f->getItemsCount()) {
+                continue;
+            }
+            if ($f->getRequestVar() === 'cat') {
+                $defaultOpenVar = 'cat';
+                break;
+            }
+            if ($defaultOpenVar === null) {
+                $defaultOpenVar = $f->getRequestVar();
+            }
+        }
+        ?>
+        <div class="space-y-2">
+            <?php foreach ($filters as $filter): ?>
+                <?php if ($filter->getItemsCount()): ?>
+                    <?php $filterId = 'sidebar-filter-' . $filterIndex++; ?>
+                    <?php $isOpen = $filter->getRequestVar() === $defaultOpenVar; ?>
+                    <details class="group bg-surface border border-subtle rounded-lg" <?= $isOpen ? 'open' : '' ?>>
+                        <summary class="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-semibold uppercase tracking-wide text-secondary select-none">
+                            <span><?= $escaper->escapeHtml($filter->getName()) ?></span>
+                            <svg class="w-4 h-4 text-muted transition-transform group-open:rotate-180"
+                                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </summary>
+                        <div class="border-t border-subtle px-1 py-1 max-h-64 overflow-y-auto"
+                             id="<?= $escaper->escapeHtmlAttr($filterId) ?>"
+                             role="listbox"
+                             aria-label="<?= $escaper->escapeHtmlAttr($filter->getName()) ?>">
+                            <?= $block->getChildBlock('renderer')
+                                ->setFilterItems($filter->getItems())
+                                ->setFilter($filter)
+                                ->toHtml() ?>
+                        </div>
+                    </details>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>

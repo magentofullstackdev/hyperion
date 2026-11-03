@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <module name="Magentofullstackdev_HyperionCms">
+        <sequence>
+            <module name="Magentofullstackdev_HyperionCore"/>
+            <module name="Magento_Cms"/>
+            <module name="Magento_PageBuilder"/>
+            <module name="Magento_Csp"/>
+            <module name="Magento_Store"/>
+        </sequence>
+    </module>
+</config>

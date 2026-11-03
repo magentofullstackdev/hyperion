@@ -1,0 +1,186 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Email a Friend form (Magento_SendFriend::send.phtml).
+ *
+ * Plain HTML POST to `sendfriend/product/sendmail` (the controller answers
+ * with a redirect and a page message). Core builds the recipient rows with
+ * a RequireJS row builder; here every row up to `getMaxRecipients()` is
+ * rendered by the server, the rows above the first (or above the posted
+ * data on a validation round trip) are hidden with their inputs disabled,
+ * and lib/sendfriend.js reveals the next one on "Add recipient" (entry.js
+ * loads it only when [data-hyperion-sendfriend] is on the page). The
+ * `form.additional.info` container carries <hyperion-recaptcha> when the
+ * form is protected, the `captcha` child the image CAPTCHA.
+ *
+ * @var \Magento\SendFriend\Block\Send $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+use Magento\Framework\View\Element\ButtonLockManager;
+
+$maxRecipients = max(1, (int) $block->getMaxRecipients());
+$formData = $block->getFormData();
+$postedNames = (array) ($formData->getData('recipients/name') ?? []);
+$postedEmails = (array) ($formData->getData('recipients/email') ?? []);
+$openRows = max(1, min($maxRecipients, count($postedNames), count($postedEmails)));
+$buttonLockManager = $block->getData('button_lock_manager');
+$isLocked = $buttonLockManager instanceof ButtonLockManager && $buttonLockManager->isDisabled('sendfriend_form_submit');
+$canSend = $block->canSend() && !$isLocked;
+$productId = (int) $block->getProductId();
+$backUrl = $productId > 0 ? $block->getUrl('catalog/product/view', ['id' => $productId]) : $block->getUrl('');
+$fieldClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm';
+$labelClass = 'block text-sm font-medium text-secondary mb-1';
+?>
+<div class="max-w-2xl mx-auto py-8" data-hyperion-sendfriend>
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-secondary tracking-tight">
+            <?= $escaper->escapeHtml(__('Email to a Friend')) ?>
+        </h1>
+        <p class="mt-2 text-muted">
+            <?= $escaper->escapeHtml(__('Share this product with up to %1 people. They receive your message and a link to the product.', $maxRecipients)) ?>
+        </p>
+    </div>
+
+    <form action="<?= $escaper->escapeUrl($block->getSendUrl()) ?>"
+          method="post"
+          id="product-sendtofriend-form"
+          class="bg-surface rounded-2xl border border-subtle shadow-sm p-6 space-y-8">
+        <?= $block->getBlockHtml('formkey') ?>
+
+        <fieldset class="space-y-5">
+            <legend class="text-lg font-semibold text-secondary mb-3"><?= $escaper->escapeHtml(__('Sender')) ?></legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                    <label for="sender-name" class="<?= /* @noEscape */ $labelClass ?>">
+                        <?= $escaper->escapeHtml(__('Name')) ?>
+                        <span aria-hidden="true" class="text-error">*</span>
+                    </label>
+                    <input type="text"
+                           name="sender[name]"
+                           id="sender-name"
+                           required
+                           autocomplete="name"
+                           value="<?= $escaper->escapeHtmlAttr((string) $block->getUserName()) ?>"
+                           class="<?= /* @noEscape */ $fieldClass ?>">
+                </div>
+                <div>
+                    <label for="sender-email" class="<?= /* @noEscape */ $labelClass ?>">
+                        <?= $escaper->escapeHtml(__('Email')) ?>
+                        <span aria-hidden="true" class="text-error">*</span>
+                    </label>
+                    <input type="email"
+                           name="sender[email]"
+                           id="sender-email"
+                           required
+                           autocomplete="email"
+                           value="<?= $escaper->escapeHtmlAttr((string) $block->getEmail()) ?>"
+                           class="<?= /* @noEscape */ $fieldClass ?>">
+                </div>
+            </div>
+            <div>
+                <label for="sender-message" class="<?= /* @noEscape */ $labelClass ?>">
+                    <?= $escaper->escapeHtml(__('Message')) ?>
+                    <span aria-hidden="true" class="text-error">*</span>
+                </label>
+                <textarea name="sender[message]"
+                          id="sender-message"
+                          required
+                          rows="4"
+                          class="<?= /* @noEscape */ $fieldClass ?> resize-y"><?= $escaper->escapeHtml((string) $block->getMessage()) ?></textarea>
+            </div>
+        </fieldset>
+
+        <fieldset class="space-y-4" data-hyperion-sendfriend-recipients>
+            <legend class="text-lg font-semibold text-secondary mb-3"><?= $escaper->escapeHtml(__('Invitee')) ?></legend>
+            <?php for ($i = 0; $i < $maxRecipients; $i++): ?>
+                <?php $isOpen = $i < $openRows; ?>
+                <div class="rounded-xl border border-subtle p-4 space-y-4"
+                     data-hyperion-sendfriend-recipient
+                     <?= /* @noEscape */ $isOpen ? '' : 'hidden' ?>>
+                    <div class="flex items-center justify-between gap-4">
+                        <h3 class="text-sm font-semibold text-secondary"><?= $escaper->escapeHtml(__('Recipient %1', $i + 1)) ?></h3>
+                        <button type="button"
+                                data-hyperion-sendfriend-remove
+                                class="text-sm font-medium text-muted hover:text-error focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                                <?= /* @noEscape */ $openRows > 1 ? '' : 'hidden' ?>>
+                            <?= $escaper->escapeHtml(__('Remove')) ?>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div>
+                            <label for="recipients-name-<?= (int) $i ?>" class="<?= /* @noEscape */ $labelClass ?>">
+                                <?= $escaper->escapeHtml(__('Name')) ?>
+                                <span aria-hidden="true" class="text-error">*</span>
+                            </label>
+                            <input type="text"
+                                   name="recipients[name][<?= (int) $i ?>]"
+                                   id="recipients-name-<?= (int) $i ?>"
+                                   required
+                                   autocomplete="off"
+                                   value="<?= $escaper->escapeHtmlAttr((string) ($postedNames[$i] ?? '')) ?>"
+                                   class="<?= /* @noEscape */ $fieldClass ?>"
+                                   <?= /* @noEscape */ $isOpen ? '' : 'disabled' ?>>
+                        </div>
+                        <div>
+                            <label for="recipients-email-<?= (int) $i ?>" class="<?= /* @noEscape */ $labelClass ?>">
+                                <?= $escaper->escapeHtml(__('Email')) ?>
+                                <span aria-hidden="true" class="text-error">*</span>
+                            </label>
+                            <input type="email"
+                                   name="recipients[email][<?= (int) $i ?>]"
+                                   id="recipients-email-<?= (int) $i ?>"
+                                   required
+                                   autocomplete="off"
+                                   value="<?= $escaper->escapeHtmlAttr((string) ($postedEmails[$i] ?? '')) ?>"
+                                   class="<?= /* @noEscape */ $fieldClass ?>"
+                                   <?= /* @noEscape */ $isOpen ? '' : 'disabled' ?>>
+                        </div>
+                    </div>
+                </div>
+            <?php endfor; ?>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <p class="text-xs text-muted" data-hyperion-sendfriend-limit>
+                    <?= $escaper->escapeHtml(__('Maximum %1 email addresses allowed.', $maxRecipients)) ?>
+                </p>
+                <?php if ($maxRecipients > 1): ?>
+                    <button type="button"
+                            data-hyperion-sendfriend-add
+                            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary
+                                   border border-subtle rounded-lg hover:border-primary/40
+                                   focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                            <?= /* @noEscape */ $openRows >= $maxRecipients ? 'hidden' : '' ?>>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        <?= $escaper->escapeHtml(__('Add Invitee')) ?>
+                    </button>
+                <?php endif; ?>
+            </div>
+        </fieldset>
+
+        <?= $block->getChildHtml('form_additional_info') ?>
+        <?= $block->getChildHtml('captcha') ?>
+
+        <?php if (!$block->canSend()): ?>
+            <p class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-secondary" role="status">
+                <?= $escaper->escapeHtml(__('You have reached the hourly limit of emails. Please try again later.')) ?>
+            </p>
+        <?php endif; ?>
+
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+               class="text-sm font-medium text-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                <?= $escaper->escapeHtml(__('Back')) ?>
+            </a>
+            <button type="submit"
+                    class="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md text-sm uppercase tracking-wider
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+                    <?= /* @noEscape */ $canSend ? '' : 'disabled' ?>>
+                <?= $escaper->escapeHtml(__('Send Email')) ?>
+            </button>
+        </div>
+    </form>
+</div>

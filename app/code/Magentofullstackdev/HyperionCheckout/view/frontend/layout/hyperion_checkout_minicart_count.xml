@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the mini-cart count header fragment.
+
+    Rendered by /hyperion/header/state (HeaderStatePool, registered in
+    etc/frontend/di.xml) and re-rendered out of band by the cart HTMX
+    action plugins: block `hyperion.minicart.count`, a single <span> with
+    the current quote item count that rehydrates the header badge.
+-->
+<!--
+    cacheable="false" is mandatory. Without it the layout counts as
+    cacheable and, on GET, Magento_PageCache's depersonalize plugins clear
+    the customer session before the block renders: the checkout session
+    then drops the customer's quote (customer_id mismatch) and a logged-in
+    shopper sees an empty mini-cart and a badge of 0 after every reload,
+    while the cart page (non-cacheable) still lists the items.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCheckout\Block\Minicart\Fragment"
+               name="hyperion.minicart.count"
+               cacheable="false"
+               template="Magento_Checkout::minicart/count.phtml">
+            <arguments>
+                <argument name="cart_data_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCheckout\ViewModel\CartData</argument>
+            </arguments>
+        </block>
+    </body>
+</page>

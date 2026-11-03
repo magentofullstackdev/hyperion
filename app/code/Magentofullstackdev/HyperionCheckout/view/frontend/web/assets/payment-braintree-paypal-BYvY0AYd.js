@@ -1,0 +1,44 @@
+import{i as L,S as H,A as g,t as l,b as m,g as O,n as T}from"./checkout-BMmec92X.js";import{e as N,n as M,r as A}from"./checkout-app-DW9Judp3.js";import{f as R,d as E,e as b,i as x,a as q,l as D,b as F,h as S,j as I,k as $,m as G,r as Q}from"./quote-DArtz96u.js";const X=249,B=127;function u(a){const n=parseFloat(String(a??0));return Number.isFinite(n)?n:0}function h(a,n,e){return{name:a,kind:n,quantity:"1.00",unitAmount:R(Math.abs(e))}}function j(a,n){if(!n)return[];const e=[];for(const o of a){const p=u(o.price);if(o.parent_item_id!==null&&o.parent_item_id!==void 0||p===0)continue;const C=u(o.qty),w=!Number.isInteger(C);e.push({name:o.name.substring(0,B),kind:"debit",quantity:(w?1:C).toFixed(2),unitAmount:(w?C*p:p).toFixed(2),productCode:o.sku.substring(0,B),description:w?`Item quantity is ${C.toFixed(2)} and per unit amount is ${p.toFixed(2)}`:""})}let t=0,i=0,r=0,s=0,c=0;for(const o of n.total_segments??[])if(o.code==="customerbalance"&&(t=Math.abs(u(o.value))),o.code==="giftcardaccount"&&(i=Math.abs(u(o.value))),o.code==="giftwrapping"){const p=o.extension_attributes??{};r=u(p.gw_base_price),s=u(p.gw_items_base_price),c=u(p.gw_card_base_price)}const d=Math.abs(u(n.base_discount_amount)),y=u(n.base_shipping_amount),f=u(n.base_tax_amount);return d>0&&e.push(h("Discount","credit",d)),y>0&&e.push(h("Shipping","debit",y)),f>0&&e.push(h("Tax","debit",f)),t>0&&e.push(h("Store Credit","credit",t)),s>0&&e.push(h("Gift Wrapping for Items","debit",s)),r>0&&e.push(h("Gift Wrapping for Order","debit",r)),c>0&&e.push(h("Printed Card","debit",c)),i>0&&e.push(h("Gift Cards","credit",i)),e.length>X?[]:e}var W=Object.defineProperty,P=(a,n,e,t)=>{for(var i=void 0,r=a.length-1,s;r>=0;r--)(s=a[r])&&(i=s(n,e,i)||i);return i&&W(n,e,i),i};const _=new H.State(null);function Z(){return _.get()}function ee(a){_.set(a)}function k(){const a=_.get();return a!==null&&a.amount===$()}function z(){const a=G();if(!a)return null;const[n="",e="",t]=a.street;return{recipientName:`${a.firstname} ${a.lastname}`,line1:n,line2:t===void 0?e:`${e} ${t}`,city:a.city,countryCode:a.country_id,postalCode:a.postcode??"",state:Q(a)??""}}function K(a,n){const e=O(),t={flow:"checkout",amount:$(),currency:I()};a.locale&&(t.locale=a.locale),a.merchantName&&(t.displayName=a.merchantName),n&&(t.requestBillingAgreement=!0);const i=z();if(i&&(t.enableShippingAddress=!0,t.shippingAddressEditable=!1,t.shippingAddressOverride=i),a.canSendLineItems){const r=j(e.items.get(),e.totals.get());r.length>0&&(t.lineItems=r)}return t}class v extends N(L){constructor(){super(...arguments),this.code=E,this._status="idle",this._message=null,this._saveForLater=!1,this._checkout=null,this._buttons=[],this._generation=0,this._initQueued=!1,this._onChange=()=>{_.set(null)},this._onRetry=()=>{this._init()}}createRenderRoot(){return this}disconnectedCallback(){super.disconnectedCallback(),this._generation++,this._status="idle",this._teardown()}render(){const n=b(),e=_.get(),t=k(),i=n!==null&&x(n.vaultCode);return m`
+            <div class="space-y-3">
+                ${t&&e?this._renderApproved(e):g}
+                ${!t&&e?m`<p class="text-sm text-muted" role="status">
+                          ${l("Hyperion_Checkout::braintree_paypal_amount_changed")}
+                      </p>`:g}
+                ${this._message?m`<p role="alert" class="text-sm text-danger">${this._message}</p>`:g}
+                ${this._status==="error"?m`<button type="button"
+                                   class="text-sm text-accent hover:underline"
+                                   @click=${this._onRetry}>
+                              ${l("Hyperion_Checkout::braintree_retry")}
+                          </button>`:g}
+                <div class="space-y-3 ${t?"hidden":""}">
+                    <p class="text-sm text-muted">${l("Hyperion_Checkout::braintree_paypal_hint")}</p>
+                    ${i?m`<hc-checkbox
+                                  name="braintree_paypal_save"
+                                  label=${l("Hyperion_Checkout::braintree_paypal_save")}
+                                  .checked=${this._saveForLater}
+                                  @value-change=${this._onSaveChange}
+                              ></hc-checkbox>`:g}
+                    ${this._status==="loading"?m`<p class="text-sm text-muted" role="status" aria-live="polite">
+                              ${l("Hyperion_Checkout::braintree_paypal_loading")}
+                          </p>`:g}
+                    <div class="max-w-sm space-y-2">
+                        <div data-paypal-button="paypal"></div>
+                        <div data-paypal-button="credit"></div>
+                        <div data-paypal-button="paylater"></div>
+                    </div>
+                </div>
+            </div>
+        `}_renderApproved(n){return m`
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-subtle bg-surface-raised p-3"
+                 role="status">
+                <p class="flex-1 text-sm text-brand" data-paypal-approved>
+                    ${n.email?l("Hyperion_Checkout::braintree_paypal_authorised_as",{email:n.email}):l("Hyperion_Checkout::braintree_paypal_authorised")}
+                </p>
+                <button type="button"
+                        class="text-sm text-accent hover:underline"
+                        @click=${this._onChange}>
+                    ${l("Hyperion_Checkout::braintree_paypal_change")}
+                </button>
+            </div>
+        `}updated(){this._initQueued||!this._needsInit()||(this._initQueued=!0,queueMicrotask(()=>{this._initQueued=!1,this._needsInit()&&this._init()}))}_needsInit(){return this.isConnected&&this._status==="idle"&&!k()}async _init(){const n=++this._generation,e=()=>n!==this._generation||!this.isConnected;this._status="loading",this._message=null;try{const t=b();if(!t?.clientToken)throw new Error("missing Braintree client token");const[i,r]=await Promise.all([q(t.clientToken),D("paypal-checkout")]);if(F(t.clientToken,{paypal:!0}),e())return;await this._teardown();const s=await r.create({client:i});if(e()){s.teardown().catch(()=>{});return}this._checkout=s;const c=S("credit"),d=S("paylater"),y={components:"buttons,funding-eligibility","enable-funding":c?.isActive?"credit":"paylater",currency:I(),commit:!1};if(t.environment==="sandbox"&&t.merchantCountry&&(y["buyer-country"]=t.merchantCountry),await s.loadPayPalSDK(y),e())return;const f=await Promise.all([this._renderButton(s,t,"paypal",t.style),c?.isActive?this._renderButton(s,t,"credit",c.style):!1,d?.isActive?this._renderButton(s,t,"paylater",d.style):!1]);if(e())return;if(!f.some(Boolean))throw new Error("no eligible PayPal button");this._status="ready"}catch(t){if(e())return;console.error("[hyperion-checkout] Braintree PayPal could not be initialised",t),this._status="error",this._message=l("Hyperion_Checkout::braintree_paypal_init_failed")}}async _renderButton(n,e,t,i){const r=this.querySelector(`[data-paypal-button="${t}"]`),s=window.paypal;if(!r||!s)return!1;r.replaceChildren();const c=s.Buttons({fundingSource:t,style:i,createOrder:()=>(this._message=null,n.createPayment(K(e,this._isSaving()))),onApprove:async d=>{const y=$(),f=this._isSaving(),o=await n.tokenizePayment(d);_.set({nonce:o.nonce,email:o.details.email??"",amount:y,savedForLater:f})},onError:d=>{console.error("[hyperion-checkout] PayPal button error",d),this._message=l("Hyperion_Checkout::braintree_paypal_failed")}});return c.isEligible()?(await c.render(r),this._buttons.push(c),!0):!1}_isSaving(){const n=b();return n!==null&&x(n.vaultCode)&&this._saveForLater}async _teardown(){const n=this._buttons,e=this._checkout;this._buttons=[],this._checkout=null;for(const t of n)try{await t.close?.()}catch{}if(e)try{await e.teardown()}catch(t){console.error("[hyperion-checkout] Braintree PayPal teardown failed",t)}}_onSaveChange(n){this._saveForLater=n.detail.checked}}P([M({type:String})],v.prototype,"code");P([A()],v.prototype,"_status");P([A()],v.prototype,"_message");P([A()],v.prototype,"_saveForLater");customElements.get("payment-braintree-paypal")||customElements.define("payment-braintree-paypal",v);function V(){T({code:E,component:"payment-braintree-paypal",isAvailable:()=>{const a=b();return!!(a?.isActive&&a.clientToken)},isReady:k,afterPlaceOrderFailed:()=>_.set(null),beforePlaceOrder:async()=>{const a=b(),n=_.get();if(!a||!n||!k())throw new Error(l("Hyperion_Checkout::braintree_paypal_not_authorised"));const e=await F(a.clientToken,{paypal:!0});return{payment_method_nonce:n.nonce,...e?{device_data:e}:{},...x(a.vaultCode)?{is_active_payment_token_enabler:n.savedForLater}:{}}}})}V();export{v as PaymentBraintreePaypal,K as buildCreatePaymentOptions,z as buildShippingAddressOverride,Z as getPayPalApproval,V as registerBraintreePayPalRenderer,ee as setPayPalApproval};
+//# sourceMappingURL=payment-braintree-paypal-BYvY0AYd.js.map

@@ -1,0 +1,48 @@
+{
+    "name": "magentofullstackdev/module-hyperion-core",
+    "description": "Hyperion Core: theme helpers, ESI infrastructure, asset manifest, HTMX configuration",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "magento/framework": "^103.0.6",
+        "magento/module-theme": "*",
+        "magento/module-page-cache": "*",
+        "magento/module-re-captcha-ui": "*",
+        "magento/module-backend": "*",
+        "magento/module-catalog": "*",
+        "magento/module-checkout": "*",
+        "magento/module-cms": "*",
+        "magento/module-config": "*",
+        "magento/module-configurable-product": "*",
+        "magento/module-customer": "*",
+        "magento/module-quote": "*",
+        "magento/module-review": "*",
+        "magento/module-sales": "*",
+        "magento/module-store": "*",
+        "magento/module-swatches": "*",
+        "magento/module-wishlist": "*"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionCore\\": ""
+        }
+    }
+}

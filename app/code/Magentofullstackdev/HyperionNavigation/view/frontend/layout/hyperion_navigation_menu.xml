@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle loaded by
+    Magentofullstackdev\HyperionNavigation\Controller\Navigation\Menu.
+
+    Renders the same Topmenu block the header embeds, as a bare fragment:
+    Varnish fetches it through <esi:include src="/hyperion/navigation/menu">
+    and caches it on its own TTL (public, s-maxage from CacheHeaders); HTMX
+    fetches it when the page was not served by an ESI-capable edge.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionNavigation\Block\Topmenu"
+               name="hyperion.navigation.menu"
+               template="Magento_Theme::html/topmenu.phtml"/>
+    </body>
+</page>

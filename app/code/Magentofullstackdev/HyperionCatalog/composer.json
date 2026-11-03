@@ -1,0 +1,53 @@
+{
+    "name": "magentofullstackdev/module-hyperion-catalog",
+    "description": "Hyperion Catalog: PLP/PDP blocks, HTMX fragment controllers, swatch configuration",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "magento/framework": "^103.0.6",
+        "magento/module-catalog": "*",
+        "magento/module-eav": "*",
+        "magento/module-configurable-product": "*",
+        "magento/module-swatches": "*",
+        "magento/module-review": "*",
+        "magento/module-store": "*",
+        "magento/module-bundle": "*",
+        "magento/module-catalog-inventory": "*",
+        "magento/module-catalog-search": "*",
+        "magento/module-checkout": "*",
+        "magento/module-config": "*",
+        "magento/module-customer": "*",
+        "magento/module-directory": "*",
+        "magento/module-search": "*",
+        "magento/module-theme": "*",
+        "magento/module-ui": "*",
+        "magento/module-wishlist": "*",
+        "magentofullstackdev/module-hyperion-core": "self.version"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionCatalog\\": ""
+        }
+    },
+    "suggest": {
+        "magento/module-msrp": "Minimum advertised price (click for price) support in the Hyperion catalog"
+    }
+}

@@ -1,0 +1,68 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion shopping cart form.
+ *
+ * @var \Magento\Checkout\Block\Cart\Grid $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?= $block->getChildHtml('form_before') ?>
+
+<form action="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/updatePost')) ?>"
+      method="post"
+      id="form-validate"
+      class="bg-surface rounded-xl border border-subtle shadow-sm overflow-hidden">
+    <?= $block->getBlockHtml('formkey') ?>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm" id="shopping-cart-table">
+            <thead class="bg-surface-raised border-b border-subtle text-xs uppercase tracking-wider text-muted">
+                <tr>
+                    <th class="px-6 py-3 text-left font-semibold"><?= $escaper->escapeHtml(__('Item')) ?></th>
+                    <th class="px-6 py-3 text-right font-semibold w-32"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                    <th class="px-6 py-3 text-center font-semibold w-32"><?= $escaper->escapeHtml(__('Qty')) ?></th>
+                    <th class="px-6 py-3 text-right font-semibold w-32"><?= $escaper->escapeHtml(__('Subtotal')) ?></th>
+                </tr>
+            </thead>
+            <?php foreach ($block->getItems() as $_item): ?>
+                <?= /* @noEscape */ $block->getItemHtml($_item) ?>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-6 py-4 border-t border-subtle bg-surface-raised">
+        <?php if ($block->getContinueShoppingUrl()): ?>
+            <a href="<?= $escaper->escapeUrl($block->getContinueShoppingUrl()) ?>"
+               class="inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-primary transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                <?= $escaper->escapeHtml(__('Continue Shopping')) ?>
+            </a>
+        <?php else: ?>
+            <span></span>
+        <?php endif; ?>
+
+        <div class="flex items-center gap-3">
+            <?php if ($block->getViewModel()->isClearShoppingCartEnabled()): ?>
+                <button type="submit"
+                        name="update_cart_action"
+                        value="empty_cart"
+                        class="px-4 py-2 text-sm font-medium text-secondary bg-surface border border-subtle rounded-lg hover:bg-surface-raised transition-colors">
+                    <?= $escaper->escapeHtml(__('Clear Cart')) ?>
+                </button>
+            <?php endif; ?>
+            <button type="submit"
+                    name="update_cart_action"
+                    value="update_qty"
+                    class="px-4 py-2 text-sm font-medium text-secondary bg-surface border border-subtle rounded-lg hover:bg-surface-raised transition-colors">
+                <?= $escaper->escapeHtml(__('Update Cart')) ?>
+            </button>
+        </div>
+    </div>
+</form>
+
+<?= $block->getChildHtml('checkout.cart.order.actions') ?>
+<?= $block->getChildHtml('shopping.cart.table.after') ?>

@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Frontend-area DI overrides for Magentofullstackdev_HyperionCheckout.
+
+    Registers Magentofullstackdev\HyperionCheckout\Model\ConfigProvider with Magento's
+    `CompositeConfigProvider`. The composite aggregates every registered
+    provider into a single payload that Magentofullstackdev\HyperionCheckout\Block\Checkout
+    serialises into the `#checkout-config` JSON island.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Checkout\Model\CompositeConfigProvider">
+        <arguments>
+            <argument name="configProviders" xsi:type="array">
+                <item name="hyperion_checkout_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\ConfigProvider</item>
+                <item name="hyperion_checkout_paypal_express_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\PaypalExpressConfigProvider</item>
+                <item name="hyperion_checkout_name_fields_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\NameFieldsConfigProvider</item>
+                <item name="hyperion_checkout_guest_quote_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\GuestQuoteConfigProvider</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Model\Htmx\HeaderStatePool">
+        <arguments>
+            <argument name="fragments" xsi:type="array">
+                <item name="minicart_count" xsi:type="array">
+                    <item name="handle" xsi:type="string">hyperion_checkout_minicart_count</item>
+                    <item name="block" xsi:type="string">hyperion.minicart.count</item>
+                    <item name="sort_order" xsi:type="number">40</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>

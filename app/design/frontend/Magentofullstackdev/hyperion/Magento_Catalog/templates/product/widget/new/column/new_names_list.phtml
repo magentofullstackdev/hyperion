@@ -1,0 +1,18 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * "Catalog New Products List" widget. Every display variant of the core
+ * widget (grid, list and the three sidebar lists) renders the Hyperion
+ * product card grid of Magento_CatalogWidget, so there is a single card
+ * implementation: HTMX add to cart, wish list and compare toggles, no
+ * RequireJS. The widget block offers the same collection / pager API.
+ *
+ * @var \Magento\Catalog\Block\Product\Widget\NewWidget $block
+ */
+if (!$block->getData('title')) {
+    $block->setData('title', __('New Products'));
+}
+$gridTemplate = (string) $block->getTemplateFile('Magento_CatalogWidget::product/widget/content/grid.phtml');
+?>
+<?= /* @noEscape -- rendered template, escaped there */ $block->fetchView($gridTemplate) ?>

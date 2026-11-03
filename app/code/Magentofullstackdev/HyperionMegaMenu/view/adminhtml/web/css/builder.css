@@ -1,0 +1,111 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/* Hyperion Mega Menu builder. Neutral custom properties with fallbacks,
+   currentColor icons and the admin's own form / button classes, so the page
+   looks native in the Magento and in the Mage-OS admin themes. */
+.hyperion-megamenu-builder {
+    --hmm-border: var(--admin__color-gray-80, #ccc);
+    --hmm-surface: var(--admin__color-white, #fff);
+    --hmm-surface-muted: var(--admin__color-gray-95, #f5f5f5);
+    --hmm-text: var(--admin__color-very-dark-gray-black, #303030);
+    --hmm-text-muted: var(--admin__color-dark-gray, #666);
+    --hmm-accent: var(--admin__color-blue-dodger, #1979c3);
+    --hmm-accent-soft: #e8f3fb;
+    --hmm-danger: var(--admin__color-red, #e22626);
+    --hmm-success: #2f8f46;
+    --hmm-warning: #b88400;
+    --hmm-radius: 4px;
+}
+
+.hmm-scope { margin: 1.5rem 0 1rem; }
+.hmm-scope-note { margin: 0.5rem 0 0; color: var(--hmm-text-muted); font-size: 1.3rem; max-width: 80ch; }
+.hmm-messages:empty { display: none; }
+
+.hmm-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 2fr) minmax(360px, 3fr);
+    gap: 2.5rem;
+    align-items: start;
+}
+@media (max-width: 1023px) {
+    .hmm-layout { grid-template-columns: 1fr; }
+}
+
+.hmm-column-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.hmm-column-title { font-size: 1.6rem; font-weight: 600; margin: 0; color: var(--hmm-text); }
+.hmm-tree-actions { display: flex; gap: 1rem; }
+
+.hmm-tree, .hmm-inspector {
+    background: var(--hmm-surface);
+    border: 1px solid var(--hmm-border);
+    border-radius: var(--hmm-radius);
+    padding: 1rem;
+    min-height: 12rem;
+}
+.hmm-inspector.is-loading { opacity: 0.5; }
+.hmm-placeholder { margin: 1rem; color: var(--hmm-text-muted); }
+
+.hmm-list { list-style: none; margin: 0; padding: 0; }
+.hmm-list .hmm-list { margin-left: 1.75rem; border-left: 1px dashed var(--hmm-border); padding-left: 0.5rem; }
+.hmm-node { margin: 0; padding: 0; }
+.hmm-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.6rem;
+    margin: 0.15rem 0;
+    border: 1px solid transparent;
+    border-radius: var(--hmm-radius);
+    cursor: pointer;
+    color: var(--hmm-text);
+    position: relative;
+}
+.hmm-row:hover { background: var(--hmm-surface-muted); }
+.hmm-row:focus-visible { outline: 2px solid var(--hmm-accent); outline-offset: 1px; }
+.hmm-row.is-selected { background: var(--hmm-accent-soft); border-color: var(--hmm-accent); }
+.hmm-row.is-disabled .hmm-title, .hmm-row.is-hidden-here .hmm-title { color: var(--hmm-text-muted); text-decoration: line-through; }
+.hmm-row.is-dragging { opacity: 0.4; }
+.hmm-row.drop-before::before, .hmm-row.drop-after::after {
+    content: ""; position: absolute; left: 0.5rem; right: 0.5rem; height: 0; border-top: 2px solid var(--hmm-accent);
+}
+.hmm-row.drop-before::before { top: -2px; }
+.hmm-row.drop-after::after { bottom: -2px; }
+.hmm-row.drop-inside { box-shadow: inset 0 0 0 2px var(--hmm-accent); background: var(--hmm-accent-soft); }
+
+.hmm-icon { width: 1.4rem; height: 1.4rem; display: block; }
+.hmm-caret {
+    background: none; border: 0; padding: 0.1rem; margin: 0; color: var(--hmm-text-muted); cursor: pointer; display: inline-flex;
+    transition: transform 0.15s;
+    transform: rotate(90deg);
+}
+.hmm-caret.is-collapsed { transform: rotate(0deg); }
+.hmm-caret.is-leaf { visibility: hidden; }
+.hmm-handle { color: var(--hmm-text-muted); cursor: grab; display: inline-flex; }
+.hmm-type {
+    font-size: 1rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+    color: var(--hmm-text-muted); background: var(--hmm-surface-muted); border: 1px solid var(--hmm-border);
+    border-radius: 3px; padding: 0.1rem 0.4rem; white-space: nowrap;
+}
+.hmm-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.4rem; }
+.hmm-badge {
+    font-size: 1rem; font-weight: 700; text-transform: uppercase; border-radius: 999px; padding: 0.15rem 0.5rem; color: #fff; background: var(--hmm-accent);
+}
+.hmm-badge-danger { background: var(--hmm-danger); }
+.hmm-badge-success { background: var(--hmm-success); }
+.hmm-badge-warning { background: var(--hmm-warning); }
+.hmm-badge-neutral { background: var(--hmm-surface-muted); color: var(--hmm-text); border: 1px solid var(--hmm-border); }
+.hmm-tag {
+    font-size: 1rem; color: var(--hmm-text-muted); border: 1px solid var(--hmm-border); border-radius: 3px; padding: 0.1rem 0.4rem; white-space: nowrap;
+}
+.hmm-tag-store { color: var(--hmm-accent); border-color: var(--hmm-accent); }
+.hmm-tag-override { color: var(--hmm-success); border-color: var(--hmm-success); }
+.hmm-tag-disabled { color: var(--hmm-danger); border-color: var(--hmm-danger); }
+
+.hmm-form .admin__fieldset { padding: 0; margin: 0 0 1rem; }
+.hmm-form .admin__field { margin-bottom: 1rem; }
+.hmm-form .admin__field[hidden] { display: none; }
+.hmm-form .admin__field-service { margin-top: 0.5rem; }
+.hmm-inline-fields { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.hmm-inline-fields .admin__control-text { flex: 1 1 14rem; }
+.hmm-form-actions { display: flex; gap: 1rem; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--hmm-border); }

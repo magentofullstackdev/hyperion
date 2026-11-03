@@ -1,0 +1,150 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "My Downloadable Products" -- purchased links of the signed-in
+ * customer with order reference, download link, status and remaining
+ * downloads. Grid table on md+, stacked label / value rows below.
+ *
+ * @var \Magento\Downloadable\Block\Customer\Products\ListProducts $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+use Magento\Downloadable\Model\Link\Purchased\Item;
+
+$items = $block->getItems();
+$openInNewWindow = (bool) $block->getIsOpenInNewWindow();
+$pagerHtml = (string) $block->getChildHtml('pager');
+?>
+<section class="space-y-4" aria-labelledby="hyperion-downloads-heading">
+
+    <h2 id="hyperion-downloads-heading" class="text-xl font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('My Downloadable Products')) ?>
+    </h2>
+
+    <?php if ($items && count($items)): ?>
+        <div class="bg-surface border border-subtle rounded-xl overflow-hidden">
+
+            <div class="hidden md:grid md:grid-cols-[8rem_8rem_minmax(12rem,2fr)_8rem_8rem]
+                        gap-4 px-5 py-3 border-b border-subtle
+                        text-xs font-bold uppercase tracking-wider text-secondary bg-surface-raised">
+                <div><?= $escaper->escapeHtml(__('Order #')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Date')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Title')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Status')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Remaining Downloads')) ?></div>
+            </div>
+
+            <?php foreach ($items as $item): ?>
+                <?php
+                    $purchased = $item->getPurchased();
+                    $status = (string) $item->getStatus();
+                    $isAvailable = $status === Item::LINK_STATUS_AVAILABLE;
+                ?>
+                <div class="md:grid md:grid-cols-[8rem_8rem_minmax(12rem,2fr)_8rem_8rem]
+                            md:gap-4 md:items-center
+                            px-5 py-4 border-b border-subtle last:border-b-0
+                            flex flex-col gap-2">
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Order #')) ?>
+                        </span>
+                        <a href="<?= $escaper->escapeUrl($block->getOrderViewUrl($purchased->getOrderId())) ?>"
+                           title="<?= $escaper->escapeHtmlAttr(__('View Order')) ?>"
+                           class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                            <?= $escaper->escapeHtml($purchased->getOrderIncrementId()) ?>
+                        </a>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Date')) ?>
+                        </span>
+                        <span class="text-sm text-secondary">
+                            <?= $escaper->escapeHtml($block->formatDate($purchased->getCreatedAt())) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <span class="text-sm text-secondary font-medium">
+                            <?= $escaper->escapeHtml($purchased->getProductName()) ?>
+                        </span>
+                        <?php if ($isAvailable): ?>
+                            <a href="<?= $escaper->escapeUrl($block->getDownloadUrl($item)) ?>"
+                               id="download_<?= (int) $item->getId() ?>"
+                               title="<?= $escaper->escapeHtmlAttr(__('Start Download')) ?>"
+                               <?php if ($openInNewWindow): ?>target="_blank" rel="noopener"<?php endif; ?>
+                               class="inline-flex items-center gap-1 text-sm font-medium
+                                      text-primary hover:text-primary-hover">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                                     viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                                </svg>
+                                <?= $escaper->escapeHtml($item->getLinkTitle()) ?>
+                            </a>
+                        <?php else: ?>
+                            <span class="text-sm text-muted">
+                                <?= $escaper->escapeHtml($item->getLinkTitle()) ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Status')) ?>
+                        </span>
+                        <?php if ($isAvailable): ?>
+                            <span class="text-sm font-medium text-success">
+                                <?= $escaper->escapeHtml(__(ucfirst($status))) ?>
+                            </span>
+                        <?php elseif ($status === Item::LINK_STATUS_EXPIRED): ?>
+                            <span class="text-sm font-medium text-error">
+                                <?= $escaper->escapeHtml(__(ucfirst($status))) ?>
+                            </span>
+                        <?php else: ?>
+                            <span class="text-sm text-secondary">
+                                <?= $escaper->escapeHtml(__(ucfirst($status))) ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Remaining Downloads')) ?>
+                        </span>
+                        <span class="text-sm text-secondary">
+                            <?= $escaper->escapeHtml($block->getRemainingDownloads($item)) ?>
+                        </span>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <?php if ($pagerHtml !== ''): ?>
+            <div class="flex items-center justify-end gap-4 flex-wrap">
+                <?= /* @noEscape */ $pagerHtml ?>
+            </div>
+        <?php endif; ?>
+    <?php else: ?>
+        <div class="py-16 text-center space-y-3 bg-surface border border-subtle rounded-xl" role="status">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            <p class="text-muted">
+                <?= $escaper->escapeHtml(__('You have not purchased any downloadable products yet.')) ?>
+            </p>
+        </div>
+    <?php endif; ?>
+
+    <div class="flex items-center justify-end pt-4 border-t border-subtle">
+        <a href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>"
+           class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+            <?= $escaper->escapeHtml(__('Back')) ?>
+        </a>
+    </div>
+</section>

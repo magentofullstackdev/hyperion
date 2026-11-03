@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Customer account shell (handle: customer_account).
+
+    Merged on top of every /customer/account/* route (and every
+    account-adjacent handle: sales_order_*, wishlist_index_*, downloadable_*,
+    review_customer_*, newsletter_manage_*, vault_cards_*). Owns the
+    sidebar navigation + content grid that Phase 7 introduces:
+
+        +================================================+
+        | <hyperion.account.header>    "My Account"      |
+        |                                                |
+        |  +===============+  +=======================+  |
+        |  | account nav   |  | #hyperion-account-    |  |
+        |  | (sidebar)     |  |   content (main)      |  |
+        |  +===============+  +=======================+  |
+        +================================================+
+
+    HTMX navigation:
+      * <hyperion-account-nav> tags each internal link with
+        hx-get/hx-target="#hyperion-account-content"/hx-select=same,
+        so only the content subtree swaps. Server controllers keep
+        rendering their normal full-page layout - HTMX extracts the
+        content region via hx-select so no fragment branching is
+        needed on the PHP side.
+
+    page.main.title is retired globally for account pages; the Hyperion
+    `hyperion.account.header` block owns the page heading so we can wrap
+    it with the sidebar grid without Luma's side stacked layout.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd"
+      design_abstraction="custom">
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <!--
+            The core Customer module ships customer_account_index with
+            `layout="2columns-left"` which re-introduces `sidebar.main` and
+            drags the Recently-Ordered / Wishlist-Sidebar / Compare-Sidebar
+            Luma widgets into the account area. Hyperion owns the sidebar
+            grid in shell-open.phtml: the legacy widgets and `sidebar.main`
+            are removed, and Hyperion's own wishlist / compare sidebars are
+            declared inside `hyperion.account.sidebar`,
+            a container the navigation template prints UNDER the account
+            menu, in the left column of the account grid (the page-layout
+            wrapper of `sidebar.additional` is then empty and hidden).
+        -->
+        <referenceBlock name="sale.reorder.sidebar" remove="true"/>
+        <referenceBlock name="wishlist_sidebar" remove="true"/>
+        <referenceBlock name="catalog.compare.sidebar" remove="true"/>
+        <referenceContainer name="sidebar.main" remove="true"/>
+
+        <!--
+            Replace Magento's core sidebar-mounted navigation with the Hyperion
+            account shell. The shell wraps everything under `content` into a
+            two-column grid and owns the H1 page heading so no individual
+            template needs to emit it.
+        -->
+        <referenceContainer name="content">
+            <block class="Magentofullstackdev\HyperionCustomer\Block\Account\Shell"
+                   name="hyperion.account.shell"
+                   template="Magentofullstackdev_HyperionCustomer::account/shell-open.phtml"
+                   before="-"/>
+
+            <block class="Magento\Customer\Block\Account\Navigation"
+                   name="customer_account_navigation"
+                   after="hyperion.account.shell"
+                   template="Magento_Customer::account/navigation.phtml">
+                <arguments>
+                    <argument name="css_class" xsi:type="string">hyperion-account-nav</argument>
+                </arguments>
+                <!-- Printed by navigation.phtml under the menu (lg+ only, the
+                     header icons serve phones); collapses with every child hidden. -->
+                <container name="hyperion.account.sidebar" htmlTag="div"
+                           htmlClass="sidebar sidebar-additional hidden lg:block mt-6 empty:hidden">
+                    <!-- Hyperion's wishlist / compare sidebars (declared per page type, see
+                         Magento_Theme/layout/default.xml). -->
+                    <block class="Magento\Framework\View\Element\Template"
+                           name="hyperion.wishlist.sidebar"
+                           template="Magento_Wishlist::sidebar.phtml"
+                           ifconfig="wishlist/general/show_in_sidebar"
+                           before="-"/>
+                    <block class="Magento\Framework\View\Element\Template"
+                           name="hyperion.compare.sidebar"
+                           template="Magento_Catalog::product/compare/sidebar.phtml"
+                           after="hyperion.wishlist.sidebar"/>
+                </container>
+
+                <block class="Magento\Customer\Block\Account\SortLinkInterface"
+                       name="customer-account-navigation-account-link">
+                    <arguments>
+                        <argument name="label" xsi:type="string" translate="true">Dashboard</argument>
+                        <argument name="path" xsi:type="string">customer/account</argument>
+                        <argument name="sortOrder" xsi:type="number">250</argument>
+                    </arguments>
+                </block>
+                <block class="Magento\Customer\Block\Account\SortLinkInterface"
+                       name="customer-account-navigation-account-edit-link">
+                    <arguments>
+                        <argument name="label" xsi:type="string" translate="true">Account Information</argument>
+                        <argument name="path" xsi:type="string">customer/account/edit</argument>
+                        <argument name="sortOrder" xsi:type="number">180</argument>
+                    </arguments>
+                </block>
+                <block class="Magento\Customer\Block\Account\SortLinkInterface"
+                       name="customer-account-navigation-address-link">
+                    <arguments>
+                        <argument name="label" xsi:type="string" translate="true">Address Book</argument>
+                        <argument name="path" xsi:type="string">customer/address</argument>
+                        <argument name="sortOrder" xsi:type="number">190</argument>
+                    </arguments>
+                </block>
+            </block>
+
+            <!--
+                Open the `#hyperion-account-content` region right after the
+                navigation renders, then close it (plus the outer grid + page
+                container) after every other `content`-attached block has
+                flushed. `after="-"` pins the closing tag last in the render
+                loop, so all page-specific blocks land inside the content
+                region without needing to know about the shell.
+            -->
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.account.content.open"
+                   after="customer_account_navigation"
+                   template="Magentofullstackdev_HyperionCustomer::account/content-open.phtml"/>
+
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.account.shell.close"
+                   after="-"
+                   template="Magentofullstackdev_HyperionCustomer::account/shell-close.phtml"/>
+        </referenceContainer>
+
+        <!-- Keep the Hyperion dashboard info template pin for customer_account_index. -->
+        <referenceBlock name="customer_account_dashboard_info"
+                        template="Magento_Customer::account/dashboard.phtml"/>
+    </body>
+</page>

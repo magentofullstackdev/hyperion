@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Guest "Create an Account" offer on the order success page.
+ *
+ * Core's block answers '' from toHtml() when the visitor is logged in, registration is disabled, the
+ * order email already belongs to an account or an order address does not validate as a customer address,
+ * so this template only runs for a guest order that can become an account. The link leads to core's
+ * checkout/account/delegateCreate, which seeds the registration form (name, email, addresses) from the
+ * guest order and redirects to customer/account/create: no Knockout component involved.
+ *
+ * @var \Magento\Checkout\Block\Registration $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$email = (string) $block->getEmailAddress();
+?>
+<?php if ($email !== ''): ?>
+<div class="mt-6 bg-surface rounded-2xl border border-subtle shadow-sm p-8 space-y-4" data-hyperion-guest-registration>
+    <h2 class="text-lg font-bold text-secondary tracking-tight">
+        <?= $escaper->escapeHtml(__('Create an account for faster checkout next time')) ?>
+    </h2>
+    <p class="text-sm text-muted break-words [overflow-wrap:anywhere]" data-hyperion-guest-email>
+        <?= $escaper->escapeHtml(__('Email address: %1', $email)) ?>
+    </p>
+    <a href="<?= $escaper->escapeUrl($block->getCreateAccountUrl()) ?>"
+       class="inline-block py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm text-center uppercase tracking-wider"
+       data-hyperion-guest-register>
+        <?= $escaper->escapeHtml(__('Create an Account')) ?>
+    </a>
+</div>
+<?php endif; ?>

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+
+    <update handle="catalog_category_view"/>
+    <!--
+        `catalog_category_view_type_layered` creates the `catalog.leftnav`
+        block and wires its child filter items. Without this handle,
+        Magento\Catalog\Model\Layer\Resolver's filters are never applied
+        to the product collection - the filter controller returns the
+        UNFILTERED grid regardless of `?style_general=XXX` etc. in the URL.
+
+        We pull in the handle without necessarily rendering the leftnav
+        block itself; the fragment body only calls
+        $layout->getBlock('category.products.list')->toHtml(), and the
+        layer apply() runs as a side effect of the leftnav block's
+        _prepareLayout() when the layout is generated.
+    -->
+    <update handle="catalog_category_view_type_layered"/>
+
+    <body>
+        <!-- The Filter controller calls
+             $layout->getBlock('category.products.list')->toHtml() directly
+             via RawFactory, so only the product-grid HTML is emitted -
+             no <html>/<head>/<body> chrome. No root-template blanking
+             needed. -->
+    </body>
+</page>

@@ -1,0 +1,79 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Items and totals of the PayPal review page.
+ *
+ * The page prints the two parts in different places (block data `part`:
+ * `items` or `totals`). paypal/express/saveShippingMethod renders the
+ * block without a part: the items are the main HTMX swap and the totals
+ * ride along out of band.
+ *
+ * Item rows come from the core review item renderers (one <tbody> per
+ * item), styled through .hyperion-order-table.
+ *
+ * @var \Magento\Paypal\Block\Express\Review\Details $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$part = (string) $block->getData('part');
+$rowClasses = [
+    'regular' => 'flex items-center justify-between',
+    'detail' => 'flex items-center justify-between text-xs',
+    'discount' => 'flex items-center justify-between text-success',
+    'grand' => 'flex items-center justify-between pt-3 border-t border-subtle',
+];
+$labelClasses = ['grand' => 'text-base font-bold text-secondary', 'discount' => ''];
+$valueClasses = ['grand' => 'text-xl font-bold text-secondary', 'discount' => 'font-medium'];
+?>
+<?php if ($part !== 'totals'): ?>
+    <?php /* The core renderers print the thumbnail and the name as siblings: float the thumbnail. */ ?>
+    <div id="hyperion-paypal-review-items"
+         class="overflow-x-auto
+                [&_.col.item]:min-w-[9rem] [&_.product-item-photo]:hidden sm:[&_.product-item-photo]:block
+                [&_.product-item-photo]:float-left [&_.product-item-photo]:mr-3 [&_.product-item-photo]:w-16
+                [&_.product-image-container]:block [&_.product-image-container]:!w-16
+                [&_.product-image-photo]:rounded-lg [&_.product-item-details]:overflow-hidden">
+        <table class="hyperion-order-table"
+               aria-label="<?= $escaper->escapeHtmlAttr(__('Items in Your Shopping Cart')) ?>">
+            <thead>
+                <tr>
+                    <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Item')) ?></th>
+                    <th scope="col" class="col price"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                    <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty')) ?></th>
+                    <th scope="col" class="col subtotal"><?= $escaper->escapeHtml(__('Subtotal')) ?></th>
+                </tr>
+            </thead>
+            <?php foreach ($block->getItems() as $item): ?>
+                <?= $block->getItemHtml($item) ?>
+            <?php endforeach; ?>
+        </table>
+    </div>
+<?php endif; ?>
+<?php if ($part !== 'items'): ?>
+    <?php
+    /** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CartData $cart */
+    $cart = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CartData::class);
+    ?>
+    <dl id="hyperion-paypal-review-totals"
+        class="space-y-3 text-sm"
+        <?php if ($part === ''): ?>hx-swap-oob="outerHTML"<?php endif; ?>>
+        <?php foreach ($cart->getTotalsRows() as $row): ?>
+            <div class="<?= $escaper->escapeHtmlAttr($rowClasses[$row['kind']] ?? $rowClasses['regular']) ?>"
+                 data-total="<?= $escaper->escapeHtmlAttr($row['code']) ?>">
+                <dt class="<?= $escaper->escapeHtmlAttr($labelClasses[$row['kind']] ?? 'text-muted') ?>">
+                    <?= $escaper->escapeHtml($row['label']) ?>
+                    <?php if ($row['note'] !== ''): ?>
+                        <span class="text-xs text-muted">(<?= $escaper->escapeHtml($row['note']) ?>)</span>
+                    <?php endif; ?>
+                </dt>
+                <?php $valueClass = $valueClasses[$row['kind']] ?? 'font-medium text-secondary'; ?>
+                <dd class="<?= $escaper->escapeHtmlAttr($valueClass) ?>">
+                    <?= $escaper->escapeHtml($row['value']) ?>
+                </dd>
+            </div>
+        <?php endforeach; ?>
+    </dl>
+<?php endif; ?>

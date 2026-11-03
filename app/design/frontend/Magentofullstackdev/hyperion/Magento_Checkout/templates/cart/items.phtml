@@ -1,0 +1,292 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Hyperion shopping-cart page template.
+ *
+ * Two-column layout on lg+: items + coupon on the left, sticky summary
+ * card on the right. Items use HTMX outerHTML swap for qty-update /
+ * remove so the cart reflows without a full page reload. Coupon form
+ * is rendered by the `coupon` child block (#hyperion-coupon-form);
+ * totals are rendered by the `totals` child block
+ * (#hyperion-cart-totals) so every cart mutation can OOB-swap them.
+ *
+ * Gift messages (order level and per eligible item) are `<details>`
+ * editors from the `gift_message` child block; their fields belong, via
+ * the `form` attribute, to the empty forms printed after the update form
+ * (see Magentofullstackdev_HyperionCheckout::cart/gift-message.phtml).
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Cart\Items $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\GiftMessage $giftVm */
+$giftVm = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\GiftMessage::class);
+$giftBlock = $block->getChildBlock('gift_message');
+$giftOrder = $giftBlock ? $giftVm->getOrderForm() : null;
+$giftItems = $giftBlock ? $giftVm->getItemForms() : [];
+$giftUrl = $giftVm->getSaveUrl();
+$giftFormKey = $giftVm->getFormKey();
+$giftFormIds = [];
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CartData $cartData */
+$cartData = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CartData::class);
+$canMoveToWishlist = $cartData->canMoveToWishlist();
+$moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
+?>
+<section id="hyperion-cart-items"
+         class="container mx-auto px-4 py-6 lg:py-10"
+         aria-labelledby="hyperion-cart-title"
+         data-hyperion-cart-root>
+
+    <?php /*
+        Persistent notification region -- every HTMX cart plugin (coupon,
+        update, delete) ships an hx-swap-oob="outerHTML" replacement of
+        this element with the current success / error message (or hidden
+        when there's nothing to show).
+    */ ?>
+    <?php /* #hyperion-notification is global now: Magento_Theme::html/notifications.phtml */ ?>
+
+    <h1 id="hyperion-cart-title"
+        class="text-2xl md:text-3xl font-bold text-secondary tracking-tight mb-6">
+        <?= $escaper->escapeHtml(__('Shopping Cart')) ?>
+    </h1>
+
+    <?php if (!$block->hasItems()): ?>
+
+        <div class="bg-surface-raised rounded-2xl p-12 text-center space-y-4">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor"
+                 stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+            </svg>
+            <p class="text-lg text-muted">
+                <?php /* A quote or totals read that failed answers 0 items: say so instead of "empty". */ ?>
+                <?= $escaper->escapeHtml($cartData->hasLoadFailure()
+                    ? __('Unable to load cart details right now. Please refresh the page.')
+                    : __('Your cart is empty.')) ?>
+            </p>
+            <a href="<?= $escaper->escapeUrl($block->getContinueShoppingUrl()) ?>"
+               class="inline-flex items-center px-6 py-3 rounded-lg font-bold uppercase tracking-wider text-sm
+                      bg-primary text-on-primary hover:bg-primary-hover transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= $escaper->escapeHtml(__('Continue Shopping')) ?>
+            </a>
+        </div>
+
+    <?php else: ?>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
+
+            <?php /* -- Items + coupon column ---------------- */ ?>
+            <div class="flex flex-col gap-6 min-w-0">
+                <form id="hyperion-cart-form"
+                  action="<?= $escaper->escapeUrl($block->getUpdateCartUrl()) ?>"
+                  method="post"
+                  hx-post="<?= $escaper->escapeUrl($block->getUpdateCartUrl()) ?>"
+                  hx-target="#hyperion-cart-items"
+                  hx-swap="outerHTML"
+                  class="min-w-0 flex flex-col gap-4">
+
+                <input type="hidden" name="form_key"
+                       value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>">
+
+                <ul role="list" class="flex flex-col gap-3">
+                    <?php foreach ($block->getItems() as $item): ?>
+                        <li class="flex flex-wrap gap-4 p-4 rounded-xl bg-surface border border-subtle
+                                   hover:border-primary/30 transition-colors"
+                            data-hyperion-cart-item
+                            data-item-id="<?= (int) $item['id'] ?>">
+
+                            <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                               class="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden
+                                      bg-surface-raised border border-subtle
+                                      focus:outline-none focus:ring-2 focus:ring-primary">
+                                <img src="<?= $escaper->escapeUrl($item['image_url']) ?>"
+                                     alt="<?= $escaper->escapeHtmlAttr($item['name']) ?>"
+                                     loading="lazy"
+                                     class="w-full h-full object-cover">
+                            </a>
+
+                            <div class="flex-1 min-w-0 flex flex-col gap-1">
+                                <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                                   class="text-sm font-medium text-secondary hover:text-primary
+                                          transition-colors line-clamp-2
+                                          focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                    <?= $escaper->escapeHtml($item['name']) ?>
+                                </a>
+
+                                <p class="text-xs text-muted">
+                                    <?= $escaper->escapeHtml(__('SKU: %1', $item['sku'])) ?>
+                                </p>
+
+                                <?php if (!empty($item['fpt'])): ?>
+                                    <ul class="text-xs text-muted" data-hyperion-fpt>
+                                        <?php foreach ($item['fpt'] as $fpt): ?>
+                                            <li>
+                                                <?= $escaper->escapeHtml($fpt['title']) ?>:
+                                                <?= $escaper->escapeHtml($fpt['row_amount_display']) ?>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+
+                                <?php if (!empty($item['options'])): ?>
+                                    <dl class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted mt-1">
+                                        <?php foreach ($item['options'] as $optLabel => $optValue): ?>
+                                            <div class="flex gap-1">
+                                                <dt><?= $escaper->escapeHtml($optLabel) ?>:</dt>
+                                                <dd><?= $escaper->escapeHtml((string) $optValue) ?></dd>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </dl>
+                                <?php endif; ?>
+
+                                <?php /* What core attached to the line (stock validator): a quantity the
+                                         stock refused is saved all the same, this is where it is said. */ ?>
+                                <?php foreach ($item['messages'] ?? [] as $message): ?>
+                                    <p class="mt-1 text-xs font-medium <?= $message['type'] === 'error' ? 'text-error' : 'text-muted' ?>"
+                                       data-hyperion-cart-item-message>
+                                        <?= $escaper->escapeHtml($message['text']) ?>
+                                    </p>
+                                <?php endforeach; ?>
+
+                            </div>
+
+                            <div class="shrink-0 flex flex-col items-end gap-2">
+                                <p class="text-base font-semibold text-secondary">
+                                    <?= $escaper->escapeHtml($item['row_total_display']) ?>
+                                </p>
+
+                                <label class="flex items-center gap-2 text-xs text-muted">
+                                    <span class="sr-only">
+                                        <?= $escaper->escapeHtml(__('Quantity')) ?>
+                                    </span>
+                                    <input type="number"
+                                           name="cart[<?= (int) $item['id'] ?>][qty]"
+                                           value="<?= (int) $item['qty'] ?>"
+                                           min="1"
+                                           inputmode="numeric"
+                                           aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $item['name'])) ?>"
+                                           class="w-16 px-2 py-1 text-sm rounded-lg
+                                                  bg-surface border border-subtle text-secondary
+                                                  focus:outline-none focus:ring-2 focus:ring-primary
+                                                  focus:border-primary">
+                                </label>
+
+                                <?php if (!empty($item['options'])): ?>
+                                    <?php /* Core's configure page: the product page with this line's options and
+                                             quantity preselected, posting to updateItemOptions (the line is replaced,
+                                             never added twice). A plain simple has nothing to configure: no link. */ ?>
+                                    <a href="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/configure', [
+                                        'id' => (int) $item['id'],
+                                        'product_id' => (int) $item['product_id'],
+                                    ])) ?>"
+                                       data-hyperion-cart-edit
+                                       aria-label="<?= $escaper->escapeHtmlAttr(__('Edit %1', $item['name'])) ?>"
+                                       class="text-xs text-muted hover:text-primary
+                                              transition-colors underline-offset-2 hover:underline
+                                              focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                        <?= $escaper->escapeHtml(__('Edit')) ?>
+                                    </a>
+                                <?php endif; ?>
+
+                                <?php if ($canMoveToWishlist && $moveToWishlistUrl !== ''): ?>
+                                    <button type="button"
+                                            hx-post="<?= $escaper->escapeUrl($moveToWishlistUrl) ?>"
+                                            hx-vals='<?= $escaper->escapeHtmlAttr((string) json_encode(['item' => (int) $item['id']])) ?>'
+                                            hx-target="#hyperion-cart-items"
+                                            hx-swap="outerHTML"
+                                            hx-include="[name=form_key]"
+                                            data-hyperion-move-to-wishlist
+                                            aria-label="<?= $escaper->escapeHtmlAttr(__('Move %1 to wishlist', $item['name'])) ?>"
+                                            class="text-xs text-muted hover:text-primary
+                                                   transition-colors underline-offset-2 hover:underline
+                                                   focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                        <?= $escaper->escapeHtml(__('Move to Wishlist')) ?>
+                                    </button>
+                                <?php endif; ?>
+
+                                <button type="button"
+                                        hx-post="<?= $escaper->escapeUrl($item['remove_url']) ?>"
+                                        hx-target="#hyperion-cart-items"
+                                        hx-swap="outerHTML"
+                                        hx-include="[name=form_key]"
+                                        hx-confirm="<?= $escaper->escapeHtmlAttr(__('Remove this item from your cart?')) ?>"
+                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Remove %1 from cart', $item['name'])) ?>"
+                                        class="text-xs text-muted hover:text-error
+                                               transition-colors underline-offset-2 hover:underline
+                                               focus:outline-none focus:ring-2 focus:ring-error rounded">
+                                    <?= $escaper->escapeHtml(__('Remove')) ?>
+                                </button>
+                            </div>
+
+                            <?php if ($giftBlock && isset($giftItems[(int) $item['id']])): ?>
+                                <?php /* Own row under the image, name and price columns (the row wraps): inside
+                                         the name column the editor had about 100 px on a phone and its translated
+                                         buttons wrapped word by word. */ ?>
+                                <?php $giftFormIds[] = 'hyperion-gift-form-item-' . (int) $item['id']; ?>
+                                <div class="basis-full">
+                                    <?= $giftBlock->setData([
+                                        'form_id' => 'hyperion-gift-form-item-' . (int) $item['id'],
+                                        'item_id' => (int) $item['id'],
+                                        'values' => $giftItems[(int) $item['id']],
+                                        'title' => __('Gift message for this item'),
+                                        'form_key' => $giftFormKey,
+                                    ])->toHtml() ?>
+                                </div>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+
+                <div class="flex flex-wrap gap-3 pt-2">
+                    <button type="submit"
+                            class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
+                                   bg-surface border border-subtle text-secondary
+                                   hover:border-primary hover:text-primary transition-colors
+                                   focus:outline-none focus:ring-2 focus:ring-primary">
+                        <?= $escaper->escapeHtml(__('Update Cart')) ?>
+                    </button>
+                    <a href="<?= $escaper->escapeUrl($block->getContinueShoppingUrl()) ?>"
+                       class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
+                              text-muted hover:text-primary transition-colors
+                              focus:outline-none focus:ring-2 focus:ring-primary">
+                        <?= $escaper->escapeHtml(__('Continue Shopping')) ?>
+                    </a>
+                </div>
+            </form>
+
+                <?php /* -- Gift options ------------------------- */ ?>
+                <?php if ($giftBlock && $giftOrder !== null): ?>
+                    <?php $giftFormIds[] = 'hyperion-gift-form-order'; ?>
+                    <?= $giftBlock->setData([
+                        'form_id' => 'hyperion-gift-form-order',
+                        'item_id' => 0,
+                        'values' => $giftOrder,
+                        'title' => __('Gift Options'),
+                        'form_key' => $giftFormKey,
+                    ])->toHtml() ?>
+                <?php endif; ?>
+                <?php foreach ($giftFormIds as $giftFormId): ?>
+                    <form id="<?= $escaper->escapeHtmlAttr($giftFormId) ?>"
+                          action="<?= $escaper->escapeUrl($giftUrl) ?>"
+                          method="post"
+                          hx-post="<?= $escaper->escapeUrl($giftUrl) ?>"
+                          hx-target="#hyperion-cart-items"
+                          hx-swap="outerHTML"
+                          hidden></form>
+                <?php endforeach; ?>
+
+                <?php /* -- Coupon form (HTMX apply/cancel) ------ */ ?>
+                <?= $block->getChildHtml('coupon') ?>
+            </div>
+
+            <?php /* -- Sticky totals card (OOB-swappable) ------ */ ?>
+            <?= $block->getChildHtml('totals') ?>
+        </div>
+
+    <?php endif; ?>
+
+</section>

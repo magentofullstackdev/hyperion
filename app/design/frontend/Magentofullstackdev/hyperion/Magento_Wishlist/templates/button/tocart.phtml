@@ -1,0 +1,26 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Add All to Cart": submits the outer form (and its quantities) to
+ * `wishlist/index/allcart` through `formaction`.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Button $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$wishlist = $block->getWishlist();
+if (!$wishlist->getItemsCount() || !$wishlist->isSalable()
+    || !$viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase()) {
+    return;
+}
+$allCartUrl = $block->getUrl('wishlist/index/allcart', ['wishlist_id' => $wishlist->getId()]);
+?>
+<button type="submit"
+        formaction="<?= $escaper->escapeUrl($allCartUrl) ?>"
+        class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold
+               bg-primary text-on-primary hover:bg-primary-hover hover:shadow-md transition-all
+               focus:outline-none focus:ring-2 focus:ring-primary">
+    <?= $escaper->escapeHtml(__('Add All to Cart')) ?>
+</button>

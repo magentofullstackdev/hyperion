@@ -1,0 +1,108 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion configurable product swatches -- server-rendered.
+ *
+ * Uses Magento's core Swatches Configurable block for data access.
+ * Reads attribute options + swatch data from getJsonConfig() / getJsonSwatchConfig()
+ * and renders interactive swatches (color, image, text) with no client JSON dependency.
+ * Client-side JS populates hidden super_attribute[*] inputs on the add-to-cart form.
+ *
+ * @var \Magento\Swatches\Block\Product\Renderer\Configurable $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$product = $block->getProduct();
+if (!$product->isSaleable()) {
+    return;
+}
+
+$config = json_decode($block->getJsonConfig(), true) ?: [];
+$swatchConfig = json_decode($block->getJsonSwatchConfig(), true) ?: [];
+$attributes = $config['attributes'] ?? [];
+$variantImages = $config['images'] ?? [];
+
+if (empty($attributes)) {
+    return;
+}
+?>
+
+<div id="configurable-options"
+     class="space-y-5"
+     aria-label="<?= $escaper->escapeHtmlAttr(__('Product options')) ?>"
+     data-variant-images="<?= $escaper->escapeHtmlAttr(json_encode($variantImages, JSON_UNESCAPED_SLASHES)) ?>">
+    <?php foreach ($attributes as $attributeId => $attribute): ?>
+        <?php
+        $attributeId = (int) $attributeId;
+        $attributeLabel = (string) ($attribute['label'] ?? '');
+        $options = $attribute['options'] ?? [];
+        $attributeSwatches = $swatchConfig[$attributeId] ?? [];
+        ?>
+        <div data-swatch-attribute="<?= (int) $attributeId ?>">
+            <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-secondary">
+                    <?= $escaper->escapeHtml($attributeLabel) ?>
+                </label>
+                <span class="text-xs text-muted"
+                      data-swatch-selected-label
+                      data-placeholder="<?= $escaper->escapeHtmlAttr(__('Choose an Option...')) ?>">
+                    <?= $escaper->escapeHtml(__('Choose an Option...')) ?>
+                </span>
+            </div>
+
+            <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="<?= $escaper->escapeHtmlAttr($attributeLabel) ?>">
+                <?php foreach ($options as $option): ?>
+                    <?php
+                    $optionId = (int) ($option['id'] ?? 0);
+                    $optionLabel = (string) ($option['label'] ?? '');
+                    $productIds = (array) ($option['products'] ?? []);
+                    if (!$optionId || empty($productIds)) {
+                        continue;
+                    }
+                    $swatch = $attributeSwatches[$optionId] ?? null;
+                    $swatchType = $swatch['type'] ?? null;
+                    $swatchValue = $swatch['value'] ?? '';
+                    ?>
+                    <button type="button"
+                            data-swatch-option
+                            data-attribute-id="<?= (int) $attributeId ?>"
+                            data-option-id="<?= (int) $optionId ?>"
+                            data-option-label="<?= $escaper->escapeHtmlAttr($optionLabel) ?>"
+                            data-allowed-products="<?= $escaper->escapeHtmlAttr(implode(',', array_map('intval', $productIds))) ?>"
+                            aria-label="<?= $escaper->escapeHtmlAttr($optionLabel) ?>"
+                            role="radio"
+                            aria-checked="false"
+                            class="<?php if ((int) $swatchType === 1): ?>
+                                    w-8 h-8 rounded-full border-2 border-subtle hover:border-primary/40 focus:border-primary focus:outline-none transition-colors
+                                <?php elseif ((int) $swatchType === 2): ?>
+                                    w-10 h-10 rounded-lg border-2 border-subtle hover:border-primary/40 focus:border-primary focus:outline-none transition-colors overflow-hidden bg-cover bg-center
+                                <?php else: ?>
+                                    min-w-[2.5rem] px-3 py-1.5 rounded-lg border border-subtle text-sm font-medium text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none transition-colors
+                                <?php endif; ?>"
+                            <?php if ((int) $swatchType === 1): ?>
+                                style="background-color: <?= $escaper->escapeHtmlAttr($swatchValue) ?>"
+                            <?php elseif ((int) $swatchType === 2): ?>
+                                style="background-image: url('<?= $escaper->escapeUrl($swatchValue) ?>')"
+                            <?php endif; ?>>
+                        <?php if ((int) $swatchType === 0 || $swatchType === null): ?>
+                            <?= $escaper->escapeHtml($optionLabel) ?>
+                        <?php endif; ?>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <?php // Hidden input attached to the add-to-cart form via form="..." ?>
+        <input type="hidden"
+               form="product_addtocart_form"
+               data-swatch-input
+               data-attribute-id="<?= (int) $attributeId ?>"
+               name="super_attribute[<?= (int) $attributeId ?>]"
+               value=""
+               required/>
+    <?php endforeach; ?>
+
+    <p data-swatch-error class="hidden text-sm text-error font-medium" role="alert">
+        <?= $escaper->escapeHtml(__('Please select the options above.')) ?>
+    </p>
+</div>

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion>
+            <footer>
+                <terms_cms_identifier>terms-and-conditions</terms_cms_identifier>
+                <privacy_cms_identifier>privacy-policy-cookie-restriction-mode</privacy_cms_identifier>
+            </footer>
+            <catalog>
+                <add_to_cart_from_listing>1</add_to_cart_from_listing>
+            </catalog>
+            <security>
+                <rate_limit_enabled>1</rate_limit_enabled>
+                <search_suggest_limit>30</search_suggest_limit>
+                <catalog_filter_limit>25</catalog_filter_limit>
+                <trusted_proxies></trusted_proxies>
+            </security>
+        </hyperion>
+        <catalog>
+            <navigation>
+                <max_depth>4</max_depth>
+            </navigation>
+        </catalog>
+    </default>
+</config>

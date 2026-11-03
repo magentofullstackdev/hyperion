@@ -1,0 +1,17 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion category title. Its own block so page layouts can move it
+ * (category-full-width places it above the full-width description); the
+ * id is the `aria-labelledby` target of the category section in view.phtml.
+ *
+ * @var \Magento\Catalog\Block\Category\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$categoryName = (string) $block->getCurrentCategory()?->getName();
+?>
+<h1 id="hyperion-category-title"
+    class="text-3xl font-bold text-secondary tracking-tight">
+    <?= $escaper->escapeHtml($categoryName) ?>
+</h1>

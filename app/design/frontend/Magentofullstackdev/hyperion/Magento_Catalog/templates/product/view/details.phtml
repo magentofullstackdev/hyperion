@@ -1,0 +1,69 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion PDP -- tabbed details section (description, attributes, reviews).
+ *
+ * @var \Magento\Catalog\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$product = $block->getProduct();
+$descriptionHtml = $block->getChildHtml('description');
+$attributesHtml = $block->getChildHtml('attributes');
+$reviewListHtml = $block->getChildHtml('review_list');
+// Layout XML registers the review form with alias `review_form`.
+$reviewFormHtml = $block->getChildHtml('review_form');
+// Render the Reviews tab whenever the review module is active (has the form block),
+// even when the product has zero reviews -- so customers can always submit one.
+$hasReviewFormBlock = $block->getChildBlock('review_form') !== null;
+$showReviewsTab = $reviewListHtml !== '' || $reviewFormHtml !== '' || $hasReviewFormBlock;
+?>
+
+<div class="border-t border-subtle pt-8" data-tabs>
+    <div class="flex border-b border-subtle gap-8 overflow-x-auto" role="tablist">
+        <?php if ($descriptionHtml): ?>
+            <button class="pb-3 text-sm font-semibold text-primary border-b-2 border-primary"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="tab-description"
+                    data-tab-target="tab-description">
+                <?= $escaper->escapeHtml(__('Description')) ?>
+            </button>
+        <?php endif; ?>
+        <?php if ($attributesHtml): ?>
+            <button class="pb-3 text-sm font-semibold text-muted hover:text-secondary border-b-2 border-transparent transition-colors"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="tab-attributes"
+                    data-tab-target="tab-attributes">
+                <?= $escaper->escapeHtml(__('Additional Information')) ?>
+            </button>
+        <?php endif; ?>
+        <?php if ($showReviewsTab): ?>
+            <button class="pb-3 text-sm font-semibold text-muted hover:text-secondary border-b-2 border-transparent transition-colors"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="tab-reviews"
+                    data-tab-target="tab-reviews">
+                <?= $escaper->escapeHtml(__('Reviews')) ?>
+            </button>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($descriptionHtml): ?>
+        <div id="tab-description" class="py-6" role="tabpanel">
+            <?= /* @noEscape */ $descriptionHtml ?>
+        </div>
+    <?php endif; ?>
+    <?php if ($attributesHtml): ?>
+        <div id="tab-attributes" class="py-6 hidden" role="tabpanel">
+            <?= /* @noEscape */ $attributesHtml ?>
+        </div>
+    <?php endif; ?>
+    <?php if ($showReviewsTab): ?>
+        <div id="tab-reviews" class="py-6 hidden" role="tabpanel">
+            <?= /* @noEscape */ $reviewListHtml ?>
+            <?= /* @noEscape */ $reviewFormHtml ?>
+        </div>
+    <?php endif; ?>
+</div>

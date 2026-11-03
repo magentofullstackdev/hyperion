@@ -1,0 +1,13 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "allowJs": true,
+        "checkJs": false,
+        "paths": {
+            "@magentofullstackdev/hyperion-shared": ["../shared/src/index.ts"],
+            "@magentofullstackdev/hyperion-shared/*": ["../shared/src/*"]
+        }
+    },
+    "include": ["src/**/*.ts", "src/**/*.js", "vite.config.ts", "tailwind.config.ts"]
+}

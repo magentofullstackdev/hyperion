@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Bundle PDP. The vendor handle mounts its Knockout option renderers under
+    `product.info.options.wrapper`, which the Hyperion PDP removes. Mount
+    the core Bundle view block (it owns the options collection) under the
+    Hyperion product view with a server-rendered template; the PDP template
+    prints it inside the add-to-cart form as `type_bundle_options`, so the
+    `bundle_option[...]` fields post with the cart add.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <attribute name="class" value="page-product-bundle"/>
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Bundle\Block\Catalog\Product\View\Type\Bundle"
+                   name="hyperion.product.bundle.options"
+                   as="type_bundle_options"
+                   template="Magento_Bundle::catalog/product/view/type/bundle/options.phtml">
+                <arguments>
+                    <argument name="bundle_options_view_model"
+                              xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\BundleOptions</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

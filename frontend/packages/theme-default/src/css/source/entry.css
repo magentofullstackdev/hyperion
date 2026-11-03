@@ -1,0 +1,32 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion theme -- main CSS entry.
+ *
+ * Tailwind JIT scans the content globs declared in tailwind.config.js and
+ * emits only the classes actually referenced in .phtml and component source
+ * files. Semantic color tokens resolve through the CSS Custom Properties
+ * declared in _theme.css (Requirement 18).
+ *
+ * @import order matters: the CSS spec requires every @import before any
+ * other declaration, and PostCSS silently drops imports that violate
+ * that rule. We therefore declare ALL imports up front. _topmenu.css
+ * and _pricing.css use selector specificity (data-attribute selectors,
+ * descendant combinators) higher than Tailwind utilities so the order
+ * here is fine -- utilities still win where they should, custom rules
+ * win where their selector is more specific.
+ */
+@import './_theme.css';
+@import './_motion.css';
+@import './_topmenu.css';
+@import './_pricing.css';
+@import './_layered-nav.css';
+@import './_pagebuilder.css';
+@import './_widgets.css';
+@import './_components.css';
+@import './_print.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

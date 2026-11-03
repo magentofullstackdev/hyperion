@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Share Wish List form. The `rss_link` child only tells sharing.phtml
+    whether the wish list RSS feed is enabled (Rss\Link::isRssAllowed());
+    it has no template and prints nothing.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="wishlist.sharing">
+            <block class="Magento\Wishlist\Block\Rss\Link" name="hyperion.wishlist.sharing.rss" as="rss_link"/>
+        </referenceBlock>
+    </body>
+</page>

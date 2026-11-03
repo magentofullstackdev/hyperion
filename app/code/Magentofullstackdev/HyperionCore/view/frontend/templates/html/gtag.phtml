@@ -1,0 +1,35 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Google Analytics 4 / Google Ads mount (block `hyperion.gtag`, every page).
+ *
+ * Renders nothing while `google/gtag/analytics4/active` and
+ * `google/gtag/adwords/active` are both off. Otherwise `<hyperion-gtag>`
+ * (frontend/packages/theme-default/src/js/components/hyperion-gtag.js)
+ * creates the dataLayer, pushes the `data-hyperion-gtag-event` /
+ * `data-hyperion-gtag-payload` records the page templates print (view_item,
+ * view_item_list, begin_checkout, purchase) and the ones HTMX swaps into
+ * `#hyperion-gtag-events` (add_to_cart; attributes, not `<script>` blocks,
+ * because htmx strips script elements from swapped content with
+ * `allowScriptTags` off), and loads gtag.js after the first interaction or when
+ * idle, only once the visitor accepted cookies when the cookie restriction
+ * mode is on.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$gtag = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\GoogleGtag::class);
+if (!$gtag->isEnabled()) {
+    return;
+}
+?>
+<hyperion-gtag measurement-id="<?= $escaper->escapeHtmlAttr($gtag->isAnalyticsEnabled() ? $gtag->getMeasurementId() : '') ?>"
+               ads-id="<?= $escaper->escapeHtmlAttr($gtag->isAdsEnabled() ? $gtag->getAdsConversionId() : '') ?>"
+               ads-label="<?= $escaper->escapeHtmlAttr($gtag->isAdsEnabled() ? $gtag->getAdsConversionLabel() : '') ?>"
+               website-id="<?= (int) $gtag->getWebsiteId() ?>"
+               <?= $gtag->isCookieRestrictionEnabled() ? 'consent-required' : '' ?>
+               hidden></hyperion-gtag>
+<div id="hyperion-gtag-events" hidden></div>

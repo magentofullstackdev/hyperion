@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <update handle="hyperion_sales_totals"/>
+    <body>
+        <!-- The account shell owns the heading; order/view.phtml renders date, status and actions -->
+        <referenceBlock name="page.main.title" remove="true"/>
+        <!-- order/view.phtml renders the visible status history itself (show_comments) -->
+        <referenceBlock name="order.comments" remove="true"/>
+        <move element="sales.order.view" destination="content" before="hyperion.account.shell.close"/>
+        <move element="sales.order.info" destination="sales.order.view" as="info"/>
+        <referenceBlock name="sales.order.view">
+            <block class="Magentofullstackdev\HyperionCustomer\Block\Order\Actions"
+                   name="hyperion.order.actions"
+                   as="actions"
+                   template="Magentofullstackdev_HyperionCustomer::order/actions.phtml"
+                   cacheable="false"/>
+            <arguments>
+                <argument name="show_actions" xsi:type="boolean">true</argument>
+                <argument name="show_comments" xsi:type="boolean">true</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

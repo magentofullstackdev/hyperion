@@ -1,0 +1,27 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion totals list (a <dl>) for the storefront order, invoice and
+ * credit memo pages. Lives at its own path: Magento_Sales::order/totals.phtml
+ * stays the core table-row template, which the order emails and the print
+ * invoice / credit memo pages render inside a <table>.
+ *
+ * @var \Magento\Sales\Block\Order\Totals $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<div class="flex justify-end mt-4 border-t border-subtle pt-4">
+    <dl class="w-full sm:w-1/2 lg:w-1/3 space-y-1 text-sm">
+        <?php foreach ($block->getTotals() as $total): ?>
+            <?php if ($total->getBlockName()): ?>
+                <?= $block->getChildHtml($total->getBlockName(), false) ?>
+            <?php else: ?>
+                <div class="flex justify-between <?= $total->getStrong() ? 'font-bold text-secondary border-t border-subtle pt-2 mt-2' : 'text-secondary' ?>">
+                    <dt><?= $escaper->escapeHtml($total->getLabel()) ?></dt>
+                    <dd><?= /* @noEscape */ $block->formatValue($total) ?></dd>
+                </div>
+            <?php endif; ?>
+        <?php endforeach; ?>
+    </dl>
+</div>

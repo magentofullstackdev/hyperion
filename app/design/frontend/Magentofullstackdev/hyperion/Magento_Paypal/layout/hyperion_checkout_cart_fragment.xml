@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal in the cart body re-rendered by the HTMX cart mutations. Same
+    block as in checkout_cart_index.xml.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="hyperion.cart.totals">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.paypal.cart.buttons"
+                   as="paypal_buttons"
+                   template="Magento_Paypal::hyperion/buttons.phtml">
+                <arguments>
+                    <argument name="context" xsi:type="string">cart</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

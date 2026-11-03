@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Generic CMS page layout override (cms_page_view handle).
+
+    layout="1column" removes the Luma sidebar column from all CMS pages;
+    sidebar blocks are globally suppressed in default.xml as well.
+
+    The page content itself is printed by core's `cms_page` block
+    (Magento\Cms\Block\Page::_toHtml() returns the filtered content and
+    ignores any template), so the theme owns no template for it: the served
+    markup is `.column.main > <the page's own HTML>` and the CMS rules of
+    `_widgets.css` target `body.cms-page-view .column.main`.
+-->
+<page layout="1column"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd"/>

@@ -1,0 +1,69 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Date, date + time and time custom options with native inputs.
+ *
+ * Posts `options[<id>][date]` (YYYY-MM-DD) and `options[<id>][time]`
+ * (HH:MM); HyperionCatalog's DateIsoInputPlugin converts them to the
+ * `date_internal` value core stores. The year range configured in
+ * catalog/custom_options/year_range becomes the min / max of the input.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options\Type\Date $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magento\Catalog\Api\Data\ProductCustomOptionInterface as Option;
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$option = $block->getOption();
+$optionId = (int) $option->getId();
+$type = (string) $option->getType();
+$hasDate = $type !== Option::OPTION_TYPE_TIME;
+$hasTime = $type !== Option::OPTION_TYPE_DATE;
+$isRequired = (bool) $option->getIsRequire();
+$vm = $viewModels->require(CustomOptions::class);
+$price = $vm->getPrice($block->getParentBlock(), $optionId);
+$yearRange = $vm->getYearRange();
+$internal = (string) $block->getProduct()->getPreconfiguredValues()->getData('options/' . $optionId . '/date_internal');
+$fieldId = 'options_' . $optionId . '_date';
+$inputClass = 'px-4 py-2.5 text-sm border border-subtle rounded-lg bg-surface text-secondary'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+?>
+<fieldset class="space-y-1">
+    <legend class="text-sm font-medium text-secondary">
+        <?= $escaper->escapeHtml($option->getTitle()) ?>
+        <?php if ($isRequired): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+        <span class="font-normal text-muted"><?= $escaper->escapeHtml($vm->formatNotice($price)) ?></span>
+    </legend>
+    <div class="flex flex-wrap items-center gap-3">
+        <?php if ($hasDate): ?>
+            <input type="date"
+                   id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                   name="options[<?= (int) $optionId ?>][date]"
+                   value="<?= $escaper->escapeHtmlAttr(substr($internal, 0, 10)) ?>"
+                   <?php if ($yearRange): ?>
+                       min="<?= (int) $yearRange[0] ?>-01-01"
+                       max="<?= (int) $yearRange[1] ?>-12-31"
+                   <?php endif; ?>
+                   data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                   aria-label="<?= $escaper->escapeHtmlAttr(__('%1 date', $option->getTitle())) ?>"
+                   <?php if ($isRequired): ?>required<?php endif; ?>
+                   class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+        <?php endif; ?>
+        <?php if ($hasTime): ?>
+            <input type="time"
+                   id="<?= $escaper->escapeHtmlAttr($fieldId) ?>_time"
+                   name="options[<?= (int) $optionId ?>][time]"
+                   value="<?= $escaper->escapeHtmlAttr(substr($internal, 11, 5)) ?>"
+                   <?php if (!$hasDate): ?>data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"<?php endif; ?>
+                   aria-label="<?= $escaper->escapeHtmlAttr(__('%1 time', $option->getTitle())) ?>"
+                   <?php if ($isRequired): ?>required<?php endif; ?>
+                   class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+        <?php endif; ?>
+    </div>
+</fieldset>

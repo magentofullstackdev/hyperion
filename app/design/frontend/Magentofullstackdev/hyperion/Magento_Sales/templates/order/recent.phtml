@@ -1,0 +1,117 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "Recent Orders" dashboard widget.
+ *
+ * The card at the bottom of the dashboard.
+ *
+ * Rendered by the core Magento_Sales customer_account_index layout
+ * override -- attaches to the `content` container as
+ * `customer_account_dashboard_top` and lands inside
+ * `#hyperion-account-content` thanks to the Hyperion shell ordering.
+ *
+ * @var \Magento\Sales\Block\Order\Recent $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$orders = $block->getOrders();
+$reorderHelper = $this->helper(\Magento\Sales\Helper\Reorder::class);
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+$postHelper = $this->helper(\Magento\Framework\Data\Helper\PostHelper::class);
+?>
+<section class="space-y-4" aria-labelledby="hyperion-dashboard-recent-orders-heading">
+
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+        <h2 id="hyperion-dashboard-recent-orders-heading"
+            class="text-xl font-semibold text-secondary">
+            <?= $escaper->escapeHtml(__('Recent Orders')) ?>
+        </h2>
+
+        <?php if (count($orders) > 0): ?>
+            <a href="<?= $escaper->escapeUrl($block->getUrl('sales/order/history')) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('View All')) ?>
+            </a>
+        <?php endif; ?>
+    </div>
+
+    <?php if (count($orders) > 0): ?>
+        <div class="bg-surface border border-subtle rounded-xl overflow-hidden">
+
+            <div class="hidden md:grid md:grid-cols-[minmax(8rem,1fr)_7rem_minmax(8rem,1.2fr)_7rem_7rem_4rem]
+                        gap-4 px-5 py-3 border-b border-subtle
+                        text-xs font-bold uppercase tracking-wider text-secondary bg-surface-raised">
+                <div><?= $escaper->escapeHtml(__('Order #')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Date')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Ship To')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Order Total')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Status')) ?></div>
+                <div class="text-right"><?= $escaper->escapeHtml(__('View / Reorder')) ?></div>
+            </div>
+
+            <?php foreach ($orders as $order): ?>
+                <?php
+                    $shippingAddress = $order->getShippingAddress();
+                    $shipTo = $shippingAddress
+                        ? $shippingAddress->getName()
+                        : trim(($order->getCustomerFirstname() ?? '') . ' ' . ($order->getCustomerLastname() ?? ''));
+                    $viewUrl = $block->getViewUrl($order);
+                    $canReorder = $canPurchase && $reorderHelper->canReorder($order->getEntityId());
+                    $reorderUrl = $canReorder ? $block->getReorderUrl($order) : null;
+                ?>
+                <div class="md:grid md:grid-cols-[minmax(8rem,1fr)_7rem_minmax(8rem,1.2fr)_7rem_7rem_4rem]
+                            md:gap-4 md:items-center
+                            px-5 py-4 border-b border-subtle last:border-b-0
+                            flex flex-col gap-2">
+                    <span class="text-sm text-secondary font-medium">
+                        <?= $escaper->escapeHtml($order->getRealOrderId()) ?>
+                    </span>
+                    <span class="text-sm text-secondary">
+                        <?= /* @noEscape */ $block->formatDate($order->getCreatedAt()) ?>
+                    </span>
+                    <span class="text-sm text-secondary truncate">
+                        <?= $escaper->escapeHtml($shipTo) ?>
+                    </span>
+                    <span class="text-sm text-secondary font-semibold">
+                        <?= /* @noEscape */ $order->formatPrice($order->getGrandTotal()) ?>
+                    </span>
+                    <span class="text-sm text-secondary">
+                        <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
+                    </span>
+                    <div class="flex items-center justify-end gap-2">
+                        <a href="<?= $escaper->escapeUrl($viewUrl) ?>"
+                           class="p-1.5 text-muted hover:text-primary transition-colors rounded"
+                           aria-label="<?= $escaper->escapeHtmlAttr(__('View order %1', $order->getRealOrderId())) ?>">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                                 viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                        </a>
+                        <?php if ($canReorder && $reorderUrl): ?>
+                            <a href="#"
+                               data-post="<?= $escaper->escapeHtmlAttr($postHelper->getPostData($reorderUrl)) ?>"
+                               class="p-1.5 text-muted hover:text-primary transition-colors rounded"
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('Reorder %1', $order->getRealOrderId())) ?>">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                                     viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M4 4v5h5M20 20v-5h-5"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M20 9A8 8 0 006.06 5.64L4 8M4 15a8 8 0 0013.94 3.36L20 16"/>
+                                </svg>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php else: ?>
+        <p class="text-sm text-muted">
+            <?= $escaper->escapeHtml(__('You have placed no orders.')) ?>
+        </p>
+    <?php endif; ?>
+</section>

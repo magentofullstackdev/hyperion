@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion 1column page layout overrides.
+
+    `columns` is a CSS grid: one column here, the two and three column
+    layouts (which extend this one) redefine the template and pin `main`
+    and the sidebar wrappers to their cells, so a sidebar never floats on
+    the side a page layout did not ask for. `main` keeps `min-w-0` so a
+    wide product grid or table cannot stretch its column.
+
+    The structural classes live here (not in default.xml) so that
+    ESI fragment / HTMX endpoints that skip page_layout loading do
+    not try to apply `htmlClass` to non-existent containers.
+
+    1column still needs the `sidebar.main` and `sidebar.additional`
+    containers so that site-wide "side" widgets (wishlist, compare, the
+    recently viewed / compared widgets an admin schedules there) have a
+    consistent attachment point across every page layout. Here they are
+    full-width rows BELOW `main`, the additional one laid out as a row of
+    cards.
+
+    `hyperion.sidebar.inline` is an untagged container that exists on
+    EVERY page: `Magento_LayeredNavigation/page_layout/1column.xml` moves
+    the additional wrapper into it, and the category page handle
+    (`Magento_Catalog/layout/catalog_category_view.xml`) moves the
+    container into `hyperion.category.view`, where `category/view.phtml`
+    prints it right under the inline filter bar. A `<move>` whose
+    destination does not exist detaches the element instead of leaving it
+    where it was (Magento unsets the child before the missing destination
+    throws), and a detached element is printed after the page wrapper: the
+    earlier move straight into the category view put the wishlist and
+    compare cards UNDER THE FOOTER of the home and register pages. The two
+    column layouts move the wrapper back next to the filters, the empty
+    container they carry along renders nothing. `empty:hidden` keeps a
+    wrapper out of the flow when nothing is mounted inside, and the
+    `.sidebar-additional` rule of _components.css hides it while every
+    child is hidden (guest, empty wishlist, empty compare list).
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="empty"/>
+    <referenceContainer name="page.wrapper">
+        <container name="header.container" as="header_container" label="Page Header Container" htmlTag="header" htmlClass="page-header" before="main.content"/>
+        <container name="page.top" as="page_top" label="After Page Header" after="header.container"/>
+        <container name="footer-container" as="footer" before="before.body.end" label="Page Footer Container" htmlTag="footer" htmlClass="page-footer"/>
+    </referenceContainer>
+
+    <referenceContainer name="columns"
+                        htmlClass="page-columns container mx-auto px-4 py-6 grid grid-cols-1 gap-6 md:items-start flex-grow"/>
+    <referenceContainer name="main"
+                        htmlClass="column main min-w-0 w-full"/>
+
+    <referenceContainer name="columns">
+        <container name="div.sidebar.main"
+                   htmlTag="div"
+                   htmlClass="sidebar sidebar-main w-full empty:hidden space-y-6"
+                   after="main">
+            <container name="sidebar.main" as="sidebar_main" label="Sidebar Main"/>
+        </container>
+        <container name="div.sidebar.additional"
+                   htmlTag="div"
+                   htmlClass="sidebar sidebar-additional w-full empty:hidden grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+                   after="div.sidebar.main">
+            <container name="sidebar.additional" as="sidebar_additional" label="Sidebar Additional"/>
+        </container>
+        <!-- No alias: category/view.phtml prints it by name with getChildHtml(). -->
+        <container name="hyperion.sidebar.inline" label="Inline Additional Sidebar" after="div.sidebar.additional"/>
+    </referenceContainer>
+</layout>

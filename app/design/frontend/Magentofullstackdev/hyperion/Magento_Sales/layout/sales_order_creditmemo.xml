@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <update handle="hyperion_sales_totals"/>
+    <body>
+        <!-- The account shell owns the heading; order/view.phtml renders date, status and actions -->
+        <referenceBlock name="page.main.title" remove="true"/>
+        <move element="sales.order.creditmemo" destination="content" before="hyperion.account.shell.close"/>
+        <referenceBlock name="sales.order.creditmemo" template="Magento_Sales::order/view.phtml">
+            <block class="Magentofullstackdev\HyperionCustomer\Block\Order\Actions"
+                   name="hyperion.order.actions"
+                   as="actions"
+                   template="Magentofullstackdev_HyperionCustomer::order/actions.phtml"
+                   cacheable="false"/>
+            <block class="Magento\Sales\Block\Order\Info" name="sales.order.info" as="info"/>
+            <arguments>
+                <argument name="show_actions" xsi:type="boolean">true</argument>
+                <argument name="items_alias" xsi:type="string">creditmemo_items</argument>
+                <argument name="items_title" xsi:type="string" translate="true">Refunds</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

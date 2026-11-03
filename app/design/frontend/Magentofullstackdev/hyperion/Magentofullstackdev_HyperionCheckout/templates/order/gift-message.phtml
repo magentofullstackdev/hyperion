@@ -1,0 +1,37 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * A saved gift message (order level or one item) on the order pages,
+ * rendered by Magento_Sales::order/items.phtml.
+ *
+ * Block data:
+ *   values  ['sender' => .., 'recipient' => .., 'message' => ..]
+ *   title   heading text
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$values = (array) $block->getData('values');
+?>
+<div class="hyperion-gift-message rounded-lg border border-subtle bg-surface-raised px-4 py-3 text-sm"
+     data-hyperion-gift-message>
+    <p class="mb-2 inline-flex items-center gap-2 font-semibold text-secondary">
+        <svg class="h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+             stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0H4.5a1.5 1.5 0 00-1.5 1.5v1.5c0 .414.336.75.75.75h16.5a.75.75 0 00.75-.75V9a1.5 1.5 0 00-1.5-1.5H12m0 0v13.5"/>
+        </svg>
+        <?= $escaper->escapeHtml((string) $block->getData('title')) ?>
+    </p>
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt class="text-muted"><?= $escaper->escapeHtml(__('From')) ?></dt>
+        <dd class="text-secondary"><?= $escaper->escapeHtml((string) ($values['sender'] ?? '')) ?></dd>
+        <dt class="text-muted"><?= $escaper->escapeHtml(__('To')) ?></dt>
+        <dd class="text-secondary"><?= $escaper->escapeHtml((string) ($values['recipient'] ?? '')) ?></dd>
+        <dt class="text-muted"><?= $escaper->escapeHtml(__('Message')) ?></dt>
+        <dd class="whitespace-pre-line text-secondary"><?= $escaper->escapeHtml((string) ($values['message'] ?? '')) ?></dd>
+    </dl>
+</div>

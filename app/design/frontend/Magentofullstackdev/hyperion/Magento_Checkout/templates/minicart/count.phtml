@@ -1,0 +1,38 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Mini-cart count badge -- returned by /hyperion/header/state (and by the
+ * cart HTMX actions out of band) and swapped into `#hyperion-mini-cart-count`
+ * in the header on page load. Kept visually consistent with the Tailwind utilities used
+ * inline in header.phtml so HTMX outerHTML swaps preserve the badge
+ * layout exactly. When the cart is empty we still emit the span (with
+ * the `hidden` class) so future OOB updates have a stable target.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Minicart\Fragment $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+if (!$viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase()) {
+    // The header renders no mini-cart for this visitor: no badge to swap.
+    return;
+}
+$count = $block->getItemCount();
+$baseClasses = 'absolute -top-1 -right-1 min-w-[1.125rem] px-1 py-0.5 text-[10px] '
+             . 'leading-none font-bold text-center rounded-full bg-primary text-on-primary';
+$classes = $count > 0 ? $baseClasses : $baseClasses . ' hidden';
+?>
+<?php /*
+    The response deliberately OMITS the hx-get / hx-trigger / hx-swap
+    attributes from the header.phtml's initial span -- once HTMX replaces
+    the span with this markup, those attributes would fire the load
+    trigger a second time and loop. Subsequent count changes arrive via
+    the add-to-cart / delete / update responses, which render this same
+    template with the `oob` block flag (hx-swap-oob), not via load.
+*/ ?>
+<span id="hyperion-mini-cart-count"
+      aria-live="polite"
+      <?php if ($block->getData('oob')): ?>hx-swap-oob="outerHTML"<?php endif; ?>
+      class="<?= $escaper->escapeHtmlAttr($classes) ?>"><?= $count > 0 ? (int) $count : '' ?></span>

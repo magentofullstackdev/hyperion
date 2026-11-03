@@ -1,0 +1,24 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Update Wish List": default submit of the outer wishlist form
+ * (`wishlist/index/update`, saves every quantity and comment).
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Button $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->getWishlist()->getItemsCount()) {
+    return;
+}
+?>
+<button type="submit"
+        name="do"
+        value="1"
+        class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
+               bg-surface border border-subtle text-secondary
+               hover:border-primary hover:text-primary transition-colors
+               focus:outline-none focus:ring-2 focus:ring-primary">
+    <?= $escaper->escapeHtml(__('Update Wish List')) ?>
+</button>

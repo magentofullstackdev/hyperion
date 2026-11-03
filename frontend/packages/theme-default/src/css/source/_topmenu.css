@@ -1,0 +1,175 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion Topmenu -- dropdown + mobile accordion styles.
+ *
+ * Markup contract (Hyperion\Navigation\Block\Topmenu):
+ *   [data-hyperion-topmenu]   -- root <ul> (plain list, no ARIA menu roles)
+ *   [data-hyperion-submenu]   -- every nested <ul>
+ *
+ * Desktop (>= 1024px, the header shows the top menu from lg):
+ *   * Nested submenus float as absolute flyouts.
+ *   * A submenu becomes visible when its DIRECT parent <li> is hovered
+ *     or has focus inside (`:focus-within`). Nested rules use the `>`
+ *     combinator so hovering a grandchild does not re-open its
+ *     grandparent menu.
+ *   * Depth 2 (children of root items) opens DOWN below the item.
+ *   * Depth 3+ flies out to the RIGHT of its parent.
+ *   * Hover bridge: where there would be visual whitespace between a
+ *     parent <li> and its child flyout (the gap defeats `:hover` because
+ *     the cursor is briefly over neither element), we use a transparent
+ *     pseudo-element ::before to span the gap so the cursor stays
+ *     "inside" the parent the whole way across.
+ *
+ * Mobile (< 1024px, the burger drawer):
+ *   * Submenus render in flow. Tap the chevron button
+ *     ([data-hyperion-submenu-toggle]) -- entry.js's onSubmenuToggleClick
+ *     handler flips the `hidden` class on the next-sibling submenu.
+ */
+
+/* --- Mobile baseline -------------------------------------------- */
+[data-hyperion-submenu] {
+    display: none;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+[data-hyperion-submenu]:not(.hidden) {
+    display: block;
+}
+
+/* --- Desktop flyouts (>= 1024px) --------------------------------- */
+@media (min-width: 1024px) {
+    [data-hyperion-topmenu] {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    /* Hidden by default; revealed on parent :hover / :focus-within. `.is-closed`
+       is set by lib/mega-hover.js when Escape closes a submenu the keyboard
+       opened: the focus is back on the item's link, so :focus-within alone would
+       reopen it; the class goes when the focus leaves the item. */
+    [data-hyperion-topmenu] [data-hyperion-submenu] {
+        display: none;
+        position: absolute;
+        z-index: 50;
+        min-width: 14rem;
+        padding: 0.5rem 0;
+        background: rgb(var(--color-surface-raised));
+        border: 1px solid rgb(var(--color-subtle));
+        border-radius: 0.375rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+        list-style: none;
+        margin: 0;
+    }
+
+    /* Each <li> is positioned so flyouts can anchor relative to it. */
+    [data-hyperion-topmenu] > li,
+    [data-hyperion-submenu] li {
+        position: relative;
+    }
+
+    /* -- Depth-2 flyout: drops down below the root item ---------- */
+    [data-hyperion-topmenu] > li:hover        > [data-hyperion-submenu],
+    [data-hyperion-topmenu] > li:focus-within:not(.is-closed) > [data-hyperion-submenu] {
+        display: block;
+        top: 100%;
+        left: 0;
+    }
+
+    /* Hover bridge below the root item -- extends the parent <li>'s
+       hover region 6 px down so the cursor never falls through the gap
+       on its way to the depth-2 flyout. */
+    [data-hyperion-topmenu] > li > a::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        height: 6px;
+    }
+
+    /* -- Depth-3+ flyout: opens to the right --------------------- */
+    [data-hyperion-submenu] li:hover        > [data-hyperion-submenu],
+    [data-hyperion-submenu] li:focus-within:not(.is-closed) > [data-hyperion-submenu] {
+        display: block;
+        top: 0;
+        left: 100%;
+    }
+
+    /* Hover bridge to the right of a depth-2+ row -- extends the
+       parent <li>'s hover region 8 px to the right so the cursor
+       crosses into the right-flyout without losing :hover state. */
+    [data-hyperion-submenu] li > a::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 100%;
+        width: 8px;
+    }
+
+    /* On desktop the mobile chevron button is purely decorative. */
+    [data-hyperion-topmenu] [data-hyperion-submenu-toggle] {
+        display: none;
+    }
+}
+
+/* --- Mega menu panels (Magentofullstackdev_HyperionMegaMenu) ------ */
+/* A root item with a mega panel is not positioned: the panel
+   ([data-hyperion-mega-panel], a [data-hyperion-submenu] like any flyout,
+   so the hover / focus rules above open it) anchors to the header, spans
+   its full width and drops the flyout chrome (min width, padding). */
+@media (min-width: 1024px) {
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item] {
+        position: static;
+    }
+
+    /* `.is-open` is set by lib/mega-hover.js: the panel anchors to the header,
+       so between the root link and the panel there is a strip where :hover is
+       lost; the class keeps the panel open for a moment after the pointer left. */
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item]:hover        > [data-hyperion-mega-panel],
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item]:focus-within:not(.is-closed) > [data-hyperion-mega-panel],
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item].is-open      > [data-hyperion-mega-panel] {
+        display: block;
+        top: 100%;
+        left: 0;
+        right: 0;
+    }
+
+    /* Hover bridge under the root link: the link's wrapper (the panel is a div
+       child of the item too, hence the :not) is positioned so
+       its ::after covers the strip of header between the link and the panel
+       (and a little of the panel, harmless) while the item is hovered or open,
+       so the pointer never leaves the item on its way down. */
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item] > div:not([data-hyperion-mega-panel]) {
+        position: relative;
+    }
+
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item]:hover   > div:not([data-hyperion-mega-panel])::after,
+    [data-hyperion-topmenu] > li[data-hyperion-mega-item].is-open > div:not([data-hyperion-mega-panel])::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 100%;
+        height: var(--hyperion-mega-gap, 1.5rem);
+    }
+
+    [data-hyperion-topmenu] [data-hyperion-mega-panel] {
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+    }
+
+    /* The column lists are plain lists: never flyouts. */
+    [data-hyperion-mega-panel] ul {
+        position: static;
+        display: block;
+    }
+}

@@ -1,0 +1,119 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion account dropdown menu -- rendered inside the header
+ * `<hyperion-dropdown>` panel.
+ *
+ * Styled replacement of the core welcome block, which renders unstyled on
+ * this theme.
+ *
+ * Two states:
+ *   * signed-in -> list of account destinations (My Account, My Wish
+ *     List [N], My Orders, Address Book) + a visually-separated
+ *     "Sign Out" footer.
+ *   * guest -> Sign In / Create Account stacked buttons.
+ *
+ * Rendered by /hyperion/header/state into #hyperion-account-menu, the
+ * panel of the header's account dropdown.
+ *
+ * @var \Magentofullstackdev\HyperionCustomer\Block\Welcome\Fragment $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$isLoggedIn = $block->isLoggedIn();
+$baseUrl = rtrim($block->getUrl(''), '/');
+$wishlistCount = 0;
+try {
+    $wishlistCount = (int) $this->helper(\Magento\Wishlist\Helper\Data::class)->getItemCount();
+} catch (\Throwable $e) {
+    $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->warning('welcome/fragment.phtml: wishlist count', $e);
+    $wishlistCount = 0;
+}
+
+$linkClass = 'flex items-center justify-between gap-2 px-4 py-2.5 text-sm '
+           . 'text-secondary rounded-md transition-colors '
+           . 'hover:bg-primary/10 hover:text-primary '
+           . 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+?>
+<div class="py-2 min-w-[15rem]"
+     id="hyperion-welcome"
+     data-hyperion-welcome
+     role="menu"
+     aria-live="polite">
+    <?php if ($isLoggedIn): ?>
+        <header class="px-4 py-2 border-b border-subtle mb-1">
+            <p class="text-xs uppercase tracking-wider text-muted font-semibold">
+                <?= $escaper->escapeHtml(__('Signed in as')) ?>
+            </p>
+            <p class="text-sm font-semibold text-secondary truncate">
+                <?= $escaper->escapeHtml($block->getCustomerName()) ?>
+            </p>
+        </header>
+
+        <nav class="flex flex-col gap-0.5 px-2" aria-label="<?= $escaper->escapeHtmlAttr(__('Account menu')) ?>">
+            <a href="<?= $escaper->escapeUrl($block->getAccountUrl()) ?>"
+               class="<?= /* @noEscape */ $linkClass ?>"
+               role="menuitem">
+                <?= $escaper->escapeHtml(__('My Account')) ?>
+            </a>
+            <a href="<?= $escaper->escapeUrl($baseUrl . '/wishlist/') ?>"
+               class="<?= /* @noEscape */ $linkClass ?>"
+               role="menuitem">
+                <span><?= $escaper->escapeHtml(__('My Wish List')) ?></span>
+                <?php if ($wishlistCount > 0): ?>
+                    <span class="inline-flex items-center justify-center min-w-[1.25rem] px-1.5
+                                 rounded-full bg-primary text-on-primary text-xs font-semibold">
+                        <?= (int) $wishlistCount ?>
+                    </span>
+                <?php endif; ?>
+            </a>
+            <a href="<?= $escaper->escapeUrl($baseUrl . '/sales/order/history/') ?>"
+               class="<?= /* @noEscape */ $linkClass ?>"
+               role="menuitem">
+                <?= $escaper->escapeHtml(__('My Orders')) ?>
+            </a>
+            <a href="<?= $escaper->escapeUrl($baseUrl . '/customer/address/') ?>"
+               class="<?= /* @noEscape */ $linkClass ?>"
+               role="menuitem">
+                <?= $escaper->escapeHtml(__('Address Book')) ?>
+            </a>
+        </nav>
+
+        <footer class="mt-2 pt-2 border-t border-subtle px-2 pb-1">
+            <a href="<?= $escaper->escapeUrl($block->getLogoutUrl()) ?>"
+               class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold
+                      bg-surface-raised text-secondary
+                      hover:bg-error/10 hover:text-error
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-error transition-colors"
+               role="menuitem">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+                <?= $escaper->escapeHtml(__('Sign Out')) ?>
+            </a>
+        </footer>
+
+    <?php else: ?>
+
+        <div class="px-4 py-3 space-y-2">
+            <a href="<?= $escaper->escapeUrl($block->getLoginUrl()) ?>"
+               class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-md
+                      bg-primary text-on-primary text-sm font-semibold
+                      hover:bg-primary-hover hover:shadow-md transition-all
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <?= $escaper->escapeHtml(__('Sign In')) ?>
+            </a>
+            <a href="<?= $escaper->escapeUrl($block->getRegisterUrl()) ?>"
+               class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-md
+                      border border-subtle text-secondary text-sm font-semibold
+                      hover:bg-primary/5 hover:text-primary transition-colors
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <?= $escaper->escapeHtml(__('Create an Account')) ?>
+            </a>
+        </div>
+
+    <?php endif; ?>
+</div>

@@ -1,0 +1,374 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion default layout handle - single source of truth for:
+
+      1. Global asset loading (Task 10 / Requirements 3.5, 3.6):
+         - Load HTMX from the pinned CDN URL with SRI and crossorigin attributes
+           via Magentofullstackdev\HyperionCore\ViewModel\HtmxConfig (Requirement 3.6).
+         - Load the Vite-compiled entry bundle via
+           Magentofullstackdev\HyperionCore\Block\AssetManifest, which resolves entry names to
+           cache-busted hashed filenames from pub/static/.../manifest.json
+           (Requirement 9.3).
+         - Remove every Luma JS block - require.js, knockout, jquery - so no
+           Luma asset is served on any Hyperion page (Requirement 3.5,
+           Property 1 - No Luma Assets on Any Hyperion Page).
+
+      2. Header / footer / topmenu block wiring (Tasks 11-12):
+         - Mount Magentofullstackdev\HyperionNavigation\Block\Header inside header.container.
+         - Mount two Magentofullstackdev\HyperionNavigation\Block\Topmenu children (desktop +
+           mobile) as children of the Header block so the header template
+           can call $block->getChildHtml('hyperion.topmenu') and
+           $block->getChildHtml('hyperion.topmenu.mobile').
+         - Mount Magentofullstackdev\HyperionNavigation\Block\Footer inside footer-container.
+         - Remove unused Luma header/footer child blocks.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <!-- Drop every Luma-era JS entry point. Hyperion does not ship
+             RequireJS, Knockout, or jQuery at runtime (Requirement 3.5). -->
+        <remove src="requirejs/require.js"/>
+        <remove src="mage/requirejs/mixins.js"/>
+        <remove src="jquery.js"/>
+        <remove src="jquery/jquery-migrate.js"/>
+        <remove src="jquery/jquery.mobile.custom.js"/>
+        <remove src="mage/common.js"/>
+        <remove src="mage/dataPost.js"/>
+        <remove src="mage/bootstrap.js"/>
+        <remove src="mage/translate.js"/>
+        <remove src="mage/cookies.js"/>
+        <remove src="mage/loader.js"/>
+        <remove src="mage/calendar.js"/>
+        <remove src="mage/calendar.css"/>
+        <remove src="knockoutjs/knockout.js"/>
+        <remove src="knockoutjs/knockout-es5.js"/>
+        <remove src="knockoutjs/knockout-repeat.js"/>
+        <remove src="knockoutjs/knockout-fast-foreach.js"/>
+        <remove src="Magento_Ui/js/lib/knockout/bootstrap.js"/>
+        <remove src="css/styles-m.css"/>
+        <remove src="css/styles-l.css"/>
+        <remove src="css/print.css"/>
+        <!-- Uppy (file uploader used by RequireJS widgets) ships a render-blocking stylesheet on every page -->
+        <remove src="jquery/uppy/dist/uppy-custom.css"/>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+    </head>
+
+    <body>
+        <!-- One attribute per class: Magento joins a multi-word value into a single hyphenated token -->
+        <attribute name="class" value="min-h-screen"/>
+        <attribute name="class" value="flex"/>
+        <attribute name="class" value="flex-col"/>
+        <attribute name="class" value="bg-surface"/>
+        <attribute name="class" value="text-secondary"/>
+        <attribute name="class" value="font-sans"/>
+
+        <!-- ===========================================================
+             Remove Luma JS-loading blocks. These <referenceBlock remove/>
+             directives strip the head markup emitted by the core modules
+             so the rendered page contains no require-config, translate
+             config, cookie-status check, Google Maps bootstrap, or Luma
+             theme editor script (Requirement 3.5, Property 1).
+             =========================================================== -->
+        <!-- `require.js` is Magento_Theme::page/js/require_js.phtml, the inline
+             `var require = { baseUrl: ... }` bootstrap object for RequireJS.
+             Pointless without the loader and confusing in DevTools. -->
+        <referenceBlock name="require.js" remove="true"/>
+        <referenceBlock name="requirejs-config" remove="true"/>
+        <referenceBlock name="translate-config" remove="true"/>
+        <referenceBlock name="cookie-status-check" remove="true"/>
+        <!-- RequireJS / Knockout bootstraps that can never run here: customer-data
+             sections (Hyperion renders session state through its own fragments),
+             the Knockout login popup, the page-cache placeholder loader, the
+             mage/cookies config and the MSRP popup templates. -->
+        <referenceBlock name="customer.section.config" remove="true"/>
+        <referenceBlock name="customer.customer.data" remove="true"/>
+        <referenceBlock name="customer.data.invalidation.rules" remove="true"/>
+        <referenceBlock name="authentication-popup" remove="true"/>
+        <referenceBlock name="pageCache" remove="true"/>
+        <referenceBlock name="js_cookies" remove="true"/>
+        <referenceBlock name="product.tooltip" remove="true"/>
+        <!-- Same kind, added by page-specific core handles: the "cookies required"
+             redirect trigger, the recently-viewed storage provider on the PDP and the
+             add-to-wishlist widget config on product lists. -->
+        <referenceBlock name="require-cookie" remove="true"/>
+        <referenceBlock name="product_viewed_counter" remove="true"/>
+        <referenceBlock name="catalogsearch.wishlist_addto" remove="true"/>
+        <referenceBlock name="category.product.list.additional.wishlist_addto" remove="true"/>
+        <referenceBlock name="google.maps.api" remove="true"/>
+        <referenceBlock name="theme.active.editor" remove="true"/>
+        <referenceBlock name="head.additional" remove="true"/>
+
+        <!-- Additional Luma JS-init bootstrap blocks that emit inert
+             <script type="text/x-magento-init"> JSON payloads (mage/cookies,
+             Magento_Ui/js/core/app / frontend-storage-manager). Without
+             RequireJS / Knockout the payloads do nothing, but we strip them
+             anyway so curl inspection and Lighthouse audits show a fully
+             clean checkout page with zero legacy scaffolding. -->
+        <referenceBlock name="cookie-status" remove="true"/>
+        <referenceBlock name="frontend-storage-manager" remove="true"/>
+        <referenceBlock name="cookie" remove="true"/>
+        <referenceBlock name="cookie_config" remove="true"/>
+        <!-- cookie_notices stays: the theme's Magento_Cookie::html/notices.phtml
+             renders the cookie restriction banner without RequireJS. -->
+
+        <!-- Luma widget blocks inside sidebars that no Hyperion page uses.
+             We intentionally keep the sidebar.main / sidebar.additional
+             containers themselves so Magento's native page-layout handles
+             (1column, 2columns-left, 2columns-right, 3columns) continue
+             to populate them - layered nav, PDP sidebars, etc.
+             `form.subscribe` (the core Magento_Newsletter block mounted at
+             the page-level `footer` container) IS removed below - Hyperion
+             ships its own newsletter column via the nested
+             `hyperion.footer.subscribe` block (see footer-container wiring
+             further down), and the core block would otherwise leak as a
+             stray full-width form below the dark footer band. -->
+        <referenceBlock name="navigation.sections" remove="true"/>
+        <referenceBlock name="minicart" remove="true"/>
+        <referenceBlock name="form.subscribe" remove="true"/>
+        <referenceBlock name="recaptcha-newsletter" remove="true"/>
+
+        <!--
+            Hyperion ships its own footer with "About us / Customer Service"
+            baked into the `hyperion.footer` block. Magento's sample data
+            seeds a Cms\Widget\Block instance bound to
+            `cms_footer_links_container` that mounts the `footer_links_block`
+            CMS block - that rail ends up floating BELOW the Hyperion
+            footer as a stray link strip. Remove the container so
+            the widget has nowhere to attach.
+        -->
+        <referenceContainer name="cms_footer_links_container" remove="true"/>
+
+        <!--
+            Legacy Luma "sidebar" widget declarations stay removed - the
+            Knockout last-ordered-items / wishlist-sidebar / compare-
+            sidebar components need the `customer-data` JS store that
+            Hyperion doesn't ship. Hyperion's FPC-safe replacements
+            (`hyperion.wishlist.sidebar`, `hyperion.compare.sidebar`: the
+            templates hold URLs and labels only, the items come from the
+            header state fragments through lib/list-state.js) are declared
+            where Luma shows them, not site-wide: the category and search
+            result pages (catalog_category_view.xml,
+            catalogsearch_result_index.xml, in `sidebar.additional`) and the
+            account pages (customer_account.xml, under the account menu). The
+            home page, CMS pages, sign in, register and contact pages show
+            none. The reorder sidebar has no replacement yet.
+        -->
+        <referenceBlock name="sale.reorder.sidebar" remove="true"/>
+        <referenceBlock name="wishlist_sidebar" remove="true"/>
+        <referenceBlock name="catalog.compare.sidebar" remove="true"/>
+
+        <!-- ===========================================================
+             Global asset loading - HTMX from CDN + Vite entry bundle.
+             Emitted at after.body.start so <head> remains short and the
+             body HTML begins streaming before the scripts block parsing.
+             =========================================================== -->
+        <referenceContainer name="after.body.start">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.head.scripts"
+                   as="hyperion.head.scripts"
+                   template="Magentofullstackdev_HyperionCore::head/scripts.phtml"
+                   before="-">
+                <arguments>
+                    <argument name="htmx_config" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\HtmxConfig</argument>
+                    <argument name="asset_manifest" xsi:type="object">Magentofullstackdev\HyperionCore\Block\AssetManifest</argument>
+                </arguments>
+            </block>
+
+            <!-- Global toast placeholder (#hyperion-notification) + the
+                 <hyperion-confirm> dialog. One per page; no template may
+                 render its own #hyperion-notification any more. -->
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.notifications"
+                   template="Magento_Theme::html/notifications.phtml"
+                   after="hyperion.head.scripts"/>
+
+            <!-- GA4 / Google Ads: <hyperion-gtag> (renders nothing while
+                 google/gtag/* is off) and the target of the out-of-band
+                 add_to_cart events. See HyperionCore\ViewModel\GoogleGtag. -->
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.gtag"
+                   template="Magentofullstackdev_HyperionCore::html/gtag.phtml"
+                   after="hyperion.notifications"/>
+        </referenceContainer>
+
+        <!-- ===========================================================
+             Mini-cart architecture (Task 41 revision).
+
+             The <hyperion-mini-cart> Lit element in header.phtml is the
+             SOLE surface for the cart UI. It renders a fixed off-canvas
+             drawer in its Shadow DOM and lazy-fetches the fragment via
+             HTMX (`fragment-url="/hyperion/minicart/fragment"`) on the
+             first open, then reuses the cached body until count changes.
+
+             A previous iteration mounted the fragment as an inline
+             fallback directly inside `after.body.start` so requests
+             bypassing Varnish would still SSR the cart. In practice this
+             caused the mini-cart body to render AT THE TOP of every page
+             (above the header) because the container is a page-level
+             slot - not inside the Lit host. Removed: the fragment is
+             always fetched on demand now. `/hyperion/minicart/fragment`
+             continues to return `Cache-Control: private, no-store`.
+             =========================================================== -->
+
+        <!-- ===========================================================
+             Private customer-data fragments (welcome / wishlist / compare).
+
+             Removed the page-level inline fallback mounts that previously
+             sat in `after.body.start` for the same reason as the
+             mini-cart: when Varnish is absent, the fallback block
+             renders the full fragment HTML AT THE TOP of every page
+             (above the header), not inside the header cluster where it
+             belongs.
+
+             The header.phtml icon row emits three `<span hx-get="..."
+             hx-trigger="load">` placeholders that HTMX fetches lazily
+             and swaps in place - these are the canonical mount points.
+             The fragment endpoints continue to serve `Cache-Control:
+             private, no-store` so Varnish passes them through.
+             =========================================================== -->
+
+        <!-- ===========================================================
+             Header - Magentofullstackdev\HyperionNavigation\Block\Header replaces the Luma
+             header assembly. Two Topmenu child blocks are declared here so
+             the header template can render both a desktop (inline) and a
+             mobile (drawer) navigation tree via getChildHtml().
+             Unused Luma header children are removed to prevent stray output.
+             =========================================================== -->
+        <!-- Core renders this container as <header class="page-header">; the theme template inside
+             is the one banner landmark, so the wrapper becomes a div (axe: landmark-no-duplicate-banner,
+             landmark-banner-is-top-level). The wrapper is the sticky element: `sticky` on the inner
+             <header> never stuck because this wrapper, exactly as tall as the header, was its
+             containing block. z-30 keeps the header (search panel, mega panels, drawers) above the
+             page; toasts and the confirm dialog sit higher (z-index 60 and the top layer). -->
+        <referenceContainer name="header.container" htmlTag="div" htmlClass="page-header sticky top-0 z-30">
+            <block class="Magentofullstackdev\HyperionNavigation\Block\Header"
+                   name="hyperion.header"
+                   template="Magento_Theme::html/header.phtml"
+                   before="-">
+                <!-- Desktop top navigation tree, edge-composed: behind an
+                     ESI-capable Varnish the page carries only
+                     <esi:include src="/hyperion/navigation/menu"> and the
+                     fragment is cached on its own TTL; elsewhere the
+                     `inline` child renders the menu in place. -->
+                <block class="Magentofullstackdev\HyperionCore\Block\EsiFragment"
+                       name="hyperion.topmenu"
+                       as="hyperion.topmenu"
+                       template="Magentofullstackdev_HyperionCore::esi/fragment.phtml">
+                    <arguments>
+                        <argument name="fragment_route" xsi:type="string">hyperion/navigation/menu</argument>
+                        <argument name="element_id" xsi:type="string">hyperion-topmenu</argument>
+                    </arguments>
+                    <block class="Magentofullstackdev\HyperionNavigation\Block\Topmenu"
+                           name="hyperion.topmenu.inline"
+                           as="inline"
+                           template="Magento_Theme::html/topmenu.phtml"/>
+                </block>
+                <!-- Mobile drawer navigation tree -->
+                <block class="Magentofullstackdev\HyperionNavigation\Block\Topmenu"
+                       name="hyperion.topmenu.mobile"
+                       as="hyperion.topmenu.mobile"
+                       template="Magento_Theme::html/topmenu.phtml">
+                    <arguments>
+                        <!-- A navigation source (mega menu) renders its accordion variant here. -->
+                        <argument name="device" xsi:type="string">mobile</argument>
+                    </arguments>
+                </block>
+            </block>
+
+            <!-- Remove Luma header children that are superseded by the
+                 Hyperion Header block above. -->
+            <referenceBlock name="header.panel" remove="true"/>
+            <referenceBlock name="logo" remove="true"/>
+            <referenceBlock name="top.search" remove="true"/>
+        </referenceContainer>
+
+        <!-- ===========================================================
+             Footer - Magentofullstackdev\HyperionNavigation\Block\Footer replaces the Luma
+             footer assembly. Unused Luma footer children are removed.
+             =========================================================== -->
+        <!-- Same for the footer: core's <footer class="page-footer"> wrapper becomes a div, the
+             template's <footer role="contentinfo"> is the one contentinfo landmark. -->
+        <referenceContainer name="footer-container" htmlTag="div">
+            <block class="Magentofullstackdev\HyperionNavigation\Block\Footer"
+                   name="hyperion.footer"
+                   template="Magento_Theme::html/footer.phtml"
+                   before="-">
+
+                <!-- Newsletter subscribe form (fourth footer column). -->
+                <block class="Magento\Newsletter\Block\Subscribe"
+                       name="hyperion.footer.subscribe"
+                       as="subscribe"
+                       template="Magento_Newsletter::subscribe.phtml">
+                    <!-- reCAPTCHA for the newsletter form. Magento_ReCaptchaNewsletter
+                         mounts its block in the page-level `footer` container and
+                         hooks the form by id from Knockout; Hyperion renders the
+                         same core block inside its own subscribe form instead. -->
+                    <block class="Magento\ReCaptchaUi\Block\ReCaptcha"
+                           name="hyperion.footer.subscribe.recaptcha"
+                           as="recaptcha"
+                           template="Magento_ReCaptchaFrontendUi::recaptcha.phtml"
+                           ifconfig="recaptcha_frontend/type_for/newsletter">
+                        <arguments>
+                            <argument name="recaptcha_for" xsi:type="string">newsletter</argument>
+                        </arguments>
+                    </block>
+                </block>
+
+                <!-- Store/language + currency switchers - rendered in the
+                     bottom bar next to the copyright line. Each switcher
+                     is a native HTML <details> element (no JS) courtesy
+                     of the theme-level Magento_Store + Magento_Directory
+                     template overrides. -->
+                <!-- Store switcher. `scope`: `group` (core: the store groups
+                     of the current website), `website` (every store view of
+                     the website) or `all` (every store view of every website,
+                     grouped by website). The theme uses `all`, which already
+                     lists the current group's views, so core's language
+                     switcher (Magento_Store::switch/languages.phtml) is not
+                     rendered next to it: with it the footer would list the
+                     same store views twice. The three footer
+                     disclosures share a `name`, so opening one closes the
+                     others (native exclusive details, no JS). -->
+                <block class="Magento\Store\Block\Switcher"
+                       name="hyperion.footer.store_switcher"
+                       as="store_switcher"
+                       template="Magento_Store::switch/stores.phtml">
+                    <arguments>
+                        <argument name="id_modifier" xsi:type="string">footer</argument>
+                        <argument name="scope" xsi:type="string">all</argument>
+                        <argument name="store_switcher" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\StoreSwitcher</argument>
+                    </arguments>
+                </block>
+                <block class="Magento\Directory\Block\Currency"
+                       name="hyperion.footer.currency"
+                       as="currency"
+                       template="Magento_Directory::currency.phtml">
+                    <arguments>
+                        <argument name="id_modifier" xsi:type="string">footer</argument>
+                    </arguments>
+                </block>
+            </block>
+
+            <!-- Remove Luma footer children superseded by hyperion.footer. -->
+            <referenceBlock name="footer_links" remove="true"/>
+            <referenceBlock name="copyright" remove="true"/>
+            <referenceBlock name="report.bugs" remove="true"/>
+            <referenceBlock name="form.subscribe.info" remove="true"/>
+        </referenceContainer>
+
+        <!-- ===========================================================
+             Structural classes for `main`, `columns`, `sidebar.main`,
+             `sidebar.additional` are applied in the per-page_layout XMLs
+             (Magentofullstackdev/hyperion/Magento_Theme/page_layout/*.xml) because
+             those containers are declared by the page_layout chain and do
+             not exist on fragment / ESI handles that opt out of the
+             default page_layout.
+             =========================================================== -->
+        <referenceContainer name="page.top" htmlTag="div" htmlClass="container mx-auto px-4 pt-4"/>
+    </body>
+</page>

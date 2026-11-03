@@ -1,0 +1,64 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion date of birth widget: native date input, no jQuery calendar.
+ *
+ * Core filters the posted `dob` through the store locale date format
+ * (Magento\Customer\Model\Metadata\Form\Date), and an ISO value only survives
+ * that filter in a few locales (en_US yes, de_DE / fr_FR come back empty).
+ * The script below rewrites the `dob` entry of the submitted FormData into
+ * the format core expects ($block->getDateFormat()), so the native input
+ * works in every locale without any server-side change.
+ *
+ * @var \Magento\Customer\Block\Widget\Dob $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+$fieldId = $block->getHtmlId();
+$isoValue = $block->getYear() ? $block->getYear() . '-' . $block->getMonth() . '-' . $block->getDay() : '';
+$minDate = $block->getMinDateRange() ? str_replace('/', '-', $block->getMinDateRange()) : '';
+$maxDate = $block->getMaxDateRange()
+    ? str_replace('/', '-', $block->getMaxDateRange())
+    : (new \DateTimeImmutable('yesterday'))->format('Y-m-d');
+?>
+<div>
+    <label class="block text-sm font-medium text-secondary mb-1" for="<?= $escaper->escapeHtmlAttr($fieldId) ?>">
+        <?= $escaper->escapeHtml($block->getStoreLabel('dob')) ?>
+        <?php if ($block->isRequired()): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+    </label>
+    <input type="date"
+           id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+           name="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+           value="<?= $escaper->escapeHtmlAttr($isoValue) ?>"
+           <?php if ($minDate): ?>min="<?= $escaper->escapeHtmlAttr($minDate) ?>"<?php endif; ?>
+           max="<?= $escaper->escapeHtmlAttr($maxDate) ?>"
+           autocomplete="bday"
+           data-hyperion-dob-format="<?= $escaper->escapeHtmlAttr($block->getDateFormat()) ?>"
+           class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+           <?= $block->isRequired() ? 'required' : '' ?>/>
+    <?php if ($message = $block->getAdditionalDescription()): ?>
+        <p class="mt-1 text-xs text-muted"><?= $escaper->escapeHtml($message) ?></p>
+    <?php endif; ?>
+</div>
+<?php
+$script = <<<'JS'
+(function () {
+    if (window.hyperionDobFormat) { return; }
+    window.hyperionDobFormat = true;
+    document.addEventListener('formdata', function (event) {
+        event.target.querySelectorAll('input[type="date"][data-hyperion-dob-format]').forEach(function (input) {
+            var parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value);
+            if (!parts || !input.name || input.disabled) { return; }
+            var value = input.getAttribute('data-hyperion-dob-format').replace(/y+|M+|d+/g, function (token) {
+                return token.charAt(0) === 'y' ? parts[1] : (token.charAt(0) === 'M' ? parts[2] : parts[3]);
+            });
+            event.formData.set(input.name, value);
+        });
+    });
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

@@ -1,0 +1,197 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion order history -- responsive list of the signed-in customer's
+ * past orders.
+ *
+ * Desktop: classic grid-card table with columns Order #, Date, Ship To,
+ * Order Total, Status, View / Reorder icons.
+ *
+ * Mobile (< md): the same orders render as a stack of cards with the
+ * same data on rows instead of cells -- the table collapses visually
+ * via CSS so no duplicate markup is shipped.
+ *
+ * @var \Magento\Sales\Block\Order\History $block
+ * Magento_OrderCancellationUi variant (2.4.7+): core swaps the template
+ * to add a "Cancel" action per cancellable order; this copy of the
+ * Magento_Sales template adds it as `<hyperion-order-cancel>` (dialog +
+ * HTMX POST to hyperion/order/cancel) instead of core's RequireJS modal.
+ *
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCustomer\ViewModel\Sales\OrderActions;
+
+$orders = $block->getOrders();
+$reorderHelper = $this->helper(\Magento\Sales\Helper\Reorder::class);
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+$postHelper = $this->helper(\Magento\Framework\Data\Helper\PostHelper::class);
+$actions = $viewModels->require(OrderActions::class);
+$backUrl = $block->getUrl('customer/account');
+?>
+<section class="space-y-4" aria-labelledby="hyperion-orders-heading">
+
+    <h2 id="hyperion-orders-heading" class="text-xl font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('My Orders')) ?>
+    </h2>
+
+    <?= $block->getChildHtml('info') ?>
+
+    <?php if ($orders && count($orders)): ?>
+        <div class="bg-surface border border-subtle rounded-xl overflow-hidden">
+
+            <?php /* -- Desktop header row (md+) ------------------- */ ?>
+            <div class="hidden md:grid md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_6rem]
+                        gap-4 px-5 py-3 border-b border-subtle
+                        text-xs font-bold uppercase tracking-wider text-secondary bg-surface-raised">
+                <div><?= $escaper->escapeHtml(__('Order #')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Date')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Ship To')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Order Total')) ?></div>
+                <div><?= $escaper->escapeHtml(__('Status')) ?></div>
+                <div class="text-right"><?= $escaper->escapeHtml(__('Actions')) ?></div>
+            </div>
+
+            <?php foreach ($orders as $order): ?>
+                <?php
+                    $shippingAddress = $order->getShippingAddress();
+                    $shipTo = $shippingAddress
+                        ? trim(($shippingAddress->getFirstname() ?? '') . ' ' . ($shippingAddress->getLastname() ?? ''))
+                        : trim(($order->getCustomerFirstname() ?? '') . ' ' . ($order->getCustomerLastname() ?? ''));
+                    $viewUrl = $block->getViewUrl($order);
+                    $canReorder = $canPurchase && $reorderHelper->canReorder($order->getEntityId());
+                    $reorderUrl = $canReorder ? $block->getReorderUrl($order) : null;
+                    $reasons = $actions->getCancellationReasons($order);
+                ?>
+
+                <div class="md:grid md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_6rem]
+                            md:gap-4 md:items-center
+                            px-5 py-4 border-b border-subtle last:border-b-0
+                            flex flex-col gap-2">
+
+                    <?php /* Mobile card row / desktop cell */ ?>
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Order #')) ?>
+                        </span>
+                        <span class="text-sm text-secondary font-medium">
+                            <?= $escaper->escapeHtml($order->getRealOrderId()) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Date')) ?>
+                        </span>
+                        <span class="text-sm text-secondary">
+                            <?= /* @noEscape */ $block->formatDate($order->getCreatedAt()) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Ship To')) ?>
+                        </span>
+                        <span class="text-sm text-secondary truncate">
+                            <?= $escaper->escapeHtml($shipTo) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Order Total')) ?>
+                        </span>
+                        <span class="text-sm text-secondary font-semibold">
+                            <?= /* @noEscape */ $order->formatPrice($order->getGrandTotal()) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                            <?= $escaper->escapeHtml(__('Status')) ?>
+                        </span>
+                        <span class="text-sm text-secondary" id="hyperion-order-status-<?= (int) $order->getId() ?>">
+                            <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
+                        </span>
+                    </div>
+
+                    <div class="flex justify-end md:justify-end items-center gap-3">
+                        <a href="<?= $escaper->escapeUrl($viewUrl) ?>"
+                           class="p-1.5 text-muted hover:text-primary transition-colors
+                                  focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                           aria-label="<?= $escaper->escapeHtmlAttr(__('View order %1', $order->getRealOrderId())) ?>">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                                 viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                            </svg>
+                        </a>
+
+                        <?php if ($canReorder && $reorderUrl): ?>
+                            <a href="#"
+                               data-post="<?= $escaper->escapeHtmlAttr($postHelper->getPostData($reorderUrl)) ?>"
+                               class="p-1.5 text-muted hover:text-primary transition-colors
+                                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('Reorder %1', $order->getRealOrderId())) ?>">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                                     viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M4 4v5h5M20 20v-5h-5"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M20 9A8 8 0 006.06 5.64L4 8M4 15a8 8 0 0013.94 3.36L20 16"/>
+                                </svg>
+                            </a>
+                        <?php endif; ?>
+
+                        <?php if ($reasons !== []): ?>
+                            <hyperion-order-cancel id="hyperion-order-cancel-<?= (int) $order->getId() ?>"
+                                                   action="<?= $escaper->escapeUrl($actions->getCancelUrl()) ?>"
+                                                   order-id="<?= (int) $order->getId() ?>"
+                                                   order-number="<?= $escaper->escapeHtmlAttr($order->getRealOrderId()) ?>"
+                                                   form-key="<?= $escaper->escapeHtmlAttr($actions->getFormKey()) ?>"
+                                                   context="list"
+                                                   variant="icon"
+                                                   reasons="<?= $escaper->escapeHtmlAttr(json_encode(array_values($reasons))) ?>"
+                                                   trigger-label="<?= $escaper->escapeHtmlAttr(__('Cancel order %1', $order->getRealOrderId())) ?>"
+                                                   title-label="<?= $escaper->escapeHtmlAttr(__('Cancel order #%1', $order->getRealOrderId())) ?>"
+                                                   prompt-label="<?= $escaper->escapeHtmlAttr(__('Provide a cancellation reason:')) ?>"
+                                                   keep-label="<?= $escaper->escapeHtmlAttr(__('Keep Order')) ?>"
+                                                   confirm-label="<?= $escaper->escapeHtmlAttr(__('Cancel Order')) ?>"></hyperion-order-cancel>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+            <p class="text-sm text-muted">
+                <?= $escaper->escapeHtml(__('%1 Item(s)', count($orders))) ?>
+            </p>
+            <?php if ($block->getPagerHtml()): ?>
+                <?= /* @noEscape */ $block->getPagerHtml() ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="flex items-center justify-end pt-4 border-t border-subtle">
+            <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('Back')) ?>
+            </a>
+        </div>
+    <?php else: ?>
+        <div class="py-16 text-center space-y-3 bg-surface border border-subtle rounded-xl" role="status">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            <p class="text-muted">
+                <?= $escaper->escapeHtml($block->getEmptyOrdersMessage()) ?>
+            </p>
+        </div>
+    <?php endif; ?>
+</section>

@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion breadcrumbs -- Tailwind-styled, schema.org BreadcrumbList.
+ *
+ * @var \Magento\Theme\Block\Html\Breadcrumbs $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+// Magento's Breadcrumbs block calls $this->assign('crumbs', $this->_crumbs) in _toHtml(),
+// so the $crumbs variable is already provided by the block when it renders this template.
+// Fall back to decoding from cache key info for environments that pass the block
+// without the assigned variable. getCacheKeyInfo() stores the crumbs as base64(json),
+// so a plain json_decode() is enough: no unserialize(), nothing to silence.
+if (!isset($crumbs) || !is_array($crumbs)) {
+    $cacheKey = $block->getCacheKeyInfo();
+    $encoded = $cacheKey['crumbs'] ?? null;
+    $decoded = is_string($encoded) ? json_decode((string) base64_decode($encoded, true), true) : null;
+    $crumbs = is_array($decoded) ? $decoded : null;
+}
+
+if (!is_array($crumbs) || empty($crumbs)) {
+    return;
+}
+?>
+<nav class="mb-4" aria-label="<?= $escaper->escapeHtmlAttr(__('Breadcrumb')) ?>">
+    <ol class="flex flex-wrap items-center gap-1.5 text-sm text-muted"
+        itemscope itemtype="https://schema.org/BreadcrumbList">
+        <?php $position = 1; $total = count($crumbs); $i = 0; ?>
+        <?php foreach ($crumbs as $crumbInfo): ?>
+            <?php $i++; $isLast = $i === $total; ?>
+            <li class="flex items-center gap-1.5"
+                itemprop="itemListElement"
+                itemscope
+                itemtype="https://schema.org/ListItem">
+                <?php if (!empty($crumbInfo['link']) && !$isLast): ?>
+                    <a href="<?= $escaper->escapeUrl($crumbInfo['link']) ?>"
+                       class="text-primary hover:text-primary-hover hover:underline transition-colors"
+                       itemprop="item">
+                        <span itemprop="name"><?= $escaper->escapeHtml($crumbInfo['label'] ?? '') ?></span>
+                    </a>
+                <?php else: ?>
+                    <span class="<?= $isLast ? 'text-secondary font-medium' : '' ?>" itemprop="name">
+                        <?= $escaper->escapeHtml($crumbInfo['label'] ?? '') ?>
+                    </span>
+                <?php endif; ?>
+                <meta itemprop="position" content="<?= (int) $position ?>" />
+                <?php if (!$isLast): ?>
+                    <svg class="w-3.5 h-3.5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                <?php endif; ?>
+            </li>
+            <?php $position++; ?>
+        <?php endforeach; ?>
+    </ol>
+</nav>

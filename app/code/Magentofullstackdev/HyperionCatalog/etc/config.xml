@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion>
+            <catalog>
+                <max_active_filters>5</max_active_filters>
+                <infinite_scroll>disabled</infinite_scroll>
+                <infinite_scroll_auto_pages>3</infinite_scroll_auto_pages>
+            </catalog>
+        </hyperion>
+    </default>
+</config>

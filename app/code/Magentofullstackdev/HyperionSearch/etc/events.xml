@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <!-- The categories of the autocomplete come from the database, not from the index: a save or
+         delete (admin, import, API) drops the cached answers. -->
+    <event name="catalog_category_save_after">
+        <observer name="hyperion_search_flush_suggest_cache" instance="Magentofullstackdev\HyperionSearch\Observer\FlushSuggestCache"/>
+    </event>
+    <event name="catalog_category_delete_after">
+        <observer name="hyperion_search_flush_suggest_cache" instance="Magentofullstackdev\HyperionSearch\Observer\FlushSuggestCache"/>
+    </event>
+</config>

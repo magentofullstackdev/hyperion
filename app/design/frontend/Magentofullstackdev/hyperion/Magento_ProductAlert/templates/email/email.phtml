@@ -1,0 +1,31 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Product alert unsubscribe landing page (the link in the alert email is a
+ * GET, the controller requires a POST). `entry.js` submits every
+ * `form[data-hyperion-autosubmit]` on load; the button is the fallback
+ * without JavaScript.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<div class="max-w-md mx-auto py-8">
+    <form action="<?= $escaper->escapeUrl($block->getUrl('productalert/unsubscribe/stock')) ?>"
+          method="post"
+          data-form="unsubscription_form"
+          data-hyperion-autosubmit
+          class="bg-surface rounded-2xl border border-subtle shadow-sm p-8 space-y-5">
+        <?= $block->getBlockHtml('formkey') ?>
+        <input type="hidden" id="productId" name="product"
+               value="<?= $escaper->escapeHtmlAttr((string)$block->getProductId()) ?>"/>
+        <p class="text-sm text-muted">
+            <?= $escaper->escapeHtml(__('Unsubscribing from the stock alert for this product.')) ?>
+        </p>
+        <button type="submit"
+                class="w-full py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors text-sm uppercase tracking-wider">
+            <?= $escaper->escapeHtml(__('Unsubscribe')) ?>
+        </button>
+    </form>
+</div>

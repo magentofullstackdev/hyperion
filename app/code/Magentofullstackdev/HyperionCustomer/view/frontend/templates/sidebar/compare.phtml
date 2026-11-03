@@ -1,0 +1,46 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "Compare Products" sidebar widget -- server-rendered.
+ *
+ * Returns empty when no products are in the compare list, letting the
+ * parent sidebar container collapse via `empty:hidden`.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magentofullstackdev\HyperionCustomer\ViewModel\SidebarWidgets|null $vm
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$vm = $block->getData('sidebar_widgets');
+if (!$vm) {
+    return;
+}
+$count = $vm->getCompareItemCount();
+if ($count < 1) {
+    return;
+}
+?>
+<section class="bg-surface border border-subtle rounded-xl p-4 space-y-3"
+         aria-labelledby="hyperion-compare-sidebar-heading">
+
+    <header class="flex items-center justify-between gap-2">
+        <h2 id="hyperion-compare-sidebar-heading"
+            class="text-sm font-bold uppercase tracking-wider text-secondary">
+            <?= $escaper->escapeHtml(__('Compare Products')) ?>
+            <span class="text-muted font-medium">(<?= (int) $count ?>)</span>
+        </h2>
+    </header>
+
+    <p class="text-sm text-secondary">
+        <?= $escaper->escapeHtml(__('You have %1 items in your comparison list.', (int) $count)) ?>
+    </p>
+
+    <a href="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare')) ?>"
+       class="inline-flex w-full items-center justify-center gap-1 px-3 py-2
+              rounded-lg bg-primary text-on-primary text-sm font-semibold
+              hover:bg-primary-hover hover:shadow-md transition-all
+              focus:outline-none focus:ring-2 focus:ring-primary">
+        <?= $escaper->escapeHtml(__('Compare Products')) ?>
+    </a>
+</section>

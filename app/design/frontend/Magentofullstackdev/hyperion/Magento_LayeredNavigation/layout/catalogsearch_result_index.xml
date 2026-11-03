@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Remove default sidebar-based filters -->
+        <referenceBlock name="catalogsearch.leftnav" remove="true"/>
+
+        <!-- Place filters inline above the search result grid -->
+        <referenceContainer name="content">
+            <block class="Magento\LayeredNavigation\Block\Navigation\Search" name="hyperion.search.layered.nav"
+                   template="Magento_LayeredNavigation::layer/view.phtml" before="search.result">
+                <block class="Magento\LayeredNavigation\Block\Navigation\State" name="catalogsearch.navigation.state" as="state"/>
+                <block class="Magento\LayeredNavigation\Block\Navigation\FilterRenderer" name="catalogsearch.navigation.renderer"
+                       as="renderer" template="Magento_LayeredNavigation::layer/filter.phtml">
+                    <arguments>
+                        <argument name="product_layer_view_model" xsi:type="object">Magento\LayeredNavigation\ViewModel\Layer\Filter</argument>
+                    </arguments>
+                </block>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

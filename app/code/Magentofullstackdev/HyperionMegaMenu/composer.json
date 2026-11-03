@@ -1,0 +1,41 @@
+{
+    "name": "magentofullstackdev/module-hyperion-mega-menu",
+    "description": "Hyperion Mega Menu: drag and drop menu builder (groups, items, per-store values) rendered by the Hyperion navigation",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "magento/framework": "^103.0.6",
+        "magento/module-backend": "*",
+        "magento/module-catalog": "*",
+        "magento/module-cms": "*",
+        "magento/module-customer": "*",
+        "magento/module-store": "*",
+        "magento/module-ui": "*",
+        "magento/module-widget": "*",
+        "magentofullstackdev/module-hyperion-core": "self.version",
+        "magentofullstackdev/module-hyperion-navigation": "self.version"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionMegaMenu\\": ""
+        }
+    }
+}

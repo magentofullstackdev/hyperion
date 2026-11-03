@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/* --- Print documents (order, invoice, shipment, refund) ------------
+ * The print pages carry the body class `page-print` (core's `print`
+ * handle) and open the print dialog on load. On paper the chrome goes
+ * (toasts, dialogs, cookie notice, hidden-for-print controls), cards keep
+ * their borders but lose shadows and backgrounds, and tables do not split
+ * across pages. */
+@media print {
+    /* On every page: the toast, the confirm dialog, the cookie notice and
+     * the mini-cart drawer are screen chrome and never belong on paper. */
+    hyperion-notification,
+    [data-hyperion-notification],
+    hyperion-confirm,
+    [data-hyperion-cookie-notice],
+    hyperion-mini-cart {
+        display: none !important;
+    }
+
+    .page-print {
+        background: #fff !important;
+        color: #000;
+    }
+
+    .page-print [data-hyperion-notification],
+    .page-print hyperion-confirm,
+    .page-print hyperion-gtag,
+    .page-print [data-hyperion-cookie-notice],
+    .page-print #hyperion-gtag-events {
+        display: none !important;
+    }
+
+    .page-print a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .page-print article,
+    .page-print table,
+    .page-print tr {
+        break-inside: avoid;
+    }
+
+    .page-print .shadow-sm,
+    .page-print .shadow-md,
+    .page-print .shadow-lg {
+        box-shadow: none !important;
+    }
+}

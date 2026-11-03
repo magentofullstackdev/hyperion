@@ -1,0 +1,128 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion address book -- "Additional Addresses" grid.
+ *
+ * The empty state and the multi-entry view share the same card grid; only
+ * the number of children differs.
+ *
+ * Each non-default address is rendered as a <hyperion-address-card>,
+ * which attaches a delete-confirm handler on the inline DELETE form.
+ * Cards stack in a responsive auto-fill grid instead of the legacy
+ * table so the layout collapses cleanly to a single column on phones.
+ *
+ * @var \Magento\Customer\Block\Address\Grid $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$addresses = $block->getAdditionalAddresses();
+$addUrl = $block->getAddAddressUrl();
+$deleteUrl = rtrim((string) $block->getDeleteUrl(), '/');
+$formKey = $block->getFormKey();
+$backUrl = $block->getUrl('customer/account');
+?>
+<section class="space-y-4" aria-labelledby="hyperion-addressbook-grid-heading">
+
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+        <h2 id="hyperion-addressbook-grid-heading"
+            class="text-xl font-semibold text-secondary">
+            <?= $escaper->escapeHtml(__('Address Book')) ?>
+        </h2>
+
+        <a href="<?= $escaper->escapeUrl($addUrl) ?>"
+           class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+                  bg-primary text-on-primary text-sm font-semibold shadow-sm
+                  hover:bg-primary-hover hover:shadow-md transition-all
+                  focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Add New Address')) ?>
+        </a>
+    </div>
+
+    <?php if ($addresses): ?>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <?php foreach ($addresses as $address): ?>
+                <?php
+                    $editUrl = $block->getUrl('customer/address/edit', ['id' => $address->getId()]);
+                    $fullName = implode(' ', array_filter([
+                        $address->getPrefix(),
+                        $address->getFirstname(),
+                        $address->getMiddlename(),
+                        $address->getLastname(),
+                        $address->getSuffix(),
+                    ]));
+                    $regionName = (string) $address->getRegion()?->getRegion();
+                ?>
+                <hyperion-address-card
+                    class="bg-surface border border-subtle rounded-xl p-5 flex flex-col gap-3"
+                    data-delete-confirm="<?= $escaper->escapeHtmlAttr(__('Are you sure you want to delete this address?')) ?>">
+
+                    <div class="space-y-1">
+                        <p class="text-sm font-semibold text-secondary">
+                            <?= $escaper->escapeHtml($fullName) ?>
+                        </p>
+                        <address class="text-sm text-secondary not-italic leading-relaxed">
+                            <?= $escaper->escapeHtml($block->getStreetAddress($address)) ?><br>
+                            <?= $escaper->escapeHtml(trim(
+                                ($address->getCity() ?? '')
+                                . ($regionName !== '' ? ', ' . $regionName : '')
+                                . ($address->getPostcode() ? ' ' . $address->getPostcode() : '')
+                            )) ?><br>
+                            <?= $escaper->escapeHtml($block->getCountryByCode($address->getCountryId())) ?>
+                        </address>
+                        <?php if ($address->getTelephone()): ?>
+                            <p class="text-xs text-muted">
+                                <?= $escaper->escapeHtml(__('T: %1', $address->getTelephone())) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="mt-auto pt-3 border-t border-subtle flex items-center justify-between gap-3">
+                        <a href="<?= $escaper->escapeUrl($editUrl) ?>"
+                           class="inline-flex items-center gap-1 text-sm font-medium
+                                  text-primary hover:text-primary-hover">
+                            <?= $escaper->escapeHtml(__('Edit')) ?>
+                            <span aria-hidden="true">-></span>
+                        </a>
+
+                        <form method="post"
+                              action="<?= $escaper->escapeUrl($deleteUrl . '/id/' . (int) $address->getId()) ?>"
+                              data-hyperion-address-delete
+                              class="inline-flex">
+                            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
+                            <button type="submit"
+                                    class="inline-flex items-center gap-1 text-sm font-medium
+                                           text-muted hover:text-error transition-colors
+                                           focus:outline-none focus:ring-2 focus:ring-error rounded">
+                                <?= $escaper->escapeHtml(__('Delete')) ?>
+                            </button>
+                        </form>
+                    </div>
+                </hyperion-address-card>
+            <?php endforeach; ?>
+        </div>
+
+        <?php if ($block->getChildHtml('pager')): ?>
+            <div class="pt-2">
+                <?= /* @noEscape */ $block->getChildHtml('pager') ?>
+            </div>
+        <?php endif; ?>
+    <?php else: ?>
+        <p class="text-sm text-secondary">
+            <?= $escaper->escapeHtml(__('You have no other address entries in your address book.')) ?>
+        </p>
+    <?php endif; ?>
+
+    <div class="flex items-center justify-end gap-4 pt-4 border-t border-subtle">
+        <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+           class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+            <?= $escaper->escapeHtml(__('Back')) ?>
+        </a>
+        <a href="<?= $escaper->escapeUrl($addUrl) ?>"
+           class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+                  bg-primary text-on-primary text-sm font-semibold shadow-sm
+                  hover:bg-primary-hover hover:shadow-md transition-all">
+            <?= $escaper->escapeHtml(__('Add New Address')) ?>
+        </a>
+    </div>
+</section>

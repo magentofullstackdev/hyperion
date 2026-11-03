@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: MIT
+name: PHP
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  php:
+    name: phpcs, phpstan, phpunit on Mage-OS ${{ matrix.mageos }} / PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        mageos: ['3.6.*']
+        include:
+          - php: '8.4'
+            mageos: '*'
+            experimental: true
+    continue-on-error: ${{ matrix.experimental == true }}
+    services:
+      mysql:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: magento
+        ports: ['3306:3306']
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=10s --health-timeout=5s --health-retries=10
+      opensearch:
+        image: opensearchproject/opensearch:2.19.0
+        env:
+          discovery.type: single-node
+          DISABLE_SECURITY_PLUGIN: 'true'
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+        ports: ['9200:9200']
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: hyperion
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, gd, intl, mbstring, pdo_mysql, soap, sockets, sodium, xsl, zip
+          tools: composer:v2
+          coverage: none
+      - name: Create a Mage-OS project (no authentication keys needed)
+        # Pinned to the Mage-OS minor the release was verified on (docs/compatibility.md);
+        # the `latest` job below tracks the newest release without blocking the gate.
+        run: composer create-project --repository-url=https://repo.mage-os.org/ "mage-os/project-community-edition:${{ matrix.mageos }}" magento --no-interaction --no-progress
+      - name: Install Hyperion from this checkout (copy, like a Packagist install)
+        working-directory: magento
+        run: |
+          composer config repositories.hyperion-modules '{"type":"path","url":"../hyperion/app/code/Magentofullstackdev/*","options":{"symlink":false}}'
+          composer config repositories.hyperion-theme '{"type":"path","url":"../hyperion/app/design/frontend/Magentofullstackdev/*","options":{"symlink":false}}'
+          composer config minimum-stability beta
+          composer config prefer-stable true
+          composer require "magentofullstackdev/theme-hyperion:*" "magentofullstackdev/module-hyperion-sample-data:*" --no-interaction --no-progress
+      - name: Install Magento and compile
+        working-directory: magento
+        run: |
+          bin/magento setup:install --base-url=http://ci.local/ --db-host=127.0.0.1 --db-name=magento --db-user=root --db-password=root \
+            --admin-firstname=CI --admin-lastname=CI --admin-email=ci@example.com --admin-user=ci --admin-password=CiPassword123 \
+            --search-engine=opensearch --opensearch-host=127.0.0.1 --opensearch-port=9200 --no-interaction
+          bin/magento setup:di:compile
+      - name: phpcs (Magento2 standard, errors only)
+        working-directory: magento
+        # Deprecation notices raised inside legacy sniffs on PHP 8.4 must not fail the gate.
+        run: php -d error_reporting="E_ALL&~E_DEPRECATED" vendor/bin/phpcs --standard=Magento2 --extensions=php,phtml -n --report=summary ../hyperion/app/code/Magentofullstackdev ../hyperion/app/design/frontend/Magentofullstackdev
+      - name: phpstan level 5
+        working-directory: magento
+        run: vendor/bin/phpstan analyse --level=5 --no-progress --error-format=github ../hyperion/app/code/Magentofullstackdev
+      - name: phpunit
+        working-directory: magento
+        run: |
+          set -euo pipefail
+          # Every module that ships a Test directory; a new module joins without a workflow change.
+          # --no-extensions: core's phpunit.xml.dist bootstraps the Allure extension with a config path
+          # relative to the cwd; from the Magento root every test passes and the runner still exits 1.
+          found=0
+          for t in ../hyperion/app/code/Magentofullstackdev/*/Test; do
+            [ -d "$t" ] || continue
+            found=$((found + 1))
+            echo "::group::$t"
+            vendor/bin/phpunit --no-extensions --do-not-cache-result -c dev/tests/unit/phpunit.xml.dist "$t"
+            echo "::endgroup::"
+          done
+          test "$found" -gt 0

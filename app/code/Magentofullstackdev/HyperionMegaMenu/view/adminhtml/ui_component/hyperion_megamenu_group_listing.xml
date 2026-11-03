@@ -1,0 +1,152 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">hyperion_megamenu_group_listing.hyperion_megamenu_group_listing_data_source</item>
+        </item>
+    </argument>
+    <settings>
+        <buttons>
+            <button name="add">
+                <url path="*/*/new"/>
+                <class>primary</class>
+                <label translate="true">Add Menu Group</label>
+            </button>
+        </buttons>
+        <spinner>hyperion_megamenu_group_columns</spinner>
+        <deps>
+            <dep>hyperion_megamenu_group_listing.hyperion_megamenu_group_listing_data_source</dep>
+        </deps>
+    </settings>
+    <dataSource name="hyperion_megamenu_group_listing_data_source" component="Magento_Ui/js/grid/provider">
+        <settings>
+            <storageConfig>
+                <param name="indexField" xsi:type="string">group_id</param>
+            </storageConfig>
+            <updateUrl path="mui/index/render"/>
+        </settings>
+        <aclResource>Magentofullstackdev_HyperionMegaMenu::group</aclResource>
+        <dataProvider class="Magento\Framework\View\Element\UiComponent\DataProvider\DataProvider" name="hyperion_megamenu_group_listing_data_source">
+            <settings>
+                <requestFieldName>group_id</requestFieldName>
+                <primaryFieldName>group_id</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+    <listingToolbar name="listing_top">
+        <settings>
+            <sticky>true</sticky>
+        </settings>
+        <bookmark name="bookmarks"/>
+        <columnsControls name="columns_controls"/>
+        <filters name="listing_filters"/>
+        <massaction name="listing_massaction">
+            <action name="enable">
+                <settings>
+                    <url path="hyperion_megamenu/group/massStatus">
+                        <param name="status">1</param>
+                    </url>
+                    <type>enable</type>
+                    <label translate="true">Enable</label>
+                </settings>
+            </action>
+            <action name="disable">
+                <settings>
+                    <url path="hyperion_megamenu/group/massStatus">
+                        <param name="status">0</param>
+                    </url>
+                    <type>disable</type>
+                    <label translate="true">Disable</label>
+                </settings>
+            </action>
+            <action name="delete">
+                <settings>
+                    <confirm>
+                        <message translate="true">Delete the selected menu groups and every item in them?</message>
+                        <title translate="true">Delete menu groups</title>
+                    </confirm>
+                    <url path="hyperion_megamenu/group/massStatus">
+                        <param name="delete">1</param>
+                    </url>
+                    <type>delete</type>
+                    <label translate="true">Delete</label>
+                </settings>
+            </action>
+        </massaction>
+        <paging name="listing_paging"/>
+    </listingToolbar>
+    <columns name="hyperion_megamenu_group_columns">
+        <selectionsColumn name="ids">
+            <settings>
+                <indexField>group_id</indexField>
+            </settings>
+        </selectionsColumn>
+        <column name="group_id">
+            <settings>
+                <filter>textRange</filter>
+                <sorting>asc</sorting>
+                <label translate="true">ID</label>
+            </settings>
+        </column>
+        <column name="title">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Title</label>
+            </settings>
+        </column>
+        <column name="identifier">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Identifier</label>
+            </settings>
+        </column>
+        <column name="menu_type" component="Magento_Ui/js/grid/columns/select">
+            <settings>
+                <filter>select</filter>
+                <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\MenuType"/>
+                <dataType>select</dataType>
+                <label translate="true">Type</label>
+            </settings>
+        </column>
+        <column name="website_ids" class="Magentofullstackdev\HyperionMegaMenu\Ui\Component\Listing\Column\WebsiteNames">
+            <settings>
+                <label translate="true">Websites</label>
+                <sortable>false</sortable>
+            </settings>
+        </column>
+        <column name="devices" component="Magento_Ui/js/grid/columns/select">
+            <settings>
+                <filter>select</filter>
+                <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\Devices"/>
+                <dataType>select</dataType>
+                <label translate="true">Devices</label>
+            </settings>
+        </column>
+        <column name="priority">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">Priority</label>
+            </settings>
+        </column>
+        <column name="is_active" component="Magento_Ui/js/grid/columns/select">
+            <settings>
+                <filter>select</filter>
+                <options class="Magento\Config\Model\Config\Source\Enabledisable"/>
+                <dataType>select</dataType>
+                <label translate="true">Status</label>
+            </settings>
+        </column>
+        <actionsColumn name="actions" class="Magentofullstackdev\HyperionMegaMenu\Ui\Component\Listing\Column\GroupActions">
+            <settings>
+                <indexField>group_id</indexField>
+                <resizeEnabled>false</resizeEnabled>
+                <resizeDefaultWidth>160</resizeDefaultWidth>
+            </settings>
+        </actionsColumn>
+    </columns>
+</listing>

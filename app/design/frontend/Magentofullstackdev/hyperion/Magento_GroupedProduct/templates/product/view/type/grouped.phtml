@@ -1,0 +1,71 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Grouped product: associated products with one quantity field each,
+ * server-rendered inside the PDP add-to-cart form.
+ *
+ * Field contract is Magento's own (Magento\GroupedProduct\Model\Product\
+ * Type\Grouped::prepareForCartAdvanced): `super_group[<childId>]` = qty.
+ * At least one quantity must be above zero; the server answers with its
+ * own message otherwise.
+ *
+ * @var \Magento\GroupedProduct\Block\Product\View\Type\Grouped $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCatalog\ViewModel\Pricing;
+
+$block->setPreconfiguredValue();
+$product = $block->getProduct();
+$items = $block->getAssociatedProducts();
+$pricing = $viewModels->require(Pricing::class);
+$isSaleable = $product->isSaleable();
+?>
+<?php if (!$items): ?>
+    <p class="text-sm text-muted">
+        <?= $escaper->escapeHtml(__('No options of this product are available.')) ?>
+    </p>
+    <?php return; ?>
+<?php endif; ?>
+
+<fieldset class="space-y-2">
+    <legend class="sr-only"><?= $escaper->escapeHtml(__('Grouped product items')) ?></legend>
+    <ul class="divide-y divide-divider border-y border-subtle">
+        <?php foreach ($items as $item): ?>
+            <?php $fieldId = 'super-group-' . (int) $item->getId(); ?>
+            <li class="flex items-center justify-between gap-4 py-3">
+                <div class="min-w-0">
+                    <label for="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                           class="block text-sm font-semibold text-secondary">
+                        <?= $escaper->escapeHtml($item->getName()) ?>
+                    </label>
+                    <?php if ($block->getCanShowProductPrice($product) && $block->getCanShowProductPrice($item)): ?>
+                        <div class="text-sm">
+                            <?= /* @noEscape */ $pricing->getTileHtml($item) ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($isSaleable && $item->isSaleable()): ?>
+                    <input type="number"
+                           id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                           name="super_group[<?= (int) $item->getId() ?>]"
+                           value="<?= $escaper->escapeHtmlAttr((string) ($item->getQty() * 1)) ?>"
+                           min="0"
+                           inputmode="numeric"
+                           aria-label="<?= $escaper->escapeHtmlAttr(__('Qty of %1', $item->getName())) ?>"
+                           class="w-20 shrink-0 px-3 py-2 text-sm border border-subtle rounded-lg bg-surface
+                                  text-secondary
+                                  focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary">
+                <?php else: ?>
+                    <span class="shrink-0 text-sm font-medium text-muted">
+                        <?= $escaper->escapeHtml(__('Out of stock')) ?>
+                    </span>
+                <?php endif; ?>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</fieldset>

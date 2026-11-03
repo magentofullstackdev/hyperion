@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Navigation sources: other modules add an implementation of
+    Model\Menu\SourceInterface to the `sources` argument of the pool (see
+    Magentofullstackdev_HyperionMegaMenu/etc/frontend/di.xml); the pool is
+    empty here so the category tree is the navigation out of the box.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magentofullstackdev\HyperionNavigation\Model\Menu\SourcePool">
+        <arguments>
+            <argument name="sources" xsi:type="array"/>
+        </arguments>
+    </type>
+</config>

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/magentofullstackdev/hyperion/discussions
+    about: Ask how to do something, share what you built, or discuss a feature before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/magentofullstackdev/hyperion/security/policy
+    about: Never open a public issue for a security problem; use the private reporting described in SECURITY.md.

@@ -1,0 +1,148 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion layered navigation styles.
+ *
+ * Two visual variants share ONE template (Magento_LayeredNavigation/
+ * templates/layer/view.phtml):
+ *
+ *   1. Sidebar variant (default -- used on 2col/3col page layouts).
+ *      Vertical stack of bordered <details> cards. Matches img_29
+ *      visual: SHOP BY heading, each filter is its own card with a
+ *      bold uppercase header, count chip on the right of each item,
+ *      Category card open by default.
+ *
+ *   2. Horizontal bar variant (1column page layouts only).
+ *      The category template wraps the same markup with
+ *      [data-hyperion-inline-filters], which flips the inner cards to
+ *      a horizontal flex row of inline dropdowns. Each <details>
+ *      becomes a compact button; opening it floats the items list
+ *      below as an absolute panel.
+ */
+
+/* --- Sidebar variant (default) ---------------------------------- */
+/*
+ * Already styled by view.phtml's Tailwind classes -- the rules below
+ * are scoped to the inline horizontal variant only, so the sidebar
+ * keeps the bordered-cards visual we shipped.
+ */
+
+/* --- Sidebar rail is unused on Hyperion category pages ----------
+ *
+ * Every layout (1col / 2col / 3col) renders the filters inline inside
+ * `data-hyperion-inline-filters` above the product grid -- the
+ * `catalog_category_view.xml` body handle moves `catalog.leftnav` into
+ * the `hyperion.category.view` wrapper so its SOLE rendering is the
+ * inline `$leftnav->toHtml()` in `category/view.phtml`. The
+ * `.sidebar.sidebar-main` container has no layered-nav child as a
+ * result; hide it (along with `.sidebar.additional`) so an empty flex
+ * item doesn't push the main column around on 2col/3col pages.
+ */
+.sidebar.sidebar-main:empty,
+.sidebar.sidebar-additional:empty {
+    display: none;
+}
+
+/* --- Inline (horizontal) variant on 1column pages --------------- */
+[data-hyperion-inline-filters] section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+[data-hyperion-inline-filters] section > h2 {
+    /* Hide the "SHOP BY" heading on the inline variant -- context is
+       implicit and the horizontal bar reads better without a label. */
+    display: none;
+}
+
+@media (min-width: 768px) {
+    /* The filter cards are wrapped by <hyperion-filter-accordion> so only
+       one dropdown can be open at a time (see
+       web/js/components/hyperion-filter-accordion.js). On 1column pages
+       that element becomes the horizontal flex row; on sidebar layouts
+       the element is a display:block column (inherits from its Tailwind
+       `block space-y-3` classes) and this rule doesn't apply.
+
+       IMPORTANT: the wrapper used to be a bare `<div class="space-y-3">`;
+       when we introduced `<hyperion-filter-accordion>` (exclusive-open
+       SRP component) the old selector `section > div` stopped matching --
+       leaving jackets-women filters as a stacked block column
+       instead of a row. This selector points at the current
+       wrapper element. */
+    [data-hyperion-inline-filters] hyperion-filter-accordion {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    /* The Tailwind `space-y-3` utility on <hyperion-filter-accordion>
+       compiles to `.space-y-3 > :not([hidden]) ~ :not([hidden])
+       { margin-top: .75rem }`. That's correct stacking for the sidebar
+       variant, but in the inline flex row it pushes every non-first
+       <details> 12px down from the container's top edge. The first
+       filter has no margin-top so it sits 12px HIGHER than its
+       siblings; since flex's cross-axis stretch aligns all items to
+       the tallest row height, the first card ends up ~12px taller
+       visually. Using
+       `.space-y-3` in the selector matches Tailwind's specificity
+       (0,2,0) directly, and the additional
+       `[data-hyperion-inline-filters]` attribute pushes ours higher so
+       the override wins without needing !important. */
+    [data-hyperion-inline-filters] hyperion-filter-accordion.space-y-3 > :not([hidden]) ~ :not([hidden]) {
+        margin-top: 0;
+    }
+
+    /* Each filter card becomes a compact inline-block disclosure. The
+       `position: relative` is what the absolute-panel rule below
+       measures from -- without it the <ul> anchors to the nearest
+       positioned ancestor and drifts visually (img_47.png, "ul is in
+       the page but is not visible").
+
+       The phtml template applies Tailwind `overflow-hidden` on the
+       card (needed for the sidebar variant so the bottom <ul>'s border
+       tucks into the rounded bottom corners). In the inline variant
+       the items panel is an ABSOLUTELY POSITIONED floating dropdown
+       that extends outside the card's border box -- `overflow-hidden`
+       clips it to a 1-2 pixel sliver and the user sees nothing below
+       the button. Undo the clip so the dropdown can render freely. */
+    [data-hyperion-inline-filters] details {
+        position: relative;
+        flex: 0 0 auto;
+        background: rgb(var(--color-surface));
+        overflow: visible;
+    }
+
+    /* Flatter, button-like summary instead of a full card header. */
+    [data-hyperion-inline-filters] details > summary {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        text-transform: none;
+        letter-spacing: normal;
+        font-weight: 600;
+        gap: 0.5rem;
+    }
+
+    /* Items list floats as an absolute panel below the button. */
+    [data-hyperion-inline-filters] details[open] > ul {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        z-index: 40;
+        min-width: 16rem;
+        max-height: 20rem;
+        overflow-y: auto;
+        background: rgb(var(--color-surface));
+        border: 1px solid rgb(var(--color-subtle));
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+    }
+
+    /* Wrap-around fix: prevent the absolute panel from forcing the
+       container to grow vertically. */
+    [data-hyperion-inline-filters] details[open] {
+        z-index: 41;
+    }
+
+}

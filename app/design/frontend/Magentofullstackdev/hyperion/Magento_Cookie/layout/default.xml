@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The cookie restriction notice keeps core's `cookie_notices` block (a
+    referenceBlock, never a re-declaration: a `cacheable="false"` block here
+    would make every storefront page uncacheable). The theme template at
+    Magento_Cookie::html/notices.phtml replaces core's automatically.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="cookie_notices" template="Magento_Cookie::html/notices.phtml"/>
+    </body>
+</page>

@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <!--
+        Pull in the default handle so that session state, form key, and any
+        globally-registered OOB blocks (mini-cart count) are available.
+    -->
+    <update handle="default"/>
+
+    <body>
+        <!--
+            Fragment response layout handle.
+            Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\AddPlugin intercepts
+            the Magento cart-add controller.  On success it selects this handle
+            and returns the rendered hyperion.addtocart.response block directly
+            to the browser via HTMX.
+
+            The template emits:
+              1. <div id="hyperion-notification"> - HTMX target for success toast.
+              2. <div id="hyperion-mini-cart-count" hx-swap-oob="true"> - out-of-band
+                 update for the header cart count badge.
+
+            Using the "content" container guarantees this block renders in a
+            predictable position even when the page skeleton is assembled by
+            Magento's layout merge.  Only this one block must exist in the
+            rendered output; the plugin calls $block->toHtml() by name.
+        -->
+        <referenceContainer name="content">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.addtocart.response"
+                   template="Magentofullstackdev_HyperionCatalog::product/addtocart-response.phtml"
+                   before="-"/>
+        </referenceContainer>
+    </body>
+</page>

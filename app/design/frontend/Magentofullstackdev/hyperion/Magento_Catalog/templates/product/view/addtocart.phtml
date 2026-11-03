@@ -1,0 +1,53 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion add-to-cart form.
+ *
+ * @var \Magento\Catalog\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$product = $block->getProduct();
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\FormKey|null $formKeyViewModel */
+$formKeyViewModel = $block->getData('formKeyViewModel');
+if ($formKeyViewModel) {
+    $formKey = $formKeyViewModel->getFormKey();
+} else {
+    $formKey = $block->getFormKey();
+}
+?>
+
+<?php if ($product->isSaleable() && $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase()): ?>
+    <?php $submitUrl = $block->getSubmitUrl($product); ?>
+    <form method="post"
+          action="<?= $escaper->escapeUrl($submitUrl) ?>"
+          class="space-y-4"
+          id="product_addtocart_form"
+          hx-post="<?= $escaper->escapeUrl($submitUrl) ?>"
+          hx-target="body"
+          hx-swap="beforeend"
+          hx-include="[data-swatch-input]">
+        <input type="hidden" name="product" value="<?= $escaper->escapeHtmlAttr($product->getId()) ?>"/>
+        <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>"/>
+
+        <div class="flex items-center gap-3">
+            <label for="qty" class="text-sm font-medium text-secondary"><?= $escaper->escapeHtml(__('Qty')) ?></label>
+            <input type="number"
+                   id="qty"
+                   name="qty"
+                   value="1"
+                   min="1"
+                   class="w-20 px-3 py-2 text-center border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"/>
+        </div>
+
+        <button type="submit"
+                class="w-full py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm uppercase tracking-wider">
+            <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+        </button>
+    </form>
+<?php else: ?>
+    <div class="py-3 px-6 bg-surface-raised text-muted font-medium rounded-lg text-center text-sm">
+        <?= $escaper->escapeHtml(__('This product is currently out of stock.')) ?>
+    </div>
+<?php endif; ?>

@@ -1,0 +1,61 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion refund list of an order: one section per credit memo with
+ * its items, totals and comments. Rows come from the core item
+ * renderers (styled through .hyperion-order-table).
+ *
+ * @var \Magento\Sales\Block\Order\Creditmemo\Items $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$order = $block->getOrder();
+$linkClass = 'text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline';
+?>
+<div class="flex justify-end">
+    <a href="<?= $escaper->escapeUrl($block->getPrintAllCreditmemosUrl($order)) ?>" target="_blank" rel="noopener"
+       class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+        <?= $escaper->escapeHtml(__('Print All Refunds')) ?>
+    </a>
+</div>
+
+<?php foreach ($order->getCreditmemosCollection() as $creditmemo): ?>
+    <section class="space-y-3 border-t border-subtle pt-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h4 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Refund #')) ?><?= $escaper->escapeHtml($creditmemo->getIncrementId()) ?>
+            </h4>
+            <a href="<?= $escaper->escapeUrl($block->getPrintCreditmemoUrl($creditmemo)) ?>"
+               target="_blank" rel="noopener"
+               class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+                <?= $escaper->escapeHtml(__('Print Refund')) ?>
+            </a>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Items Refunded')) ?>">
+                <thead>
+                    <tr>
+                        <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Product Name')) ?></th>
+                        <th scope="col" class="col sku"><?= $escaper->escapeHtml(__('SKU')) ?></th>
+                        <th scope="col" class="col price"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                        <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty')) ?></th>
+                        <th scope="col" class="col subtotal"><?= $escaper->escapeHtml(__('Subtotal')) ?></th>
+                        <th scope="col" class="col discount"><?= $escaper->escapeHtml(__('Discount Amount')) ?></th>
+                        <th scope="col" class="col total"><?= $escaper->escapeHtml(__('Row Total')) ?></th>
+                    </tr>
+                </thead>
+                <?php foreach ($creditmemo->getAllItems() as $item): ?>
+                    <?php if (!$item->getOrderItem()->getParentItem()): ?>
+                        <tbody>
+                            <?= $block->getItemHtml($item) ?>
+                        </tbody>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </table>
+        </div>
+
+        <?= $block->getTotalsHtml($creditmemo) ?>
+        <?= $block->getCommentsHtml($creditmemo) ?>
+    </section>
+<?php endforeach; ?>

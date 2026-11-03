@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- Expose $viewModels (ViewModelRegistry) in every PHP template.
+         Lets templates request their collaborators without layout XML args. -->
+    <type name="Magento\Framework\View\TemplateEngine\Php">
+        <plugin name="hyperion_core_template_viewmodels"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\TemplateEngine\PhpPlugin"
+                sortOrder="10"/>
+    </type>
+
+</config>

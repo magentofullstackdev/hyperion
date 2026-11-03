@@ -1,0 +1,58 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion store / language switcher -- native <details> disclosure, zero JS.
+ *
+ * Opens UPWARD (mb-1 bottom-full) so it works when rendered inside the
+ * footer bottom bar; if you mount this elsewhere, override the panel
+ * position on the wrapper by replacing the `bottom-full mb-1` classes
+ * with `top-full mt-1`.
+ *
+ * @var \Magento\Store\Block\Switcher $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+$stores = $block->getStores();
+if (count($stores) < 2) {
+    return;
+}
+
+$id = $block->getIdModifier() ? '-' . $block->getIdModifier() : '';
+$currentName = (string) $block->getStoreName();
+$viewModel = $block->getViewModel();
+?>
+<details class="relative group"
+         name="hyperion-switcher<?= $escaper->escapeHtmlAttr($id) ?>"
+         id="hyperion-lang-switcher<?= $escaper->escapeHtmlAttr($id) ?>">
+    <summary class="flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-xs font-medium
+                    text-on-inverted-muted hover:text-primary rounded-md transition-colors select-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/>
+        </svg>
+        <span><?= $escaper->escapeHtml($currentName) ?></span>
+        <svg class="w-3.5 h-3.5 transition-transform group-open:rotate-180"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </summary>
+    <ul class="absolute right-0 bottom-full mb-1 z-50 min-w-[180px] bg-surface border border-subtle
+               rounded-lg shadow-lg py-1 text-secondary"
+        aria-label="<?= $escaper->escapeHtmlAttr(__('Select store view')) ?>">
+        <?php foreach ($stores as $store): ?>
+            <?php $isCurrent = (int) $store->getId() === (int) $block->getCurrentStoreId(); ?>
+            <li>
+                <a href="<?= $escaper->escapeUrl($viewModel->getTargetStoreRedirectUrl($store)) ?>"
+                   class="block px-4 py-2 text-sm transition-colors
+                          <?= $isCurrent
+                              ? 'text-primary bg-primary/10 font-semibold'
+                              : 'text-secondary hover:bg-primary/10 hover:text-primary' ?>"
+                   <?= $isCurrent ? 'aria-current="true"' : '' ?>>
+                    <?= $escaper->escapeHtml((string) $store->getName()) ?>
+                </a>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</details>

@@ -1,0 +1,37 @@
+{
+    "name": "magentofullstackdev/module-hyperion-cms",
+    "description": "Hyperion CMS: CMS page/block rendering and PageBuilder content-type renderer overrides",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "magento/framework": "^103.0.6",
+        "magento/module-cms": "*",
+        "magento/module-page-builder": "*",
+        "magento/module-csp": "*",
+        "magento/module-store": "*",
+        "magentofullstackdev/module-hyperion-core": "self.version"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionCms\\": ""
+        }
+    }
+}

@@ -1,0 +1,144 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/** @var \Magento\Framework\Escaper $escaper */
+$shopLinks = $block->getShopLinks();
+$privacyUrl = $block->getPrivacyPolicyUrl();
+$termsUrl = $block->getTermsUrl();
+$copyrightText = $block->getCopyrightText();
+$homeUrl = $escaper->escapeUrl($block->getHomeUrl());
+$logoUrl = $block->getLogoUrl();
+// Same accessible name as the header logo link: image alt, or visible wordmark + sr-only.
+$homeLabel = __('%1 Home', $block->getStoreName());
+$logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
+?>
+<footer role="contentinfo" class="bg-inverted text-on-inverted-muted mt-auto">
+
+    <?php /* -- Main grid --------------------------------------- */ ?>
+    <div class="container mx-auto px-4 py-12">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-subtle-inverted">
+
+            <?php /* Brand + tagline -- same 3-step logo resolution as the
+                   header (admin upload -> theme images/logo.svg -> wordmark).
+                   See \Magentofullstackdev\HyperionNavigation\Model\LogoResolver. */ ?>
+            <div>
+                <a href="<?= /* @noEscape -- escaped above */ $homeUrl ?>"
+                   class="inline-flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                    <?php if ($logoUrl !== ''): ?>
+                        <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
+                             alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
+                             width="140" height="40"
+                             class="h-10 w-auto object-contain"
+                             loading="lazy" decoding="async">
+                    <?php else: ?>
+                        <span class="text-2xl font-black tracking-tighter text-on-inverted
+                                     hover:text-primary transition-colors">
+                            HYPERION<span class="text-primary">.</span>
+                        </span>
+                        <span class="sr-only"> <?= $escaper->escapeHtml($homeLabel) ?></span>
+                    <?php endif; ?>
+                </a>
+                <p class="mt-4 text-sm leading-relaxed text-on-inverted-muted">
+                    <?= $escaper->escapeHtml(__('Stateless, edge-cacheable commerce -- built for speed on Magento.')) ?>
+                </p>
+            </div>
+
+            <?php /* Shop column -- dynamic category links */ ?>
+            <div>
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
+                    <?= $escaper->escapeHtml(__('Shop')) ?>
+                </h2>
+                <?php if (!empty($shopLinks)): ?>
+                    <ul class="space-y-2 text-sm" role="list">
+                        <?php foreach ($shopLinks as $link): ?>
+                            <li>
+                                <a href="<?= $escaper->escapeUrl($link['url']) ?>"
+                                   class="text-on-inverted-muted hover:text-primary transition-colors
+                                          focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                    <?= $escaper->escapeHtml($link['name']) ?>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+
+            <?php /* Support column -- contact, orders, legal */ ?>
+            <div>
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
+                    <?= $escaper->escapeHtml(__('Customer service')) ?>
+                </h2>
+                <ul class="space-y-2 text-sm" role="list">
+                    <li>
+                        <a href="<?= $escaper->escapeUrl($block->getContactUrl()) ?>"
+                           class="text-on-inverted-muted hover:text-primary transition-colors
+                                  focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                            <?= $escaper->escapeHtml(__('Contact us')) ?>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?= $escaper->escapeUrl($block->getOrderStatusUrl()) ?>"
+                           class="text-on-inverted-muted hover:text-primary transition-colors
+                                  focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                            <?= $escaper->escapeHtml(__('Order status')) ?>
+                        </a>
+                    </li>
+                    <?php if ($privacyUrl !== ''): ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($privacyUrl) ?>"
+                               class="text-on-inverted-muted hover:text-primary transition-colors
+                                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                <?= $escaper->escapeHtml(__('Privacy policy')) ?>
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                    <?php if ($termsUrl !== ''): ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($termsUrl) ?>"
+                               class="text-on-inverted-muted hover:text-primary transition-colors
+                                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                <?= $escaper->escapeHtml(__('Terms &amp; conditions')) ?>
+                            </a>
+                        </li>
+                    <?php endif; ?>
+                </ul>
+            </div>
+
+            <?php /* Newsletter column -- delegated to Magento_Newsletter
+                   subscribe block when mounted by layout XML; falls back
+                   to an empty column when the subscribe block is absent
+                   so the 4-col grid still balances. */ ?>
+            <div>
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
+                    <?= $escaper->escapeHtml(__('Stay in the loop')) ?>
+                </h2>
+                <p class="text-sm mb-4 text-on-inverted-muted">
+                    <?= $escaper->escapeHtml(__('Subscribe for new arrivals and exclusive offers.')) ?>
+                </p>
+                <?= $block->getChildHtml('subscribe') ?>
+            </div>
+
+        </div>
+    </div>
+
+    <?php /* -- Bottom bar: copyright + switchers --------------- */ ?>
+    <div class="container mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-on-inverted-muted">
+        <p>
+            <?php if ($copyrightText !== ''): ?>
+                <?= $escaper->escapeHtml($copyrightText) ?>
+            <?php else: ?>
+                <?= $escaper->escapeHtml(
+                    __('© %1 %2. All rights reserved.', $block->getCurrentYear(), $block->getStoreName())
+                ) ?>
+            <?php endif; ?>
+        </p>
+
+        <div class="flex items-center gap-2">
+            <?php /* The store switcher (scope `all`) lists every store view; core's language switcher
+                    would repeat them, so it is not rendered (see default.xml). */ ?>
+            <?= $block->getChildHtml('store_switcher') ?>
+            <?= $block->getChildHtml('currency') ?>
+        </div>
+    </div>
+
+</footer>

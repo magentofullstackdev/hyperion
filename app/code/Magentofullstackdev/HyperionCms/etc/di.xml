@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <type name="Magentofullstackdev\HyperionCms\PageBuilder\ContentTypePool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="slider"    xsi:type="object">Magentofullstackdev\HyperionCms\PageBuilder\Renderer\Slider</item>
+                <item name="accordion" xsi:type="object">Magentofullstackdev\HyperionCms\PageBuilder\Renderer\Accordion</item>
+                <item name="map"       xsi:type="object">Magentofullstackdev\HyperionCms\PageBuilder\Renderer\Map</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Coerce Magento\Cms\Model\Page::getContent() NULL -> '' so the CMS Page
+        block's _toHtml() doesn't hand NULL to Magento\Framework\Filter\Template::filter(),
+        which since 2.4.7 throws InvalidArgumentException - the parent Email
+        filter then substitutes its error text in place of the page body.
+        Relevant when the home page delivers its content via Content > Widgets
+        and the cms_page row's content column is NULL / empty.
+    -->
+    <type name="Magento\Cms\Model\Page">
+        <plugin name="hyperion_cms_page_null_content_coercion"
+                type="Magentofullstackdev\HyperionCms\Plugin\Cms\PagePlugin"/>
+    </type>
+
+</config>

@@ -1,0 +1,361 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion customer registration form.
+ *
+ * Posts to Magento\Customer\Controller\Account\CreatePost. The name parts
+ * (prefix / middle name / suffix), date of birth, tax / VAT number and gender
+ * follow Stores > Configuration > Customers > Customer Configuration > Name and
+ * Address Options through the core widget blocks, rendered with the Hyperion
+ * widget templates. Children added by other modules are rendered where core
+ * renders them: form_fields_before, customer.form.register.extra,
+ * fieldset_create_info_additional (remote shopping assistance) and
+ * form_additional_info (reCAPTCHA). customer.form.register.newsletter is left
+ * out on purpose: it only carries a RequireJS widget.
+ *
+ * The address fieldset renders when the block carries `show_address_fields`
+ * (core reads the same flag; nothing in core sets it on this page, a layout
+ * update on `customer_form_register` or a plugin does). The State/Province
+ * control is <hyperion-region-select>, fed by the HyperionCustomer
+ * AddressForm view model; the field names are the ones
+ * Magento\Customer\Controller\Account\CreatePost::extractAddress() reads.
+ *
+ * @var \Magento\Customer\Block\Form\Register $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+use Magento\Customer\Block\Widget\Company;
+use Magento\Customer\Block\Widget\Dob;
+use Magento\Customer\Block\Widget\Fax;
+use Magento\Customer\Block\Widget\Gender;
+use Magento\Customer\Block\Widget\Name;
+use Magento\Customer\Block\Widget\Taxvat;
+use Magento\Customer\Block\Widget\Telephone;
+use Magento\Framework\View\Element\Template;
+use Magentofullstackdev\HyperionCustomer\ViewModel\AddressForm;
+
+$formData = $block->getFormData();
+$layout = $block->getLayout();
+$dob = $layout->createBlock(Dob::class);
+$taxvat = $layout->createBlock(Taxvat::class);
+$gender = $layout->createBlock(Gender::class);
+$minimumPasswordLength = (int) $block->getMinimumPasswordLength();
+?>
+<div class="max-w-md mx-auto py-8">
+    <div class="bg-surface rounded-2xl border border-subtle shadow-sm p-8">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-secondary tracking-tight">
+                <?= $escaper->escapeHtml(__('Create an Account')) ?>
+            </h1>
+            <p class="mt-1 text-sm text-muted">
+                <?= $escaper->escapeHtml(__('Personal information')) ?>
+            </p>
+        </div>
+
+        <?= $block->getChildHtml('form_fields_before') ?>
+        <?= $block->getChildHtml('customer.form.register.extra') ?>
+
+        <form class="space-y-5"
+              action="<?= $escaper->escapeUrl($block->getPostActionUrl()) ?>"
+              method="post"
+              id="form-validate"
+              enctype="multipart/form-data"
+              autocomplete="off">
+            <?= $block->getBlockHtml('formkey') ?>
+
+            <?= $layout->createBlock(Name::class)
+                ->setObject($formData)
+                ->setForceUseCustomerAttributes(true)
+                ->toHtml() ?>
+
+            <div>
+                <label for="email_address" class="block text-sm font-medium text-secondary mb-1">
+                    <?= $escaper->escapeHtml(__('Email')) ?>
+                </label>
+                <input type="email"
+                       name="email"
+                       id="email_address"
+                       value="<?= $escaper->escapeHtmlAttr($formData->getEmail()) ?>"
+                       required
+                       autocomplete="email"
+                       class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"/>
+            </div>
+
+            <?php if ($block->isNewsletterEnabled()): ?>
+                <div class="flex items-start gap-2">
+                    <input type="checkbox"
+                           name="is_subscribed"
+                           id="is_subscribed"
+                           value="1"
+                           <?= $formData->getIsSubscribed() ? 'checked' : '' ?>
+                           class="mt-0.5 w-4 h-4 text-primary border-subtle rounded focus:ring-2 focus:ring-primary"/>
+                    <label for="is_subscribed" class="text-sm text-secondary">
+                        <?= $escaper->escapeHtml(__('Sign Up for Newsletter')) ?>
+                    </label>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($dob->isEnabled()): ?>
+                <?= $dob->setDate($formData->getDob())->toHtml() ?>
+            <?php endif; ?>
+            <?php if ($taxvat->isEnabled()): ?>
+                <?= $taxvat->setTaxvat($formData->getTaxvat())->toHtml() ?>
+            <?php endif; ?>
+            <?php if ($gender->isEnabled()): ?>
+                <?= $gender->setGender($formData->getGender())->toHtml() ?>
+            <?php endif; ?>
+
+            <?= $block->getChildHtml('fieldset_create_info_additional') ?>
+
+            <?php if ($block->getShowAddressFields()): ?>
+                <?php
+                /** @var \Magento\Customer\Helper\Address $addressHelper */
+                $addressHelper = $block->getData('addressHelper');
+                $addressForm = $viewModels->require(AddressForm::class);
+                $attributeData = $block->getAttributeData();
+                $isRequired = static fn (string $code): bool => str_contains(
+                    (string) $addressHelper->getAttributeValidationClass($code),
+                    'required-entry'
+                );
+                $company = $layout->createBlock(Company::class);
+                $telephone = $layout->createBlock(Telephone::class);
+                $fax = $layout->createBlock(Fax::class);
+                $streetLines = max(1, (int) $addressHelper->getStreetLines());
+                $countryId = (string) $block->getCountryId();
+                $regionId = (int) $formData->getRegionId() > 0 ? (string) (int) $formData->getRegionId() : '';
+                $regionText = (string) $formData->getRegion();
+                $regionsForCountry = $addressForm->getRegionsForCountry($countryId);
+                $requiredCountries = $addressForm->getCountriesWithRequiredStates();
+                $optionalZipCountries = $addressForm->getCountriesWithOptionalZip();
+                $optionalRegionAllowed = $addressForm->isOptionalRegionAllowed();
+                $regionRequired = in_array($countryId, $requiredCountries, true);
+                $regionFieldHidden = $regionsForCountry !== [] && !$regionRequired && !$optionalRegionAllowed;
+                $postcodeRequired = $isRequired('postcode') && !in_array($countryId, $optionalZipCountries, true);
+                $inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg bg-surface '
+                    . 'focus:ring-2 focus:ring-primary focus:border-primary outline-none';
+                $labelClass = 'block text-sm font-medium text-secondary mb-1';
+                $streetLabel = $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('street')));
+                ?>
+                <hyperion-region-select
+                        class="block pt-4 border-t border-subtle"
+                        regions="<?= $escaper->escapeHtmlAttr($addressForm->getRegionsJson()) ?>"
+                        required-countries="<?= $escaper->escapeHtmlAttr((string) json_encode($requiredCountries)) ?>"
+                        optional-zip-countries="<?= $escaper->escapeHtmlAttr((string) json_encode($optionalZipCountries)) ?>"
+                        region-id="<?= $escaper->escapeHtmlAttr($regionId) ?>"
+                        region="<?= $escaper->escapeHtmlAttr($regionText) ?>"
+                        placeholder="<?= $escaper->escapeHtmlAttr(__('Please select a region, state or province.')) ?>"
+                        <?= $optionalRegionAllowed ? 'optional-allowed' : '' ?>>
+                    <h2 class="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">
+                        <?= $escaper->escapeHtml(__('Address Information')) ?>
+                    </h2>
+                    <input type="hidden" name="create_address" value="1">
+                    <div class="space-y-5">
+                        <?php if ($company->isEnabled()): ?>
+                            <?= $company->setCompany($formData->getCompany())->toHtml() ?>
+                        <?php endif; ?>
+                        <?php if ($telephone->isEnabled()): ?>
+                            <?= $telephone->setTelephone($formData->getTelephone())->toHtml() ?>
+                        <?php endif; ?>
+                        <?php if ($fax->isEnabled()): ?>
+                            <?= $fax->setFax($formData->getFax())->toHtml() ?>
+                        <?php endif; ?>
+                        <?php if ($addressForm->isVatVisible()): ?>
+                            <div>
+                                <label for="vat_id" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml(__('VAT Number')) ?>
+                                </label>
+                                <input type="text" id="vat_id" name="vat_id"
+                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getVatId()) ?>"
+                                       <?= $isRequired('vat_id') ? 'required' : '' ?>
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?> <?= $escaper->escapeHtmlAttr($addressForm->getAttributeValidationClass('vat_id')) ?>">
+                            </div>
+                        <?php endif; ?>
+
+                        <?php for ($line = 1; $line <= $streetLines; $line++): ?>
+                            <div>
+                                <label for="street_<?= (int) $line ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?php if ($line === 1): ?>
+                                        <?= /* @noEscape */ $streetLabel ?>
+                                    <?php else: ?>
+                                        <?= $escaper->escapeHtml(__('Street Address %1', $line)) ?>
+                                    <?php endif; ?>
+                                </label>
+                                <input type="text"
+                                       id="street_<?= (int) $line ?>"
+                                       name="street[<?= (int) ($line - 1) ?>]"
+                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getStreet($line - 1)) ?>"
+                                       autocomplete="address-line<?= (int) min($line, 3) ?>"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= $line === 1 && $isRequired('street') ? 'required' : '' ?>/>
+                            </div>
+                        <?php endfor; ?>
+
+                        <?php if ($addressHelper->isVatAttributeVisible()): ?>
+                            <div>
+                                <label for="vat_id" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('vat_id'))) ?>
+                                </label>
+                                <input type="text"
+                                       id="vat_id"
+                                       name="vat_id"
+                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getVatId()) ?>"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= $isRequired('vat_id') ? 'required' : '' ?>/>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="country" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('country_id'))) ?>
+                                </label>
+                                <select id="country"
+                                        name="country_id"
+                                        data-country-select
+                                        autocomplete="country"
+                                        required
+                                        class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+                                    <?php foreach ($addressForm->getCountryOptions() as $option): ?>
+                                        <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"
+                                            <?= $option['value'] === $countryId ? 'selected' : '' ?>>
+                                            <?= $escaper->escapeHtml($option['label']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div data-region-field <?= $regionFieldHidden ? 'hidden' : '' ?>>
+                                <label data-region-label
+                                       for="<?= $regionsForCountry !== [] ? 'region_id' : 'region' ?>"
+                                       class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('region'))) ?>
+                                </label>
+                                <select id="region_id"
+                                        name="region_id"
+                                        data-region-select
+                                        autocomplete="address-level1"
+                                        class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                        <?= $regionRequired && $regionsForCountry !== [] ? 'required' : '' ?>
+                                        <?= $regionsForCountry === [] ? 'hidden' : '' ?>>
+                                    <option value="">
+                                        <?= $escaper->escapeHtml(__('Please select a region, state or province.')) ?>
+                                    </option>
+                                    <?php foreach ($regionsForCountry as $region): ?>
+                                        <option value="<?= $escaper->escapeHtmlAttr($region['id']) ?>"
+                                            <?= $region['id'] === $regionId ? 'selected' : '' ?>>
+                                            <?= $escaper->escapeHtml($region['name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <input type="text"
+                                       id="region"
+                                       name="region"
+                                       data-region-input
+                                       value="<?= $escaper->escapeHtmlAttr($regionText) ?>"
+                                       autocomplete="address-level1"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= $regionRequired && $regionsForCountry === [] ? 'required' : '' ?>
+                                       <?= $regionsForCountry !== [] ? 'hidden' : '' ?>/>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="city" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('city'))) ?>
+                                </label>
+                                <input type="text"
+                                       id="city"
+                                       name="city"
+                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getCity()) ?>"
+                                       autocomplete="address-level2"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= $isRequired('city') ? 'required' : '' ?>/>
+                            </div>
+                            <div>
+                                <label for="zip" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('postcode'))) ?>
+                                </label>
+                                <input type="text"
+                                       id="zip"
+                                       name="postcode"
+                                       data-postcode-input
+                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getPostcode()) ?>"
+                                       autocomplete="postal-code"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= $postcodeRequired ? 'required' : '' ?>/>
+                            </div>
+                        </div>
+
+                        <?php $addressAttributes = $block->getChildBlock('customer_form_address_user_attributes'); ?>
+                        <?php if ($addressAttributes): ?>
+                            <?php $addressAttributes->setEntityType('customer_address'); ?>
+                            <?php $addressAttributes->setFieldIdFormat('address:%1$s')->setFieldNameFormat('address[%1$s]'); ?>
+                            <?php $block->restoreSessionData($addressAttributes->getMetadataForm(), 'address'); ?>
+                            <?= $addressAttributes->setShowContainer(false)->toHtml() ?>
+                        <?php endif; ?>
+
+                        <input type="hidden" name="default_billing" value="1">
+                        <input type="hidden" name="default_shipping" value="1">
+                    </div>
+                </hyperion-region-select>
+            <?php endif; ?>
+
+            <div class="pt-4 border-t border-subtle">
+                <h2 class="text-sm font-semibold text-secondary mb-4 uppercase tracking-wider">
+                    <?= $escaper->escapeHtml(__('Sign-in Information')) ?>
+                </h2>
+                <div class="space-y-5">
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-secondary mb-1">
+                            <?= $escaper->escapeHtml(__('Password')) ?>
+                        </label>
+                        <?= $layout->createBlock(Template::class)
+                            ->setTemplate('Magento_Customer::widget/password.phtml')
+                            ->setData([
+                                'field_id' => 'password',
+                                'field_name' => 'password',
+                                'autocomplete' => 'new-password',
+                                'required' => true,
+                                'minlength' => $minimumPasswordLength,
+                            ])
+                            ->toHtml() ?>
+                    </div>
+                    <div>
+                        <label for="password-confirmation" class="block text-sm font-medium text-secondary mb-1">
+                            <?= $escaper->escapeHtml(__('Confirm Password')) ?>
+                        </label>
+                        <?= $layout->createBlock(Template::class)
+                            ->setTemplate('Magento_Customer::widget/password.phtml')
+                            ->setData([
+                                'field_id' => 'password-confirmation',
+                                'field_name' => 'password_confirmation',
+                                'autocomplete' => 'new-password',
+                                'required' => true,
+                            ])
+                            ->toHtml() ?>
+                    </div>
+                </div>
+            </div>
+
+            <?= $block->getChildHtml('form_additional_info') ?>
+
+            <button type="submit"
+                    class="w-full py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Create an Account')) ?>
+            </button>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-subtle text-center text-sm text-muted">
+            <?= $escaper->escapeHtml(__('Already have an account?')) ?>
+            <a href="<?= $escaper->escapeUrl($block->getUrl('customer/account/login')) ?>"
+               class="ml-1 font-semibold text-primary hover:text-primary-hover hover:underline">
+                <?= $escaper->escapeHtml(__('Sign In')) ?>
+            </a>
+        </div>
+    </div>
+</div>
+<?= $layout->createBlock(Template::class)
+    ->setTemplate('Magento_Customer::widget/password-toggle-js.phtml')
+    ->toHtml() ?>

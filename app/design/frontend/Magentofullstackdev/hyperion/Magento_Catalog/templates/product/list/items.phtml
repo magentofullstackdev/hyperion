@@ -1,0 +1,88 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion related / upsell / cross-sell carousel -- shared template.
+ *
+ * The same Magento_Catalog::product/list/items.phtml declaration serves
+ * `catalog.product.related`, `product.info.upsell`, and the cart cross-sell block. Hyperion overrides it with a `<hyperion-carousel>`-backed
+ * card strip and derives the heading from the block's `type` argument
+ * so each section reads correctly.
+ *
+ * @var \Magento\Catalog\Block\Product\ProductList\AbstractProduct $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$items = $block->getItems();
+$count = $items instanceof \Countable ? $items->count() : (is_array($items) ? count($items) : 0);
+if ($count === 0) {
+    return;
+}
+
+$type = (string) $block->getData('type');
+$headingMap = [
+    'related' => __('Related Products'),
+    'upsell' => __('You May Also Like'),
+    'crosssell' => __('Frequently Bought Together'),
+];
+$heading = $headingMap[$type] ?? __('More Products');
+
+$imageHelper = $this->helper(\Magento\Catalog\Helper\Image::class);
+$headingId = 'hyperion-' . ($type ?: 'products') . '-heading';
+
+/** @var \Magentofullstackdev\HyperionImage\ViewModel\ImageConfig|null $imageCfg */
+// HyperionImage may be disabled: degrade gracefully to plain <img>.
+$imageCfg = $viewModels->optional(\Magentofullstackdev\HyperionImage\ViewModel\ImageConfig::class);
+// Guarded price box: a pricing failure prints the fallback and marks the response degraded.
+$pricing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Pricing::class);
+?>
+<section class="mt-12 space-y-4" aria-labelledby="<?= $escaper->escapeHtmlAttr($headingId) ?>">
+    <h2 id="<?= $escaper->escapeHtmlAttr($headingId) ?>"
+        class="text-xl font-bold text-secondary">
+        <?= $escaper->escapeHtml($heading) ?>
+    </h2>
+
+    <hyperion-carousel gap="16" class="block"
+                       prev-label="<?= $escaper->escapeHtmlAttr(__('Previous slide')) ?>"
+                       next-label="<?= $escaper->escapeHtmlAttr(__('Next slide')) ?>"
+                       dot-label="<?= $escaper->escapeHtmlAttr(__('Go to page')) ?>">
+        <?php foreach ($items as $_item):
+            $imageUrl = $imageHelper->init($_item, 'category_page_grid')->getUrl();
+        ?>
+            <article class="bg-surface rounded-xl border border-subtle overflow-hidden
+                            hover:shadow-md hover:border-primary/30 transition-all">
+                <a href="<?= $escaper->escapeUrl($_item->getProductUrl()) ?>"
+                   class="block aspect-square overflow-hidden bg-surface-raised
+                          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <picture>
+                        <?php /* Emit <source> ONLY when the companion file exists on disk: browsers
+                               don't fall through <picture> to <img> on a 404. */ ?>
+                        <?php if ($imageCfg !== null && $imageCfg->hasAvifCompanion($imageUrl)): ?>
+                            <source type="image/avif" srcset="<?= $escaper->escapeUrl($imageCfg->getAvifUrl($imageUrl)) ?>">
+                        <?php endif; ?>
+                        <?php if ($imageCfg !== null && $imageCfg->hasWebpCompanion($imageUrl)): ?>
+                            <source type="image/webp" srcset="<?= $escaper->escapeUrl($imageCfg->getWebpUrl($imageUrl)) ?>">
+                        <?php endif; ?>
+                        <img src="<?= $escaper->escapeUrl($imageUrl) ?>"
+                             alt="<?= $escaper->escapeHtmlAttr((string) $_item->getName()) ?>"
+                             loading="lazy"
+                             width="300"
+                             height="300"
+                             class="w-full h-full object-cover">
+                    </picture>
+                </a>
+                <div class="p-3 space-y-1">
+                    <a href="<?= $escaper->escapeUrl($_item->getProductUrl()) ?>"
+                       class="block text-sm font-medium text-secondary hover:text-primary
+                              line-clamp-2 transition-colors
+                              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+                        <?= $escaper->escapeHtml($_item->getName()) ?>
+                    </a>
+                    <div class="text-sm">
+                        <?= /* @noEscape */ $pricing->getTileHtml($_item) ?>
+                    </div>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </hyperion-carousel>
+</section>

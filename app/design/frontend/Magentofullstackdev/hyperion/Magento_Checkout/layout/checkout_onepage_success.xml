@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+        <referenceBlock name="order.success.print.link" remove="true"/>
+        <!-- Core's guest "Create an Account" offer. The block stays (its toHtml() decides whether the order
+             was a guest order whose email is still free and whose addresses validate as customer addresses);
+             it moves under checkout.success so success.phtml renders it inside the page card, with Hyperion's
+             template: a plain link to checkout/account/delegateCreate (a server controller that seeds the
+             registration form from the order) instead of core's Knockout component. -->
+        <move element="checkout.registration" destination="checkout.success"/>
+        <referenceBlock name="checkout.registration" template="Magento_Checkout::registration.phtml"/>
+        <!-- Google Ads conversion blocks of Magento_GoogleGtag / Magento_GoogleAdwords (RequireJS
+             x-magento-init only): <hyperion-gtag> sends the conversion from the purchase event. -->
+        <referenceBlock name="gtag.google.adwords" remove="true"/>
+        <referenceBlock name="google.adwords.code" remove="true"/>
+
+        <!-- The InventoryInStorePickupFrontend module changes the template of
+             `checkout.success` to its own InStorePickup variant. Restore the
+             original Magento_Checkout::success.phtml path so our theme's
+             override at that path is used. -->
+        <referenceBlock name="checkout.success" template="Magento_Checkout::success.phtml"/>
+    </body>
+</page>

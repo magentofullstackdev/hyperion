@@ -1,0 +1,44 @@
+{
+    "name": "magentofullstackdev/module-hyperion-image",
+    "description": "Hyperion: automatic WebP and AVIF generation for Magento catalog images. Part of the Hyperion theme by Magentofullstackdev.",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "ext-gd": "*",
+        "magento/framework": "^103.0.6",
+        "magento/module-catalog": ">=104.0.0",
+        "magento/module-media-storage": ">=100.4.0",
+        "magento/module-message-queue": "*",
+        "magento/module-backend": "*",
+        "magento/module-cms": "*",
+        "magento/module-config": "*",
+        "magento/module-store": "*",
+        "magentofullstackdev/module-hyperion-core": "self.version"
+    },
+    "suggest": {
+        "ext-imagick": "Imagick is faster than GD for batch image conversion. Recommended for catalogs with 1000+ products."
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionImage\\": ""
+        }
+    }
+}

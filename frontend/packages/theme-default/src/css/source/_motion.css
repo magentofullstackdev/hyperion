@@ -1,0 +1,128 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion motion: the small cross-fades that make page changes
+ * and fragment swaps feel fluid.
+ *
+ * ONE knob: `--hyperion-motion-fast` on :root (_theme.css, 120ms). A child
+ * theme overrides it there; 0ms turns every transition below off.
+ *
+ *   * Page to page: cross-document view transitions (`@view-transition`),
+ *     a cross-fade between two same-origin pages. Chrome, Edge and Safari
+ *     animate; a browser without the feature navigates as before.
+ *   * Fragment swaps: the content htmx adds (a swapped grid, appended tiles,
+ *     a header fragment) fades in through the `htmx-added` settle class, no
+ *     View Transitions API here: a swap overlapping another transition made
+ *     Chrome reject the transition's promises as page errors. The product
+ *     grid dims while its next state loads (the toolbar, pager and load more
+ *     requests use it as hx-indicator).
+ *   * Components that replace a server fallback when they upgrade (swatches
+ *     over their skeleton, the gallery over its image) fade in.
+ *
+ * Everything is off under `prefers-reduced-motion: reduce`, the Tailwind
+ * utilities of the templates included (see the last block).
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+        navigation: auto;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation-duration: var(--hyperion-motion-fast);
+        animation-timing-function: ease-out;
+    }
+
+    /*
+     * While a cross-document transition runs, the `::view-transition` tree is
+     * laid out against the snapshot containing block: the whole viewport,
+     * scrollbar included, so with `scrollbar-gutter: stable` (_theme.css) it
+     * is 15 px wider than the root's content box. The root then overflows
+     * horizontally for the first frames of the new page (`scrollWidth` 1440
+     * against `clientWidth` 1425, and `scrollTo(100, 0)` really moves the
+     * page 15 px). The overflow of the root element is the
+     * viewport's: clipping it horizontally for the duration of the
+     * transition leaves no scrollable overflow in that axis, so the page
+     * cannot be widened or scrolled sideways by the snapshots. Its own rule
+     * on purpose: a browser without `:active-view-transition` drops it alone.
+     */
+    html:active-view-transition {
+        overflow-x: clip;
+    }
+
+    @keyframes hyperion-fade-in {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    hyperion-swatches:defined,
+    hyperion-gallery:defined {
+        animation: hyperion-fade-in var(--hyperion-motion-fast) ease-out;
+    }
+
+    [data-hyperion-product-grid],
+    [data-hyperion-product-grid] [data-hyperion-tiles] > li,
+    [id^="hyperion-"][hx-swap-oob],
+    .htmx-settling {
+        transition: opacity var(--hyperion-motion-fast) ease-out;
+    }
+
+    /* htmx keeps `htmx-added` on new content for the settle delay (20ms), then
+       removes it: the transition above carries the element from 0 to 1. */
+    .htmx-added {
+        opacity: 0;
+    }
+}
+
+/* The grid is the hx-indicator of the requests that replace it. */
+[data-hyperion-product-grid].htmx-request {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/*
+ * Reduced motion. Besides the view transitions, every transition and
+ * animation of the theme ends at once: the Tailwind utilities the templates
+ * use (`transition-*`, `duration-*`, `animate-spin`), the hover zooms of the
+ * tiles and thumbnails (`group-hover:scale-105`, `hover:scale-110`), the
+ * chevron rotations. This file is imported before the Tailwind layers
+ * (entry.css), so a rule of the same specificity would lose to a utility:
+ * the universal rule carries `!important` (nothing else in the theme marks
+ * these properties important) and the hover scales are neutralised through
+ * their `--tw-scale-*` variables under an `html` prefix, one specificity
+ * step above the utility, which leaves the translate of the drawers alone
+ * (`transform: none` would pull an off-canvas panel on screen). The
+ * near-zero duration, rather than `none`, keeps `transitionend` and
+ * `animationend` firing for the components that wait for them.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+        transition-duration: 0.01ms !important;
+        transition-delay: 0s !important;
+        animation-duration: 0.01ms !important;
+        animation-delay: 0s !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+    }
+
+    html .hover\:scale-110:hover,
+    html .group:hover .group-hover\:scale-105 {
+        --tw-scale-x: 1;
+        --tw-scale-y: 1;
+    }
+
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none !important;
+    }
+}

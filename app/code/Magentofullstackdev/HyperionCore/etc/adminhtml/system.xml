@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="hyperion" translate="label" sortOrder="200">
+            <label>Hyperion Theme</label>
+        </tab>
+        <section id="hyperion" translate="label" sortOrder="200" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Hyperion Theme</label>
+            <tab>hyperion</tab>
+            <resource>Magentofullstackdev_HyperionCore::config</resource>
+            <group id="catalog" translate="label" sortOrder="5" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Catalog</label>
+                <field id="add_to_cart_from_listing" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Add to Cart from Listing Page</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Show the Add to Cart button on the product tiles of category listings, search results and product widgets. When disabled the tiles only link to the product page; the product page keeps its own button.</comment>
+                </field>
+            </group>
+            <group id="footer" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Footer</label>
+                <field id="terms_cms_identifier" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Terms &amp; Conditions CMS Page Identifier</label>
+                    <comment>CMS page identifier for the Terms of Service link in the footer.</comment>
+                </field>
+                <field id="privacy_cms_identifier" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Privacy Policy CMS Page Identifier</label>
+                    <comment>CMS page identifier for the Privacy Policy link in the footer.</comment>
+                </field>
+            </group>
+            <group id="security" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Anti-Abuse Shield</label>
+                <field id="rate_limit_enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Rate Limit Search and Filter Requests</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Counts the requests that reach PHP (Varnish hits are free) per client address in 10 second windows and answers HTTP 429 Too Many Requests above the limits below.</comment>
+                </field>
+                <field id="search_suggest_limit" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Search Requests per 10 Seconds</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>Budget of one client for the search suggestions (hyperion/search/suggest) and, counted separately, for the search results page. 0 disables the limit.</comment>
+                    <depends><field id="rate_limit_enabled">1</field></depends>
+                </field>
+                <field id="catalog_filter_limit" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Filter Requests per 10 Seconds</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>Budget of one client for layered navigation requests (hyperion/category/filter and category pages with filter or unknown parameters). 0 disables the limit.</comment>
+                    <depends><field id="rate_limit_enabled">1</field></depends>
+                </field>
+                <field id="trusted_proxies" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Trusted Proxy Addresses</label>
+                    <comment>Addresses of the reverse proxies in front of PHP (Varnish, the TLS terminator), one per line or comma separated. The client address is then read from X-Forwarded-For (rightmost address that is not a proxy). Leave empty when PHP sees the clients directly: the header is then ignored. Empty behind a proxy on a private network, the client is the forwarded address left after skipping the http_cache_hosts of env.php and at most one more hop in the proxy's subnet: a best effort that guesses the topology, so set the proxies in production.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Associated products + quantities, rendered inside the PDP add-to-cart form -->
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\GroupedProduct\Block\Product\View\Type\Grouped"
+                   name="hyperion.product.grouped.options"
+                   as="type_grouped_options"
+                   template="Magento_GroupedProduct::product/view/type/grouped.phtml"/>
+        </referenceBlock>
+    </body>
+</page>

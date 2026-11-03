@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Replace the native Magento\Catalog\Block\Product\ListProduct
+             with Hyperion's so ViewModel injection + cache-key extension work. -->
+        <referenceBlock name="category.products.list"
+                        class="Magentofullstackdev\HyperionCatalog\Block\Product\ListProduct"
+                        template="Magento_Catalog::product/list.phtml">
+            <arguments>
+                <argument name="product_list_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductList</argument>
+                <argument name="image_config_view_model" xsi:type="object">Magentofullstackdev\HyperionImage\ViewModel\ImageConfig</argument>
+                <argument name="cache_lifetime" xsi:type="number">3600</argument>
+            </arguments>
+        </referenceBlock>
+
+        <!-- Luma page-title container is unused; Hyperion's category/view.phtml
+             renders the category header inline. -->
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <!-- catalog.leftnav placement is owned by the theme layer - see
+             app/design/frontend/Magentofullstackdev/hyperion/Magento_Catalog/layout/catalog_category_view.xml
+             which moves it INSIDE hyperion.category.view so the wrapper
+             template can render it via $block->getChildHtml('catalog.leftnav'). -->
+    </body>
+</page>

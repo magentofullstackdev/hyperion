@@ -1,0 +1,739 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * PageBuilder storefront base styles.
+ *
+ * How PageBuilder content reaches the page (Magento_PageBuilder):
+ *   - Stored content is HTML marked with `data-content-type`,
+ *     `data-appearance` and `data-element`.
+ *   - EVERYTHING an admin configures on an element (alignment, margins,
+ *     paddings, min-height, border, colors, background position / size,
+ *     column widths, the mobile values of those) is already CSS when the
+ *     content is saved: the admin editor writes one <style> block of
+ *     `#html-body [data-pb-style=ID]{...}` rules into the content (mobile
+ *     values inside `@media only screen and (max-width: 767px)`). At render
+ *     time Magento\PageBuilder\Model\Filter\Template only adds the
+ *     background images (`.background-image-<id>` rules from
+ *     `data-background-images`) and decodes the HTML content type. None of
+ *     that needs JavaScript or this file; it needs `<body id="html-body">`,
+ *     which the theme's root template provides.
+ *   - What core adds on top is a small set of STRUCTURAL rules per content
+ *     type (module-page-builder/view/frontend/web/css/source, LESS compiled
+ *     into the Luma / Blank stylesheet). The theme has no parent, so that
+ *     stylesheet does not exist here: this file is its port, rule for rule,
+ *     with Hyperion tokens where core uses theme variables.
+ *   - Behaviour core drives with RequireJS widgets is covered by
+ *     src/js/lib/pagebuilder.js (tabs, hover states, equal-width buttons,
+ *     video backgrounds, maps) and by two Lit components: <hyperion-slider>
+ *     (HyperionCms swaps it in for the slider) and <hyperion-carousel> (the
+ *     products carousel template).
+ *
+ * Rules of the port:
+ *   - same selectors as core, so admin-set `data-pb-style` rules (which
+ *     carry `#html-body` specificity) always win over these defaults;
+ *   - breakpoint = core's `mobile` breakpoint, 767px, the one the generated
+ *     <style> blocks use;
+ *   - Tailwind's preflight strips heading sizes, list bullets and link
+ *     colors, so rich text inside PageBuilder gets a typographic baseline.
+ */
+
+/* --- Global ------------------------------------------------------- */
+
+:root {
+    --pb-layout-max-width: 80rem; /* the site container (Tailwind `container` at xl) */
+    --pb-layout-gutter: 1rem;
+}
+
+.pagebuilder-full-width {
+    float: left;
+    width: 100%;
+}
+
+.pagebuilder-content-type {
+    box-sizing: border-box;
+    margin-bottom: 20px;
+}
+
+@media only screen and (max-width: 767px) {
+    .pagebuilder-mobile-hidden {
+        display: none !important;
+    }
+}
+
+@media only screen and (min-width: 768px) {
+    .pagebuilder-mobile-only {
+        display: none !important;
+    }
+}
+
+/* --- Full-width page layouts --------------------------------------- */
+
+/*
+ * `cms-full-width`, `category-full-width` and `product-full-width` give
+ * <main> the class `page-main-full-width`: rows may span the viewport and
+ * each row appearance decides its own width (the theme drops the site
+ * container from `columns` in Magento_PageBuilder/page_layout). What is NOT
+ * PageBuilder content in there keeps the site container: the sidebar
+ * widgets and the `div.page-main` wrappers core adds on the category and
+ * product variants.
+ */
+.page-main-full-width .sidebar-main,
+.page-main-full-width div.page-main,
+.page-wrapper > div.page-main {
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: var(--pb-layout-max-width);
+    padding-left: var(--pb-layout-gutter);
+    padding-right: var(--pb-layout-gutter);
+    width: 100%;
+}
+
+/* --- Row ------------------------------------------------------------ */
+
+[data-content-type='row'][data-appearance='contained'] {
+    box-sizing: border-box;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    max-width: var(--pb-layout-max-width);
+}
+
+[data-content-type='row'][data-appearance='contained'] [data-element='inner'] {
+    box-sizing: border-box;
+}
+
+[data-content-type='row'][data-appearance='full-width'] {
+    box-sizing: border-box;
+}
+
+[data-content-type='row'][data-appearance='full-width'] > .row-full-width-inner {
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: var(--pb-layout-max-width);
+    width: 100%;
+}
+
+[data-content-type='row'][data-appearance='full-bleed'] {
+    box-sizing: border-box;
+}
+
+/*
+ * In a full-width page layout nothing around the row provides side gutters
+ * (Luma gets them from `.page-main`), so contained content would touch the
+ * viewport edge on screens narrower than the container.
+ */
+.page-main-full-width [data-content-type='row'][data-appearance='contained'],
+.page-main-full-width [data-content-type='row'][data-appearance='full-width'] > .row-full-width-inner {
+    padding-left: var(--pb-layout-gutter);
+    padding-right: var(--pb-layout-gutter);
+}
+
+/* Parallax rows: core animates with jarallax; a fixed background gives the
+   same depth cue with no script. Mobile browsers ignore `fixed`, and core
+   forces `scroll` there as well. */
+#html-body [data-content-type='row'][data-enable-parallax='1'],
+#html-body [data-content-type='row'][data-enable-parallax='1'] > [data-element='inner'][data-background-images] {
+    background-attachment: fixed;
+}
+
+@media only screen and (max-width: 767px) {
+    #html-body [data-content-type='row'],
+    #html-body [data-content-type='row'][data-appearance='contained'] [data-element='inner'] {
+        background-attachment: scroll !important;
+    }
+}
+
+/* --- Columns -------------------------------------------------------- */
+
+.pagebuilder-column {
+    box-sizing: border-box;
+}
+
+@media only screen and (max-width: 767px) {
+    .pagebuilder-column-group,
+    .pagebuilder-column-line {
+        flex-wrap: wrap;
+    }
+
+    .pagebuilder-column {
+        background-attachment: scroll !important;
+        flex-basis: 100%;
+        max-width: 100%;
+    }
+}
+
+/* --- Image ---------------------------------------------------------- */
+
+figure[data-content-type='image'] {
+    box-sizing: border-box;
+    margin: 0;
+}
+
+figure[data-content-type='image'] > [data-element='link'],
+figure[data-content-type='image'] > [data-element='link'] img {
+    border-radius: inherit;
+}
+
+figure[data-content-type='image'] img {
+    display: inline-block;
+    height: auto;
+    max-width: 100%;
+}
+
+figure[data-content-type='image'] figcaption {
+    word-wrap: break-word;
+}
+
+/* --- Banner + slide (shared structure) ------------------------------ */
+
+[data-content-type='banner'] > [data-element='link'],
+[data-content-type='banner'] > [data-element='empty_link'],
+[data-content-type='slide'] > [data-element='link'],
+[data-content-type='slide'] > [data-element='empty_link'],
+hyperion-slide > [data-element='link'],
+hyperion-slide > [data-element='empty_link'] {
+    color: inherit;
+    display: block;
+    min-height: inherit;
+    text-decoration: inherit;
+}
+
+.pagebuilder-banner-wrapper,
+.pagebuilder-slide-wrapper {
+    background-clip: padding-box;
+    border-radius: inherit;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+.pagebuilder-slide-wrapper {
+    min-height: inherit;
+}
+
+.pagebuilder-banner-wrapper .pagebuilder-overlay,
+.pagebuilder-slide-wrapper .pagebuilder-overlay {
+    border-radius: inherit;
+    box-sizing: border-box;
+    padding: 30px;
+    position: relative;
+    transition: background-color 500ms ease;
+}
+
+.pagebuilder-banner-wrapper .pagebuilder-overlay.pagebuilder-poster-overlay,
+.pagebuilder-slide-wrapper .pagebuilder-overlay.pagebuilder-poster-overlay {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+}
+
+.pagebuilder-slide-wrapper .pagebuilder-overlay.pagebuilder-poster-overlay {
+    min-height: inherit;
+}
+
+.pagebuilder-banner-wrapper .pagebuilder-overlay:not(.pagebuilder-poster-overlay),
+.pagebuilder-slide-wrapper .pagebuilder-overlay:not(.pagebuilder-poster-overlay) {
+    max-width: 540px;
+}
+
+.pagebuilder-banner-wrapper .pagebuilder-poster-content,
+.pagebuilder-slide-wrapper .pagebuilder-poster-content {
+    width: 100%;
+}
+
+.pagebuilder-banner-wrapper [data-element='content'],
+.pagebuilder-slide-wrapper [data-element='content'] {
+    min-height: 50px;
+    overflow: auto;
+}
+
+.pagebuilder-banner-wrapper .pagebuilder-banner-button,
+.pagebuilder-slide-wrapper .pagebuilder-slide-button {
+    margin: 20px 0 0;
+    max-width: 100%;
+    text-align: inherit;
+    transition: opacity 500ms ease;
+    word-break: break-word;
+}
+
+[data-appearance='collage-left'] .pagebuilder-overlay {
+    margin-right: auto;
+}
+
+[data-appearance='collage-centered'] .pagebuilder-overlay {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+[data-appearance='collage-right'] .pagebuilder-overlay {
+    margin-left: auto;
+}
+
+/*
+ * "Show button / overlay on hover" (core: widget/show-on-hover.js). The
+ * generated styles hide the button and clear the overlay; hover brings them
+ * back. The overlay color lives in `data-overlay-color`, which CSS cannot
+ * read as a color, so src/js/lib/pagebuilder.js copies it to `--pb-overlay`.
+ */
+#html-body [data-show-button='hover']:hover .pagebuilder-banner-button,
+#html-body [data-show-button='hover']:focus-within .pagebuilder-banner-button,
+#html-body [data-show-button='hover']:hover .pagebuilder-slide-button,
+#html-body [data-show-button='hover']:focus-within .pagebuilder-slide-button {
+    opacity: 1;
+    visibility: visible;
+}
+
+#html-body [data-show-overlay='hover']:hover .pagebuilder-overlay,
+#html-body [data-show-overlay='hover']:focus-within .pagebuilder-overlay {
+    background-color: var(--pb-overlay, transparent);
+}
+
+/*
+ * Video background (core: widget/video-background.js + jarallax). The player
+ * is injected by src/js/lib/pagebuilder.js; the stacking mirrors jarallax:
+ * video at the bottom, the admin-colored `.video-overlay` above it, content
+ * on top.
+ */
+[data-background-type='video'] {
+    overflow: hidden;
+    position: relative;
+    z-index: 0;
+}
+
+[data-background-type='video'] > .video-overlay {
+    bottom: 0;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: -99;
+}
+
+[data-background-type='video'] > .hyperion-pb-video {
+    border: 0;
+    height: 100%;
+    left: 0;
+    object-fit: cover;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    z-index: -100;
+}
+
+/* A 16:9 player scaled to cover the box whatever its ratio. */
+[data-background-type='video'] > iframe.hyperion-pb-video {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    left: 50%;
+    min-height: 100%;
+    min-width: 100%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: auto;
+}
+
+@media only screen and (max-width: 767px) {
+    .pagebuilder-banner-wrapper,
+    .pagebuilder-slide-wrapper {
+        background-attachment: scroll !important;
+    }
+
+    .pagebuilder-banner-wrapper .pagebuilder-overlay:not(.pagebuilder-poster-overlay),
+    .pagebuilder-slide-wrapper .pagebuilder-overlay:not(.pagebuilder-poster-overlay) {
+        max-width: none;
+    }
+}
+
+/* --- Slider (rendered as <hyperion-slider> / <hyperion-slide>) ------- */
+
+hyperion-slider.pagebuilder-slider {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+}
+
+hyperion-slider.pagebuilder-slider > hyperion-slide {
+    box-sizing: border-box;
+    display: block;
+    line-height: 20px;
+    min-height: inherit;
+    overflow: hidden;
+}
+
+/* Until the component upgrades only the first slide shows, so the page does
+   not jump from a stack of slides to a slider. */
+hyperion-slider:not(:defined) > hyperion-slide:not(:first-child) {
+    display: none;
+}
+
+/* --- Tabs ------------------------------------------------------------ */
+
+/*
+ * Core markup is kept as stored (every header and tab item carries its own
+ * generated style); src/js/lib/pagebuilder.js replaces the jQuery UI tabs
+ * widget. `aria-selected` stands in for jQuery UI's `ui-state-active`.
+ */
+div[data-content-type='tabs'] .tabs-navigation {
+    display: block;
+    font-size: 0;
+    list-style: none;
+    margin: 0 0 -1px;
+    padding: 0;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li:first-child {
+    margin-left: 0 !important;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header {
+    background: rgb(var(--color-surface-raised));
+    border: 1px solid rgb(var(--color-subtle));
+    border-bottom: 0;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    display: inline-block;
+    margin: 0;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    position: relative;
+    word-wrap: break-word;
+    z-index: 1;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header:not(:first-child) {
+    margin-left: -1px;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header a.tab-title {
+    color: rgb(var(--color-text-default));
+    cursor: pointer;
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0.875rem 1.25rem;
+    position: relative;
+    text-decoration: none;
+    transition: all 0.3s;
+    vertical-align: middle;
+    white-space: normal;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header a.tab-title span.tab-title {
+    display: block;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header[aria-selected='true'] {
+    background: rgb(var(--color-surface));
+    z-index: 19;
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header[aria-selected='true'] a.tab-title {
+    color: rgb(var(--color-primary));
+}
+
+div[data-content-type='tabs'] .tabs-navigation li.tab-header:focus-visible {
+    outline: 2px solid rgb(var(--color-focus-ring));
+    outline-offset: 2px;
+    z-index: 20;
+}
+
+div[data-content-type='tabs'] .tabs-content {
+    border: 1px solid rgb(var(--color-subtle));
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+    z-index: 9;
+}
+
+div[data-content-type='tabs'] .tabs-content [data-content-type='tab-item'] {
+    box-sizing: border-box;
+    min-height: inherit;
+}
+
+/* The generated tab item style sets `display: flex` with #html-body weight. */
+#html-body div[data-content-type='tabs']:not([data-hyperion-ready]) [data-content-type='tab-item']:not(:first-child),
+#html-body div[data-content-type='tabs'] [data-content-type='tab-item'][hidden] {
+    display: none;
+}
+
+div[data-content-type='tabs'].tab-align-left .tabs-content {
+    border-top-left-radius: 0 !important;
+}
+
+div[data-content-type='tabs'].tab-align-right .tabs-content {
+    border-top-right-radius: 0 !important;
+}
+
+@media only screen and (max-width: 767px) {
+    [data-content-type='tab-item'] {
+        background-attachment: scroll !important;
+    }
+}
+
+/* --- Buttons --------------------------------------------------------- */
+
+[data-content-type='buttons'] {
+    max-width: 100%;
+}
+
+[data-content-type='button-item'] {
+    max-width: 100%;
+}
+
+[data-content-type='button-item'] [data-element='link'],
+[data-content-type='button-item'] [data-element='empty_link'] {
+    max-width: 100%;
+    word-wrap: break-word;
+}
+
+[data-content-type='button-item'] [data-element='empty_link'] {
+    cursor: default;
+}
+
+a.pagebuilder-button-primary,
+button.pagebuilder-button-primary,
+div.pagebuilder-button-primary,
+a.pagebuilder-button-secondary,
+button.pagebuilder-button-secondary,
+div.pagebuilder-button-secondary,
+a.pagebuilder-button-link,
+button.pagebuilder-button-link,
+div.pagebuilder-button-link {
+    border-radius: 0.5rem;
+    box-shadow: none;
+    box-sizing: border-box;
+    cursor: pointer;
+    display: inline-block;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.375rem;
+    margin: 0 10px 10px 0;
+    padding: 0.75rem 1.5rem;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+a.pagebuilder-button-primary,
+button.pagebuilder-button-primary,
+div.pagebuilder-button-primary {
+    background-color: rgb(var(--color-primary));
+    border: 1px solid rgb(var(--color-primary));
+    color: rgb(var(--color-on-primary));
+}
+
+a.pagebuilder-button-primary:hover,
+button.pagebuilder-button-primary:hover,
+div.pagebuilder-button-primary:hover {
+    background-color: rgb(var(--color-primary-hover));
+    border-color: rgb(var(--color-primary-hover));
+    color: rgb(var(--color-on-primary));
+}
+
+a.pagebuilder-button-secondary,
+button.pagebuilder-button-secondary,
+div.pagebuilder-button-secondary {
+    background-color: rgb(var(--color-surface-raised));
+    border: 1px solid rgb(var(--color-subtle));
+    color: rgb(var(--color-secondary));
+}
+
+a.pagebuilder-button-secondary:hover,
+button.pagebuilder-button-secondary:hover,
+div.pagebuilder-button-secondary:hover {
+    border-color: rgb(var(--color-primary));
+    color: rgb(var(--color-primary));
+}
+
+a.pagebuilder-button-link,
+button.pagebuilder-button-link,
+div.pagebuilder-button-link {
+    background: none;
+    border: 0;
+    color: rgb(var(--color-primary));
+}
+
+a.pagebuilder-button-link:hover,
+button.pagebuilder-button-link:hover,
+div.pagebuilder-button-link:hover {
+    color: rgb(var(--color-primary-hover));
+    text-decoration: underline;
+}
+
+/* --- Text, heading, html, block: rich text baseline ------------------ */
+
+[data-content-type='text'],
+[data-content-type='heading'],
+[data-content-type='html'] {
+    word-wrap: break-word;
+}
+
+/* Heading margins are defaults only: a margin set in the admin arrives as a
+   `#html-body [data-pb-style]` rule and wins. */
+h1[data-content-type='heading'],
+[data-content-type] h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+}
+h2[data-content-type='heading'],
+[data-content-type] h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+}
+h3[data-content-type='heading'],
+[data-content-type] h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 0.75rem;
+}
+h4[data-content-type='heading'],
+[data-content-type] h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 0.75rem;
+}
+h5[data-content-type='heading'],
+[data-content-type] h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+}
+h6[data-content-type='heading'],
+[data-content-type] h6 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+}
+
+[data-content-type='text'] p,
+[data-content-type='html'] p,
+[data-element='content'] p {
+    margin-bottom: 1rem;
+}
+
+[data-content-type='text'] ul,
+[data-content-type='html'] ul,
+[data-element='content'] ul {
+    list-style: disc;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+[data-content-type='text'] ol,
+[data-content-type='html'] ol,
+[data-element='content'] ol {
+    list-style: decimal;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+[data-content-type='text'] blockquote,
+[data-content-type='html'] blockquote {
+    border-left: 3px solid rgb(var(--color-subtle));
+    color: rgb(var(--color-muted));
+    margin: 0 0 1rem;
+    padding-left: 1rem;
+}
+
+[data-content-type='text'] table,
+[data-content-type='html'] table {
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    max-width: 100%;
+}
+
+[data-content-type='text'] th,
+[data-content-type='text'] td,
+[data-content-type='html'] th,
+[data-content-type='html'] td {
+    border: 1px solid rgb(var(--color-subtle));
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+[data-content-type='text'] a,
+[data-content-type='html'] a,
+[data-element='content'] a {
+    color: rgb(var(--color-primary));
+    text-decoration: underline;
+}
+
+[data-content-type='text'] a:hover,
+[data-content-type='html'] a:hover,
+[data-element='content'] a:hover {
+    color: rgb(var(--color-primary-hover));
+}
+
+[data-content-type$='block'] .block p:last-child {
+    margin-bottom: 1rem;
+    margin-top: 0;
+}
+
+/* --- Divider --------------------------------------------------------- */
+
+/* Tailwind's preflight zeroes <hr> borders except the top one; the divider's
+   own width / color / thickness come from its generated style. */
+[data-content-type='divider'] hr {
+    border-style: solid;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    border-right-width: 0;
+}
+
+/* --- Video ----------------------------------------------------------- */
+
+div[data-content-type='video'] {
+    font-size: 0;
+}
+
+div[data-content-type='video'] .pagebuilder-video-inner {
+    box-sizing: border-box;
+    display: inline-block;
+    width: 100%;
+}
+
+div[data-content-type='video'] .pagebuilder-video-container {
+    border-radius: inherit;
+    overflow: hidden;
+    padding-top: 56.25%;
+    position: relative;
+}
+
+div[data-content-type='video'] iframe,
+div[data-content-type='video'] video {
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+}
+
+/* --- Map ------------------------------------------------------------- */
+
+[data-content-type='map'] {
+    box-sizing: border-box;
+    height: 300px;
+}
+
+[data-content-type='map'] > iframe {
+    border: 0;
+    height: 100%;
+    width: 100%;
+}
+
+/* --- Products -------------------------------------------------------- */
+
+[data-content-type='row'] li.product-item {
+    text-align: left;
+}

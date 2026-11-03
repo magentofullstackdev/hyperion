@@ -1,0 +1,20 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * @magentofullstackdev/hyperion-shared -- typography tokens.
+ *
+ * Single source of truth for type-scale and font stacks across the
+ * Hyperion suite. Override in a child theme's `_theme.css` to swap the
+ * font stack without touching markup.
+ */
+:root {
+    --font-family-base: ui-sans-serif, system-ui, sans-serif;
+    --font-size-base: 1rem;
+
+    /* --- Checkout font alias --- */
+    /* The checkout package reads --checkout-font-sans (its Tailwind
+       config in frontend/packages/module-checkout). Alias to the suite
+       font so the checkout inherits the store typography by default. */
+    --checkout-font-sans: var(--font-family-base);
+}

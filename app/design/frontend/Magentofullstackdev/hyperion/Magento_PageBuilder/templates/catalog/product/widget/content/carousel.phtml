@@ -1,0 +1,19 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * PageBuilder "Products" content type, carousel appearance.
+ *
+ * Renders the Hyperion product cards of Magento_CatalogWidget (one card
+ * implementation: HTMX add to cart, wish list and compare toggles) inside
+ * <hyperion-carousel>. The carousel settings the merchant chose (autoplay,
+ * speed, arrows, dots, infinite loop, continuous mode) are attributes of the
+ * surrounding `data-content-type="products"` element; the component reads
+ * them from there, exactly where core's slick widget reads them.
+ *
+ * @var \Magento\CatalogWidget\Block\Product\ProductsList $block
+ */
+$block->setData('hyperion_carousel', true);
+$gridTemplate = (string) $block->getTemplateFile('Magento_CatalogWidget::product/widget/content/grid.phtml');
+?>
+<?= /* @noEscape -- rendered template, escaped there */ $block->fetchView($gridTemplate) ?>

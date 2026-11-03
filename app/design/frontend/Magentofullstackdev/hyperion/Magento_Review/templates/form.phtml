@@ -1,0 +1,149 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion review submit form. No KO/RequireJS -- plain HTML POST.
+ *
+ * @var \Magento\Review\Block\Form $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\LayoutInterface $layout
+ */
+declare(strict_types=1);
+
+use Magento\Review\Block\Form;
+use Magento\Framework\Escaper;
+
+/** @var Form $block */
+/** @var Escaper $escaper */
+
+$formKeyViewModel = $block->getData('formKeyViewModel');
+$product = $block->getProductInfo();
+$ratings = $block->getRatings();
+$postAction = $escaper->escapeUrl($block->getAction());
+?>
+<section id="review-form" class="mt-8 scroll-mt-8" aria-labelledby="review-form-heading">
+    <h2 id="review-form-heading" class="text-xl font-bold text-secondary mb-4">
+        <?= $escaper->escapeHtml(__('Write Your Own Review')) ?>
+    </h2>
+
+    <?php if ($block->getAllowWriteReviewFlag()): ?>
+        <form class="space-y-5 bg-surface rounded-2xl border border-subtle shadow-sm p-6"
+              action="<?= /* @noEscape -- escaped above */ $postAction ?>"
+              method="post"
+              id="review-form-submit">
+
+            <?php if ($formKeyViewModel): ?>
+                <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKeyViewModel->getFormKey()) ?>"/>
+            <?php else: ?>
+                <?= $block->getBlockHtml('formkey') ?>
+            <?php endif; ?>
+
+            <input type="hidden" name="id" value="<?= $escaper->escapeHtmlAttr((string) $product->getId()) ?>"/>
+
+            <fieldset>
+                <legend class="text-sm text-muted mb-4">
+                    <?= $escaper->escapeHtml(__("You're reviewing:")) ?>
+                    <strong class="text-secondary"><?= $escaper->escapeHtml($product->getName()) ?></strong>
+                </legend>
+
+                <?php if ($ratings && $ratings->getSize()): ?>
+                    <div class="mb-5">
+                        <p class="block text-sm font-medium text-secondary mb-2">
+                            <?= $escaper->escapeHtml(__('Your Rating')) ?>
+                            <span aria-hidden="true" class="text-error">*</span>
+                        </p>
+                        <?php foreach ($ratings as $rating): ?>
+                            <?php $options = $rating->getOptions(); ?>
+                            <div class="flex items-center gap-1 mb-3" role="radiogroup"
+                                 aria-label="<?= $escaper->escapeHtmlAttr($rating->getRatingCode()) ?>">
+                                <?php if ($ratings->getSize() > 1): ?>
+                                    <span class="text-sm text-secondary mr-2 w-20">
+                                        <?= $escaper->escapeHtml($rating->getRatingCode()) ?>
+                                    </span>
+                                <?php endif; ?>
+                                <?php $starIndex = 1; foreach ($options as $option): ?>
+                                    <label class="cursor-pointer group" for="<?= $escaper->escapeHtmlAttr($rating->getRatingCode() . '_' . $option->getValue()) ?>">
+                                        <input type="radio"
+                                               class="sr-only peer"
+                                               id="<?= $escaper->escapeHtmlAttr($rating->getRatingCode() . '_' . $option->getValue()) ?>"
+                                               name="ratings[<?= $escaper->escapeHtmlAttr((string) $rating->getId()) ?>]"
+                                               value="<?= $escaper->escapeHtmlAttr((string) $option->getId()) ?>"
+                                               <?php if ($starIndex === 1): ?>required<?php endif; ?>
+                                               aria-label="<?= $escaper->escapeHtmlAttr($starIndex === 1 ? __('1 star') : __('%1 stars', $starIndex)) ?>"/>
+                                        <?php // Star icon: filled via peer-checked CSS on siblings using has-[] ?>
+                                        <svg class="w-7 h-7 text-muted peer-checked:text-accent group-hover:text-warning-light transition-colors"
+                                             fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                        </svg>
+                                    </label>
+                                    <?php $starIndex++; endforeach; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="nickname_field" class="block text-sm font-medium text-secondary mb-1">
+                            <?= $escaper->escapeHtml(__('Nickname')) ?>
+                            <span aria-hidden="true" class="text-error">*</span>
+                        </label>
+                        <input type="text"
+                               name="nickname"
+                               id="nickname_field"
+                               required
+                               autocomplete="nickname"
+                               class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"/>
+                    </div>
+
+                    <div>
+                        <label for="summary_field" class="block text-sm font-medium text-secondary mb-1">
+                            <?= $escaper->escapeHtml(__('Summary')) ?>
+                            <span aria-hidden="true" class="text-error">*</span>
+                        </label>
+                        <input type="text"
+                               name="title"
+                               id="summary_field"
+                               required
+                               autocomplete="off"
+                               class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"/>
+                    </div>
+
+                    <div>
+                        <label for="review_field" class="block text-sm font-medium text-secondary mb-1">
+                            <?= $escaper->escapeHtml(__('Review')) ?>
+                            <span aria-hidden="true" class="text-error">*</span>
+                        </label>
+                        <textarea name="detail"
+                                  id="review_field"
+                                  required
+                                  rows="5"
+                                  autocomplete="off"
+                                  class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm resize-y"></textarea>
+                    </div>
+                </div>
+            </fieldset>
+
+            <?= $block->getChildHtml('form_fields_before') ?>
+            <?= $block->getChildHtml('form_additional_review_info') ?>
+
+            <button type="submit"
+                    class="w-full sm:w-auto px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md text-sm uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Submit Review')) ?>
+            </button>
+        </form>
+
+    <?php else: ?>
+        <div id="review-form" tabindex="-1" class="p-6 bg-surface rounded-2xl border border-subtle shadow-sm text-sm text-secondary">
+            <?= $escaper->escapeHtml(
+                __('Only registered users can write reviews. Please %1Sign in%2 or %3create an account%4',
+                    '<a href="' . $escaper->escapeUrl($block->getLoginLink()) . '" class="text-primary underline hover:text-primary-hover">',
+                    '</a>',
+                    '<a href="' . $escaper->escapeUrl($block->getRegisterUrl()) . '" class="text-primary underline hover:text-primary-hover">',
+                    '</a>'
+                ),
+                ['a']
+            ) ?>
+        </div>
+    <?php endif; ?>
+</section>

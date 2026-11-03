@@ -1,0 +1,152 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion customer account navigation -- vertical sidebar card.
+ *
+ * Wrapped in <hyperion-account-nav> so every internal link becomes an
+ * HTMX swap that targets `#hyperion-account-content` instead of a full
+ * page load. The Lit component also keeps the active-link style in
+ * sync with the URL on history back/forward.
+ *
+ * The "Sign Out" item lives in its own group at the bottom, separated
+ * by a border divider, because it's an authentication action rather
+ * than a navigation destination and should not be HTMX-enhanced -- the
+ * component's internal filter drops non-account routes anyway.
+ *
+ * Mobile (< lg): the card collapses into a top-docked <details>
+ * accordion keyed to the current page's heading so the content area
+ * gets the full viewport while the shopper reads / edits.
+ *
+ * @var \Magento\Customer\Block\Account\Navigation $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$links = $block->getLinks();
+$currentPath = rtrim($block->getUrl($block->getRequest()->getPathInfo()), '/');
+
+$navigationLinks = [];
+$signOutLink = null;
+
+foreach ($links as $link) {
+    if (!$link) {
+        continue;
+    }
+    $href = (string) $link->getHref();
+    if ($href === '') {
+        continue;
+    }
+    // Magento's Authorization plugin surfaces the Sign Out link via the same
+    // SortLinkInterface mechanism -- segregate it so the template can style
+    // it differently.
+    if (str_contains($href, '/customer/account/logout')) {
+        $signOutLink = $link;
+    } else {
+        $navigationLinks[] = $link;
+    }
+}
+
+/** Returns true when the link's href matches the current request path. */
+$isActive = static function ($link) use ($currentPath): bool {
+    if (!$link) {
+        return false;
+    }
+    if ($link->getIsHighlighted()) {
+        return true;
+    }
+    $href = rtrim((string) $link->getHref(), '/');
+    if ($href === '') {
+        return false;
+    }
+    return $currentPath === $href || str_starts_with($currentPath, $href . '/');
+};
+
+$baseLinkClass = 'flex items-center justify-between gap-2 px-4 py-2.5 rounded-md text-sm '
+               . 'text-secondary transition-colors '
+               . 'hover:bg-primary/10 hover:text-primary '
+               . 'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+$activeLinkClass = 'bg-primary/10 text-primary font-semibold';
+?>
+<aside class="lg:self-start lg:sticky lg:top-24"
+       aria-label="<?= $escaper->escapeHtmlAttr(__('Account navigation')) ?>">
+    <hyperion-account-nav class="block">
+
+        <?php /* -- Desktop card ---------------------------------------- */ ?>
+        <div class="hidden lg:block bg-surface border border-subtle rounded-xl shadow-sm">
+            <header class="px-4 py-3 border-b border-subtle">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-secondary">
+                    <?= $escaper->escapeHtml(__('My Account')) ?>
+                </h2>
+            </header>
+
+            <ul role="list" class="p-2 space-y-1">
+                <?php foreach ($navigationLinks as $link): $active = $isActive($link); ?>
+                    <li>
+                        <a href="<?= $escaper->escapeUrl($link->getHref()) ?>"
+                           class="<?= /* @noEscape */ $baseLinkClass ?><?= $active ? ' ' . $escaper->escapeHtmlAttr($activeLinkClass) : '' ?> is-active-candidate"
+                           <?= $active ? 'aria-current="page"' : '' ?>>
+                            <span class="truncate"><?= $escaper->escapeHtml(__($link->getLabel())) ?></span>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+
+            <?php if ($signOutLink): ?>
+                <div class="border-t border-subtle p-2">
+                    <a href="<?= $escaper->escapeUrl($signOutLink->getHref()) ?>"
+                       data-hyperion-nav-skip
+                       class="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm
+                              text-muted hover:text-primary hover:bg-primary/10
+                              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                        </svg>
+                        <span><?= $escaper->escapeHtml(__($signOutLink->getLabel())) ?></span>
+                    </a>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <?php /* -- Mobile disclosure ---------------------------------- */ ?>
+        <details class="lg:hidden bg-surface border border-subtle rounded-xl shadow-sm group">
+            <summary class="flex items-center justify-between px-4 py-3
+                            text-sm font-bold uppercase tracking-wider text-secondary cursor-pointer
+                            select-none list-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                <span><?= $escaper->escapeHtml(__('My Account')) ?></span>
+                <svg class="w-4 h-4 text-muted transition-transform group-open:rotate-180"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </summary>
+
+            <ul role="list" class="p-2 space-y-1 border-t border-subtle">
+                <?php foreach ($navigationLinks as $link): $active = $isActive($link); ?>
+                    <li>
+                        <a href="<?= $escaper->escapeUrl($link->getHref()) ?>"
+                           class="<?= /* @noEscape */ $baseLinkClass ?><?= $active ? ' ' . $escaper->escapeHtmlAttr($activeLinkClass) : '' ?>"
+                           <?= $active ? 'aria-current="page"' : '' ?>>
+                            <span class="truncate"><?= $escaper->escapeHtml(__($link->getLabel())) ?></span>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+                <?php if ($signOutLink): ?>
+                    <li class="border-t border-subtle mt-2 pt-2">
+                        <a href="<?= $escaper->escapeUrl($signOutLink->getHref()) ?>"
+                           data-hyperion-nav-skip
+                           class="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm text-muted
+                                  hover:text-primary hover:bg-primary/10 transition-colors">
+                            <span><?= $escaper->escapeHtml(__($signOutLink->getLabel())) ?></span>
+                        </a>
+                    </li>
+                <?php endif; ?>
+            </ul>
+        </details>
+
+    </hyperion-account-nav>
+
+    <?php /* Wishlist / compare sidebars under the menu (customer_account.xml moves
+            them into this container; `hidden lg:block`, the header icons serve phones). */ ?>
+    <?= $block->getChildHtml('hyperion.account.sidebar') ?>
+</aside>

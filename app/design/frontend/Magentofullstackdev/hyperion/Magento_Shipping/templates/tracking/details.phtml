@@ -1,0 +1,77 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * One tracking number: carrier details as a definition list (child of
+ * Magento_Shipping::tracking/popup.phtml, data `track` and `storeSupportEmail`).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magento\Shipping\Block\Tracking\Popup $parentBlock */
+$parentBlock = $block->getParentBlock();
+$track = $block->getData('track');
+$email = (string) $block->getData('storeSupportEmail');
+$fields = [
+    'Status' => 'getStatus',
+    'Signed by' => 'getSignedby',
+    'Delivered to' => 'getDeliveryLocation',
+    'Shipped or billed on' => 'getShippedDate',
+    'Service Type' => 'getService',
+    'Weight' => 'getWeight',
+];
+$number = is_object($track) ? (string) $track->getTracking() : (string) ($track['number'] ?? '');
+$rows = [];
+if (is_object($track)) {
+    $rows[] = [__('Tracking Number'), $number];
+    if ($track->getCarrierTitle()) {
+        $rows[] = [__('Carrier'), (string) $track->getCarrierTitle()];
+    }
+    if ($track->getErrorMessage()) {
+        $rows[] = [__('Error'), null];
+    } elseif ($track->getTrackSummary()) {
+        $rows[] = [__('Info'), (string) $track->getTrackSummary()];
+    } elseif ($track->getUrl()) {
+        $rows[] = [__('Track'), ['url' => (string) $track->getUrl()]];
+    } else {
+        foreach ($fields as $title => $method) {
+            if (!empty($track->$method())) {
+                $rows[] = [__($title), (string) $track->$method()];
+            }
+        }
+        if ($track->getDeliverydate()) {
+            $rows[] = [
+                (string) $parentBlock->getDeliveryDateTitle()->getTitle($track),
+                (string) $parentBlock->formatDeliveryDateTime($track->getDeliverydate(), $track->getDeliverytime()),
+            ];
+        }
+    }
+} elseif (!empty($track['number'])) {
+    $rows[] = [(string) ($track['title'] ?: __('N/A')), (string) $track['number']];
+}
+?>
+<dl class="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-x-4 gap-y-2 text-sm" data-hyperion-tracking-details="<?= $escaper->escapeHtmlAttr($number) ?>">
+    <?php foreach ($rows as [$label, $value]): ?>
+        <dt class="font-medium text-muted"><?= $escaper->escapeHtml($label) ?></dt>
+        <dd class="text-secondary">
+            <?php if ($value === null): ?>
+                <?= $escaper->escapeHtml(__('Tracking information is currently not available. Please ')) ?>
+                <?php if ($parentBlock->getContactUsEnabled()): ?>
+                    <a href="<?= $escaper->escapeUrl($parentBlock->getContactUs()) ?>" class="text-primary hover:underline">
+                        <?= $escaper->escapeHtml(__('contact us')) ?>
+                    </a>
+                    <?= $escaper->escapeHtml(__(' for more information or ')) ?>
+                <?php endif; ?>
+                <?= $escaper->escapeHtml(__('email us at ')) ?>
+                <a href="mailto:<?= $escaper->escapeHtmlAttr($email) ?>" class="text-primary hover:underline"><?= $escaper->escapeHtml($email) ?></a>
+            <?php elseif (is_array($value)): ?>
+                <a href="<?= $escaper->escapeUrl($value['url']) ?>" target="_blank" rel="noopener" class="text-primary hover:underline break-all">
+                    <?= $escaper->escapeHtml($value['url']) ?>
+                </a>
+            <?php else: ?>
+                <?= $escaper->escapeHtml($value) ?>
+            <?php endif; ?>
+        </dd>
+    <?php endforeach; ?>
+</dl>

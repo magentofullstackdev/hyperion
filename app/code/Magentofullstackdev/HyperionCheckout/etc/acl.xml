@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Admin ACL for Magentofullstackdev_HyperionCheckout configuration.
+
+    Declares the resource node that protects the
+    Stores -> Configuration -> Hyperion -> Checkout section. Without this
+    entry, Magento would silently hide the section from admin users who
+    haven't been granted a matching ACL role.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl>
+        <resources>
+            <resource id="Magento_Backend::admin">
+                <resource id="Magento_Backend::stores">
+                    <resource id="Magento_Backend::stores_settings">
+                        <resource id="Magento_Config::config">
+                            <resource id="Magentofullstackdev_HyperionCheckout::config"
+                                      title="Hyperion Checkout"
+                                      translate="title"
+                                      sortOrder="400"/>
+                        </resource>
+                    </resource>
+                </resource>
+            </resource>
+        </resources>
+    </acl>
+</config>

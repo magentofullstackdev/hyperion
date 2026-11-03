@@ -1,0 +1,100 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion order detail shell, shared by the order, invoice, shipment,
+ * credit memo and print pages (customer and guest).
+ *
+ * The "Order # NNN" heading is owned by the Hyperion account shell
+ * (Magentofullstackdev\HyperionCustomer\Block\Account\Shell::getPageHeading).
+ * Layout arguments: `show_actions` (reorder / cancel / print buttons,
+ * rendered by the `actions` child, HyperionCustomer\Block\Order\Actions),
+ * `items_alias` (child that lists the items, default `order_items`)
+ * and `items_title`. Without an `actions` child (guest pages) only the
+ * status pill is shown. `show_comments` adds the status history comments
+ * that are visible on the storefront (core's `order.comments` block).
+ * `show_order_date` false drops the "Order Date" line: the print pages
+ * carry it in their document header (`Magento_Theme::html/print/header.phtml`).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magento\Sales\Model\Order $order */
+$order = $block->getOrder();
+$actionsHtml = trim($block->getChildHtml('actions'));
+$infoHtml = $block->getChildHtml('info');
+$itemsTitle = $block->getData('items_title') ?: __('Items Ordered');
+$backUrl = $block->getBackUrl();
+$trackingHtml = $order->getTracksCollection()->count() ? $block->getChildHtml('tracking-info-link') : '';
+$comments = $block->getData('show_comments') ? $order->getVisibleStatusHistory() : [];
+$showOrderDate = $block->getData('show_order_date') !== false;
+?>
+<section class="space-y-6" aria-labelledby="hyperion-account-heading">
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <?php if ($showOrderDate): ?>
+            <p class="text-sm text-muted">
+                <?= $escaper->escapeHtml(__(
+                    'Order Date: %1',
+                    $block->formatDate($order->getCreatedAt(), \IntlDateFormatter::MEDIUM)
+                )) ?>
+            </p>
+        <?php endif; ?>
+
+        <div class="flex items-center gap-3 flex-wrap">
+            <?= /* @noEscape */ $trackingHtml ?>
+            <?php if ($actionsHtml !== ''): ?>
+                <?= /* @noEscape */ $actionsHtml ?>
+            <?php else: ?>
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+                             bg-primary/10 text-primary border border-primary/30">
+                    <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
+                </span>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php if ($infoHtml !== ''): ?>
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+            <?= /* @noEscape */ $infoHtml ?>
+        </article>
+    <?php endif; ?>
+
+    <?php if ($comments !== []): ?>
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4" data-hyperion-order-comments>
+            <h3 class="text-base font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('About Your Order')) ?>
+            </h3>
+            <dl class="space-y-3">
+                <?php foreach ($comments as $comment): ?>
+                    <div class="text-sm">
+                        <dt class="text-xs font-medium text-muted">
+                            <?= $escaper->escapeHtml($block->formatDate($comment->getCreatedAt(), \IntlDateFormatter::MEDIUM, true)) ?>
+                        </dt>
+                        <dd class="text-secondary whitespace-pre-line">
+                            <?= $escaper->escapeHtml($comment->getComment(), ['b', 'br', 'strong', 'i', 'u', 'a']) ?>
+                        </dd>
+                    </div>
+                <?php endforeach; ?>
+            </dl>
+        </article>
+    <?php endif; ?>
+
+    <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+        <h3 class="text-base font-semibold text-secondary">
+            <?= $escaper->escapeHtml($itemsTitle) ?>
+        </h3>
+        <?= $block->getChildHtml($block->getData('items_alias') ?: 'order_items') ?>
+    </article>
+
+    <?php if ($backUrl): ?>
+        <div class="flex items-center justify-end pt-4 border-t border-subtle print:hidden">
+            <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml($block->getBackTitle()) ?>
+            </a>
+        </div>
+    <?php endif; ?>
+</section>

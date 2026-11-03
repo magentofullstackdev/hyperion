@@ -1,0 +1,232 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion layered navigation -- sidebar variant (used on 2col/3col PLPs).
+ *
+ * Visual contract (matches main-branch screenshot):
+ *
+ *   SHOP BY                       (uppercase tracking-wider heading)
+ *   +--------------------------+
+ *   | CATEGORY            [^] |   bordered card; chevron up = open
+ *   +--------------------------+
+ *   |  Jackets             12 |
+ *   |  Hoodies & Sweatshirts 12|
+ *   |  Tees                12 |
+ *   +--------------------------+
+ *   +--------------------------+
+ *   | STYLE               [v] |   each filter is a separate card
+ *   +--------------------------+
+ *   +--------------------------+
+ *   | SIZE                [v] |
+ *   +--------------------------+
+ *
+ * The CATEGORY filter is rendered with `<details open>` so it expands by
+ * default, matching the screenshot. Other groups stay collapsed until the
+ * shopper clicks them. We use native <details>/<summary> (no JS) so the
+ * disclosure works even before the Lit bundle upgrades.
+ *
+ * Dual context: the full page, and the grid fragment response
+ * (HyperionCatalog\Model\Listing\FragmentResponse), which re-renders this
+ * block for the new layer state and swaps it out of band into the page: the
+ * wrapper `#hyperion-layered-nav` is therefore ALWAYS emitted (hidden when
+ * there is nothing to show), and every link is built by the Listing view
+ * model so it points at the page URL, never at the fragment route core's
+ * `_current` URLs resolve to inside a fragment request. lib/listing-filters.js
+ * carries the open cards and the focus across the swap.
+ *
+ * @var \Magento\LayeredNavigation\Block\Navigation $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+// Collect only filters that have items.
+$filters = [];
+foreach ($block->getFilters() as $filter) {
+    if ($filter->getItemsCount() > 0) {
+        $filters[] = $filter;
+    }
+}
+
+// Active filters show their chips and Clear all even when no further filter
+// is available (the applied filter was the only one): otherwise the shopper
+// has no way back to the unfiltered listing.
+$hasActiveFilters = false;
+try {
+    $hasActiveFilters = count($block->getLayer()->getState()->getFilters()) > 0;
+} catch (\Throwable $e) {
+    $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->warning('layer/view.phtml: layer state', $e);
+}
+
+// Resolve fragment URL + grid id for HTMX-driven swaps. The list block
+// (category listing or search results) and its grid fragment endpoint come
+// from the Listing view model, so search results swap like a category.
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$listBlock = $listing->getListBlock($block->getLayout());
+$fragmentUrl = $listing->getFragmentUrl($listBlock);
+$gridId = $listing->getGridTargetId();
+
+// Swatch attributes (visual: colour / image chips, text: pills) render their
+// items as a chip grid instead of the text list; the view model hands the
+// template the data, the template owns the markup and the classes.
+$swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\LayerFilterSwatches::class);
+
+// Detect whether the layered-nav block is rendering in the sidebar
+// column (2col/3col page layouts) or inline above the product grid
+// (1column page layout). In sidebar mode the first filter is expanded
+// by default so shoppers see at least one group of options on page
+// load; inline mode keeps every filter collapsed because the chips sit
+// in a horizontal row and an auto-expanded card would overflow under
+// the siblings.
+$parentName = (string) $block->getLayout()->getParentName($block->getNameInLayout());
+$isInlineVariant = $parentName !== 'sidebar.main';
+$showSection = !empty($filters) || $hasActiveFilters;
+?>
+<div id="hyperion-layered-nav" data-hyperion-layered-nav<?= $showSection ? '' : ' hidden' ?>>
+<?php if ($showSection): ?>
+<section class="space-y-4" aria-labelledby="hyperion-filters-title">
+
+    <h2 id="hyperion-filters-title"
+        class="text-sm font-bold uppercase tracking-wider text-secondary">
+        <?= $escaper->escapeHtml(__('Shop By')) ?>
+    </h2>
+
+    <?= $block->getChildHtml('state') ?>
+
+    <?php /*
+        hyperion-filter-accordion enforces the "only one filter expanded at
+        a time" rule. The element renders in light DOM (no shadow) -- every
+        <details> card stays server-rendered so the page is usable before
+        the Lit bundle upgrades. The component only attaches a capture-
+        phase `toggle` listener and closes siblings when one card opens.
+    */ ?>
+    <?php if (!empty($filters)): ?>
+    <hyperion-filter-accordion class="block space-y-3">
+        <?php foreach ($filters as $index => $filter):
+            $name = (string) $filter->getName();
+            // Sidebar variant: open the first filter by default so shoppers
+            // land on an already-scannable group of options. Inline (1column)
+            // variant keeps every card closed because the cards sit in a
+            // horizontal row -- auto-expanding one makes that card ~12px taller
+            // than its siblings, Chrome reserving intrinsic height for the
+            // implicit ::details-content slot even when the inner <ul> is
+            // position:absolute.
+            $openByDefault = !$isInlineVariant && $index === 0;
+        ?>
+            <details
+                <?= $openByDefault ? 'open' : '' ?>
+                data-hyperion-filter="<?= $escaper->escapeHtmlAttr((string) $filter->getRequestVar()) ?>"
+                class="group rounded-xl bg-surface border border-subtle overflow-hidden">
+                <summary class="flex cursor-pointer items-center justify-between
+                                px-4 py-3 text-sm font-bold uppercase tracking-wide
+                                text-secondary select-none
+                                hover:bg-surface-raised transition-colors
+                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <span><?= $escaper->escapeHtml(__($name)) ?></span>
+                    <svg class="w-4 h-4 text-muted transition-transform group-open:rotate-180"
+                         fill="none" stroke="currentColor" stroke-width="2"
+                         viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </summary>
+
+                <?php if ($swatchFilters->isSwatchFilter($filter)): ?>
+                <?php /*
+                    Swatch filter: one chip per option. A chip is the link itself and
+                    carries the SAME HTMX contract as a text item (hx-get, hx-target,
+                    hx-swap, hx-push-url); its accessible name is "Label (count)".
+                    Colour chips paint the validated hex inline (same practice as the
+                    product page swatches), light colours get an inner ring so a white
+                    chip stays visible on the white card; image chips use the
+                    swatch_thumb as background; text swatches are compact pills.
+                */ ?>
+                <?php
+                $isVisual = $swatchFilters->isVisualSwatchFilter($filter);
+                $swatches = $swatchFilters->getSwatches($filter);
+                ?>
+                <ul role="list"
+                    class="border-t border-subtle p-3 flex flex-wrap gap-2 max-h-72 overflow-y-auto"
+                    data-hyperion-swatch-filter="<?= $escaper->escapeHtmlAttr($swatchFilters->getAttributeCode($filter)) ?>"
+                    data-hyperion-swatch-kind="<?= $isVisual ? 'visual' : 'text' ?>">
+                    <?php foreach ($filter->getItems() as $item): ?>
+                        <?php
+                        $swatch = $swatches[(int) $item->getValue()] ?? null;
+                        if ($swatch === null) {
+                            continue;
+                        }
+                        $chipName = $swatch['label'] . ' (' . $swatch['count'] . ')';
+                        $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl());
+                        ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($itemUrl) ?>"
+                               <?php if ($fragmentUrl !== ''): ?>
+                               hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, (string) $item->getUrl())) ?>"
+                               hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                               hx-swap="outerHTML"
+                               hx-push-url="<?= $escaper->escapeUrl($itemUrl) ?>"
+                               <?php endif; ?>
+                               aria-label="<?= $escaper->escapeHtmlAttr($chipName) ?>"
+                               title="<?= $escaper->escapeHtmlAttr($chipName) ?>"
+                               data-hyperion-swatch-option="<?= $escaper->escapeHtmlAttr((string) $item->getValue()) ?>"
+                               data-hyperion-swatch-type="<?= $escaper->escapeHtmlAttr($swatch['type']) ?>"
+                               <?php if ($swatch['type'] === 'text'): ?>
+                               class="min-w-[2.5rem] h-9 px-2.5 inline-flex items-center justify-center rounded-lg
+                                      border border-subtle text-xs font-semibold text-secondary
+                                      hover:border-primary hover:text-primary transition-colors
+                                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                                <?= $escaper->escapeHtml($swatch['value']) ?>
+                               <?php else: ?>
+                               class="inline-flex rounded-full transition-transform hover:scale-110
+                                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                                <?php if ($swatch['type'] === 'color'): ?>
+                                <span class="block w-8 h-8 rounded-full border border-subtle shadow-sm <?= $swatch['light'] ? 'ring-1 ring-inset ring-muted/40' : '' ?>"
+                                      style="background-color: <?= $escaper->escapeHtmlAttr($swatch['value']) ?>"
+                                      aria-hidden="true"></span>
+                                <?php else: ?>
+                                <span class="block w-8 h-8 rounded-full border border-subtle shadow-sm bg-cover bg-center"
+                                      style="background-image: url('<?= $escaper->escapeUrl($swatch['value']) ?>')"
+                                      aria-hidden="true"></span>
+                                <?php endif; ?>
+                               <?php endif; ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php else: ?>
+                <ul role="list" class="border-t border-subtle py-2 max-h-72 overflow-y-auto">
+                    <?php foreach ($filter->getItems() as $item): ?>
+                        <?php $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl()); ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($itemUrl) ?>"
+                               <?php if ($fragmentUrl !== ''): ?>
+                               hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, (string) $item->getUrl())) ?>"
+                               hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                               hx-swap="outerHTML"
+                               hx-push-url="<?= $escaper->escapeUrl($itemUrl) ?>"
+                               <?php endif; ?>
+                               class="flex items-center justify-between gap-3 px-4 py-2 text-sm
+                                      text-secondary hover:bg-primary/10 hover:text-primary
+                                      transition-colors
+                                      focus:outline-none focus:ring-2 focus:ring-primary">
+                                <?php /*
+                                    Filter labels: price filters return formatted markup
+                                    (e.g. <span class="price">€30.00</span>); other types
+                                    return plain text. We render raw -- Magento's filter
+                                    classes own their escaping.
+                                */ ?>
+                                <span class="truncate"><?= /* @noEscape */ $item->getLabel() ?></span>
+                                <span class="text-xs text-muted shrink-0">
+                                    <?= (int) $item->getCount() ?>
+                                </span>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </details>
+        <?php endforeach; ?>
+    </hyperion-filter-accordion>
+    <?php endif; ?>
+
+</section>
+<?php endif; ?>
+</div>

@@ -1,0 +1,129 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion HTMX add-to-cart response fragment.
+ *
+ * Rendered by the `hyperion_catalog_product_addtocart` layout handle, which
+ * is invoked by Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\AddPlugin on
+ * HTMX add-to-cart POSTs.
+ *
+ * Returns two atoms in a single response body:
+ *   1. In-target success / error notification that REPLACES
+ *      `#hyperion-notification` via `hx-swap="outerHTML"`. The PDP template
+ *      ships a hidden placeholder with this id so HTMX can locate the
+ *      target before the request fires.
+ *   2. Out-of-band `<span id="hyperion-mini-cart-count" hx-swap-oob="true">`
+ *      that refreshes the mini-cart badge in the header without
+ *      re-rendering anything else.
+ *
+ * Block data (set by AddPlugin::afterExecute -> setData):
+ *   - `message_html` -- aggregated message-manager output, already escaped
+ *                       by Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector
+ *   - `is_error`     -- true when any message is an error, warning or notice
+ *   - `gtag_event_json` -- GA4 `add_to_cart` payload (empty when tracking is
+ *     off); shipped out-of-band into `#hyperion-gtag-events`, which the
+ *     `<hyperion-gtag>` element renders on every page while tracking is on.
+ *   - `checkout_session` -- optional Magento\Checkout\Model\Session\Proxy
+ *     forwarded through layout XML; when absent we still render a count of
+ *     0 and the next hx-trigger="load" on `<hyperion-mini-cart>` reconciles.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+$messageHtml = trim((string) $block->getData('message_html'));
+$isError = (bool) $block->getData('is_error');
+
+// Default user-facing copy when the message manager hands back nothing.
+if ($messageHtml === '') {
+    $messageHtml = $escaper->escapeHtml(
+        $isError
+            ? (string) __('Sorry, we could not add this item to your cart.')
+            : (string) __('Added to your cart.')
+    );
+}
+
+// Prefer the AddPlugin-supplied item count when present; otherwise read
+// from the layout-injected checkout session; else fall back to 0.
+$itemCount = $block->getData('item_count');
+if ($itemCount === null) {
+    try {
+        $checkoutSession = $block->getData('checkout_session');
+        if ($checkoutSession !== null && method_exists($checkoutSession, 'getQuote')) {
+            $quote = $checkoutSession->getQuote();
+            $itemCount = $quote ? (int) $quote->getItemsQty() : 0;
+        } else {
+            $itemCount = 0;
+        }
+    } catch (\Throwable $e) {
+        $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->warning('addtocart-response.phtml: cart item count', $e);
+        $itemCount = 0;
+    }
+}
+$itemCount = (int) $itemCount;
+
+$tone = $isError ? 'error' : 'success';
+
+?>
+<?php /* In-target: REPLACES the hidden #hyperion-notification placeholder.
+
+        Emitted as <hyperion-notification> -- the Lit component (see
+        web/js/components/hyperion-notification.js) renders the close
+        button inside its Shadow DOM and auto-dismisses the toast
+        after `auto-close` milliseconds.
+
+        Presentation is keyed off the `data-tone` attribute, NOT
+        Tailwind utility classes. HTMX 2.x's swap algorithm
+        temporarily strips the class attribute during the settle
+        phase, which briefly pushed an unstyled, in-flow message
+        above the product grid before the classes came back. Data
+        attributes survive the swap unchanged, so `_components.css`
+        can paint the fixed top-right toast chrome from the very
+        first frame. */ ?>
+<hyperion-notification id="hyperion-notification"
+     role="<?= $isError ? 'alert' : 'status' ?>"
+     aria-live="<?= $isError ? 'assertive' : 'polite' ?>"
+     data-hyperion-notification
+     data-tone="<?= $escaper->escapeHtmlAttr($tone) ?>"
+     auto-close="<?= $isError ? 8000 : 3500 ?>"
+     close-label="<?= $escaper->escapeHtmlAttr(__('Dismiss notification')) ?>">
+    <p class="font-medium"><?= /* @noEscape -- escaped by MessageCollector */ $messageHtml ?></p>
+    <?php if (!$isError): ?>
+        <p class="text-sm mt-1 opacity-90">
+            <?= $escaper->escapeHtml(__('Review your cart to continue shopping or check out.')) ?>
+        </p>
+    <?php endif; ?>
+</hyperion-notification>
+
+<?php /*
+    Out-of-band: updates the mini-cart badge in the header chrome.
+
+    Classes MUST mirror Magento_Checkout/templates/minicart/count.phtml so
+    the post-ATC swap is visually identical to the post-refresh render of
+    the same badge. The `absolute -top-1 -right-1` keeps it anchored to
+    the cart icon corner; `min-w-[1.125rem] px-1 py-0.5 text-[10px]`
+    produces the snug round pill of the header badge.
+    Without these the header re-renders as the bigger floating circle
+    of the unstyled fallback -- same count, wrong chrome.
+*/ ?>
+<?php
+$countBadgeClasses = 'absolute -top-1 -right-1 min-w-[1.125rem] px-1 py-0.5 text-[10px] '
+                   . 'leading-none font-bold text-center rounded-full '
+                   . 'bg-primary text-on-primary';
+if ($itemCount <= 0) {
+    $countBadgeClasses .= ' hidden';
+}
+?>
+<span id="hyperion-mini-cart-count"
+      hx-swap-oob="true"
+      aria-live="polite"
+      aria-label="<?= $escaper->escapeHtmlAttr(__('%1 items in cart', $itemCount)) ?>"
+      class="<?= $escaper->escapeHtmlAttr($countBadgeClasses) ?>"><?= $itemCount > 0 ? (int) $itemCount : '' ?></span>
+<?php $gtagJson = (string) $block->getData('gtag_event_json'); ?>
+<?php if ($gtagJson !== ''): ?>
+<div id="hyperion-gtag-events" hx-swap-oob="innerHTML" hidden>
+    <span data-hyperion-gtag-event="add_to_cart" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($gtagJson) ?>" hidden></span>
+</div>
+<?php endif; ?>

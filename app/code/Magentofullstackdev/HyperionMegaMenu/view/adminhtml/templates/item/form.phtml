@@ -1,0 +1,237 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Inspector form of one menu item (fetched into the builder's right column).
+ *
+ * In a store view a shared item shows "Use Default Value" checkboxes on the
+ * fields a store can override; the structural fields are read only there.
+ *
+ * @var \Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\ItemForm $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+use Magentofullstackdev\HyperionMegaMenu\Model\Item;
+
+$item = $block->getItem();
+$storeId = $block->getStoreId();
+$owns = $block->ownsItem();
+$storeScope = $storeId > 0 && !$owns;
+$type = $item ? $item->getItemType() : Item::TYPE_CATEGORY;
+$target = (string) $block->getValue('item_target_value', '');
+$readonly = $storeScope ? ' disabled' : '';
+$useDefault = static function (string $field) use ($block, $storeScope, $escaper): string {
+    if (!$storeScope) {
+        return '';
+    }
+    $checked = $block->isOverridden($field) ? '' : ' checked';
+    return '<div class="admin__field-service"><input type="checkbox" class="admin__control-checkbox" name="use_default[' . $field . ']" value="1"'
+        . ' id="hmm-use-default-' . $field . '" data-hmm-use-default="' . $field . '"' . $checked . '>'
+        . '<label class="admin__field-label" for="hmm-use-default-' . $field . '"><span>' . $escaper->escapeHtml(__('Use Default Value')) . '</span></label></div>';
+};
+$storeDisabled = static fn (string $field): string => $storeScope && !$block->isOverridden($field) ? ' disabled' : '';
+?>
+<form class="hmm-form" data-hmm-form method="post" action="#"
+      data-hmm-item-id="<?= $item ? (int) $item->getId() : 0 ?>"
+      data-hmm-title="<?= $escaper->escapeHtmlAttr($item ? $item->getTitle() : (string) __('New item')) ?>">
+    <input type="hidden" name="item_id" value="<?= $item ? (int) $item->getId() : 0 ?>">
+    <input type="hidden" name="parent_id" value="<?= (int) $block->getParentId() ?>">
+    <input type="hidden" name="group_id" value="<?= (int) $block->getGroupId() ?>">
+
+    <fieldset class="admin__fieldset">
+        <div class="admin__field field-title _required">
+            <label class="admin__field-label" for="hmm-title"><span><?= $escaper->escapeHtml(__('Title')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="text" class="admin__control-text" id="hmm-title" name="title" required
+                       value="<?= $escaper->escapeHtmlAttr((string) $block->getValue('title', '')) ?>"<?= /* @noEscape */ $storeDisabled('title') ?>>
+                <?= /* @noEscape */ $useDefault('title') ?>
+            </div>
+        </div>
+
+        <div class="admin__field field-status">
+            <label class="admin__field-label" for="hmm-active"><span><?= $escaper->escapeHtml(__('Enabled')) ?></span></label>
+            <div class="admin__field-control">
+                <div class="admin__actions-switch">
+                    <input type="checkbox" class="admin__actions-switch-checkbox" id="hmm-active" name="is_active" value="1"
+                        <?= (int) $block->getValue('is_active', 1) ? 'checked' : '' ?><?= /* @noEscape */ $storeDisabled('is_active') ?>>
+                    <label class="admin__actions-switch-label" for="hmm-active">
+                        <span class="admin__actions-switch-text" data-text-on="<?= $escaper->escapeHtmlAttr(__('Yes')) ?>" data-text-off="<?= $escaper->escapeHtmlAttr(__('No')) ?>"></span>
+                    </label>
+                </div>
+                <?= /* @noEscape */ $useDefault('is_active') ?>
+            </div>
+        </div>
+
+        <div class="admin__field field-type">
+            <label class="admin__field-label" for="hmm-type"><span><?= $escaper->escapeHtml(__('Link type')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-type" name="item_type" data-hmm-type<?= /* @noEscape */ $readonly ?>>
+                    <?php foreach ($block->getTypeLabels() as $value => $label): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($value) ?>"<?= $value === $type ? ' selected' : '' ?>><?= $escaper->escapeHtml($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+
+        <div class="admin__field field-target" data-hmm-target="category">
+            <label class="admin__field-label" for="hmm-target-category"><span><?= $escaper->escapeHtml(__('Category')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-target-category" name="target_category"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
+                    <?php foreach ($block->getCategoryOptions() as $option): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr((string) $option['value']) ?>"<?= $type === Item::TYPE_CATEGORY && (string) $option['value'] === $target ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?= /* @noEscape */ $useDefault('item_target_value') ?>
+            </div>
+        </div>
+        <div class="admin__field field-target" data-hmm-target="category" data-hmm-structure>
+            <label class="admin__field-label" for="hmm-children-depth"><span><?= $escaper->escapeHtml(__('Live subcategories')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-children-depth" name="children_depth"<?= /* @noEscape */ $readonly ?>>
+                    <?php $depth = $item ? $item->getChildrenDepth() : 0; ?>
+                    <?php foreach ([0 => __('None (only the items below)'), 1 => __('One level'), 2 => __('Two levels'), 3 => __('Three levels')] as $value => $label): ?>
+                        <option value="<?= (int) $value ?>"<?= $value === $depth ? ' selected' : '' ?>><?= $escaper->escapeHtml($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('Renders the category\'s subcategories under the item, always up to date, after the items you add here.')) ?></div>
+            </div>
+        </div>
+        <div class="admin__field field-target" data-hmm-target="product">
+            <label class="admin__field-label" for="hmm-target-product"><span><?= $escaper->escapeHtml(__('Product SKU')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="text" class="admin__control-text" id="hmm-target-product" name="target_product"
+                       value="<?= $type === Item::TYPE_PRODUCT ? $escaper->escapeHtmlAttr($target) : '' ?>"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
+                <?= /* @noEscape */ $useDefault('item_target_value') ?>
+            </div>
+        </div>
+        <div class="admin__field field-target" data-hmm-target="cms_page">
+            <label class="admin__field-label" for="hmm-target-cms-page"><span><?= $escaper->escapeHtml(__('CMS page')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-target-cms-page" name="target_cms_page"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
+                    <option value=""><?= $escaper->escapeHtml(__('-- Please Select --')) ?></option>
+                    <?php foreach ($block->getCmsPageOptions() as $option): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"<?= !empty($option['disabled']) ? ' disabled' : '' ?><?= $type === Item::TYPE_CMS_PAGE && $option['value'] === $target ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?= /* @noEscape */ $useDefault('item_target_value') ?>
+            </div>
+        </div>
+        <div class="admin__field field-target" data-hmm-target="cms_block">
+            <label class="admin__field-label" for="hmm-target-cms-block"><span><?= $escaper->escapeHtml(__('CMS block')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-target-cms-block" name="target_cms_block"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
+                    <option value=""><?= $escaper->escapeHtml(__('-- Please Select --')) ?></option>
+                    <?php foreach ($block->getCmsBlockOptions() as $option): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"<?= !empty($option['disabled']) ? ' disabled' : '' ?><?= $type === Item::TYPE_CMS_BLOCK && $option['value'] === $target ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('Inside a mega panel the block fills its column; an inactive block is listed but cannot be chosen.')) ?></div>
+                <?= /* @noEscape */ $useDefault('item_target_value') ?>
+            </div>
+        </div>
+        <div class="admin__field field-target" data-hmm-target="custom">
+            <label class="admin__field-label" for="hmm-target-custom"><span><?= $escaper->escapeHtml(__('URL')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="text" class="admin__control-text" id="hmm-target-custom" name="target_custom" placeholder="{storeurl}path or https://..."
+                       value="<?= $type === Item::TYPE_CUSTOM ? $escaper->escapeHtmlAttr($target) : '' ?>"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.')) ?></div>
+                <?= /* @noEscape */ $useDefault('item_target_value') ?>
+            </div>
+        </div>
+
+        <div class="admin__field field-badge">
+            <label class="admin__field-label" for="hmm-badge-text"><span><?= $escaper->escapeHtml(__('Badge')) ?></span></label>
+            <div class="admin__field-control hmm-inline-fields">
+                <input type="text" class="admin__control-text" id="hmm-badge-text" name="badge_text" maxlength="64" placeholder="NEW, SALE, -20%"
+                       value="<?= $escaper->escapeHtmlAttr((string) $block->getValue('badge_text', '')) ?>"<?= /* @noEscape */ $storeDisabled('badge_text') ?>>
+                <select class="admin__control-select" name="badge_color" aria-label="<?= $escaper->escapeHtmlAttr(__('Badge color')) ?>"<?= /* @noEscape */ $storeDisabled('badge_color') ?>>
+                    <?php $color = (string) $block->getValue('badge_color', 'primary'); ?>
+                    <?php foreach ($block->getBadgeColorOptions() as $option): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"<?= $option['value'] === $color ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?= /* @noEscape */ $useDefault('badge_text') ?>
+                <?= /* @noEscape */ $useDefault('badge_color') ?>
+            </div>
+        </div>
+    </fieldset>
+
+    <fieldset class="admin__fieldset" data-hmm-structure>
+        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Layout and links')) ?></span></legend>
+        <div class="admin__field field-width" data-hmm-root-only>
+            <label class="admin__field-label" for="hmm-width"><span><?= $escaper->escapeHtml(__('Dropdown')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-width" name="dropdown_width"<?= /* @noEscape */ $readonly ?>>
+                    <?php $width = $item ? $item->getDropdownWidth() : 0; ?>
+                    <option value="0"<?= $width <= 1 ? ' selected' : '' ?>><?= $escaper->escapeHtml(__('Simple dropdown')) ?></option>
+                    <?php for ($i = 2; $i <= 12; $i++): ?>
+                        <option value="<?= (int) $i ?>"<?= $width === $i ? ' selected' : '' ?>><?= $escaper->escapeHtml(__('Mega panel, %1 of 12 columns', $i)) ?></option>
+                    <?php endfor; ?>
+                </select>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('A root item: 2 or more opens a full width panel whose sub-items are the columns. A sub-item: its column width in the panel (3 when 0).')) ?></div>
+            </div>
+        </div>
+        <div class="admin__field field-container">
+            <label class="admin__field-label" for="hmm-container"><span><?= $escaper->escapeHtml(__('Panel in the site container')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="checkbox" class="admin__control-checkbox" id="hmm-container" name="is_container" value="1"
+                    <?= !$item || (int) $item->getData('is_container') ? 'checked' : '' ?><?= /* @noEscape */ $readonly ?>>
+                <label class="admin__field-label" for="hmm-container"><span><?= $escaper->escapeHtml(__('Keep the panel content as wide as the page container')) ?></span></label>
+            </div>
+        </div>
+        <div class="admin__field field-target-window">
+            <label class="admin__field-label" for="hmm-url-target"><span><?= $escaper->escapeHtml(__('Open in')) ?></span></label>
+            <div class="admin__field-control">
+                <select class="admin__control-select" id="hmm-url-target" name="url_target"<?= /* @noEscape */ $readonly ?>>
+                    <option value="_self"><?= $escaper->escapeHtml(__('Same window')) ?></option>
+                    <option value="_blank"<?= $item && $item->getData('url_target') === '_blank' ? ' selected' : '' ?>><?= $escaper->escapeHtml(__('New window')) ?></option>
+                </select>
+            </div>
+        </div>
+        <div class="admin__field field-nofollow">
+            <label class="admin__field-label" for="hmm-nofollow"><span><?= $escaper->escapeHtml(__('rel="nofollow"')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="checkbox" class="admin__control-checkbox" id="hmm-nofollow" name="nofollow" value="1"
+                    <?= $item && (int) $item->getData('nofollow') ? 'checked' : '' ?><?= /* @noEscape */ $readonly ?>>
+                <label class="admin__field-label" for="hmm-nofollow"><span><?= $escaper->escapeHtml(__('Ask search engines not to follow the link')) ?></span></label>
+            </div>
+        </div>
+        <div class="admin__field field-class">
+            <label class="admin__field-label" for="hmm-class"><span><?= $escaper->escapeHtml(__('CSS class')) ?></span></label>
+            <div class="admin__field-control">
+                <input type="text" class="admin__control-text" id="hmm-class" name="custom_class" maxlength="255"
+                       value="<?= $escaper->escapeHtmlAttr((string) ($item ? $item->getData('custom_class') : '')) ?>"<?= /* @noEscape */ $readonly ?>>
+            </div>
+        </div>
+        <div class="admin__field field-groups">
+            <label class="admin__field-label" for="hmm-groups"><span><?= $escaper->escapeHtml(__('Customer groups')) ?></span></label>
+            <div class="admin__field-control">
+                <?php $groups = $block->getSelectedIds('customer_group_ids'); ?>
+                <select class="admin__control-multiselect" id="hmm-groups" name="customer_group_ids[]" multiple size="4"<?= /* @noEscape */ $readonly ?>>
+                    <?php foreach ($block->getCustomerGroupOptions() as $option): ?>
+                        <option value="<?= (int) $option['value'] ?>"<?= in_array((int) $option['value'], $groups, true) ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('None selected: every visitor sees the item.')) ?></div>
+            </div>
+        </div>
+        <div class="admin__field field-stores">
+            <label class="admin__field-label" for="hmm-stores"><span><?= $escaper->escapeHtml(__('Store views')) ?></span></label>
+            <div class="admin__field-control">
+                <?php $stores = $block->getSelectedIds('store_ids'); ?>
+                <select class="admin__control-multiselect" id="hmm-stores" name="store_ids[]" multiple size="4"<?= $storeId > 0 ? ' disabled' : '' ?>>
+                    <?php foreach ($block->getStoreOptions() as $option): ?>
+                        <option value="<?= (int) $option['value'] ?>"<?= in_array((int) $option['value'], $stores, true) ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="admin__field-note"><?= $escaper->escapeHtml(__('None selected: the item shows in every store view. Changed in Default Config only.')) ?></div>
+            </div>
+        </div>
+    </fieldset>
+
+    <div class="hmm-form-actions">
+        <button type="submit" class="action-primary"><span><?= $escaper->escapeHtml($item ? __('Save Item') : __('Add Item')) ?></span></button>
+        <?php if ($item && $owns): ?>
+            <button type="button" class="action-secondary" data-hmm-action="delete"><span><?= $escaper->escapeHtml(__('Delete Item')) ?></span></button>
+        <?php endif; ?>
+    </div>
+</form>

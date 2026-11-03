@@ -1,0 +1,29 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * CMS static block widget (Content > Widgets, type "CMS Static Block").
+ *
+ * On a category page whose landing block (`landing_page`, rendered by the
+ * `category.cms` block inside the Hyperion category shell) is the very
+ * block this widget instance renders, the widget is skipped: the Luma
+ * sample data binds the "Category Content" widgets to `content.top` of the
+ * top-level categories AND the same blocks are set as landing pages, which
+ * printed the promo tiles and "Hot Sellers" twice.
+ *
+ * @var \Magento\Cms\Block\Widget\Block $block
+ */
+$blockId = (string) $block->getData('block_id');
+$categoryCms = $block->getLayout()->getBlock('category.cms');
+if ($blockId !== '' && $categoryCms instanceof \Magento\Catalog\Block\Category\View) {
+    $category = $categoryCms->getCurrentCategory();
+    $landing = (string) ($category?->getLandingPage() ?? '');
+    if ($landing !== '' && $landing === $blockId && ($categoryCms->isContentMode() || $categoryCms->isMixedMode())) {
+        return;
+    }
+}
+?>
+<div class="widget block block-static-block">
+    <?= /* @noEscape */ $block->getText() ?>
+</div>

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Magentofullstackdev_HyperionCatalog module-level PDP layout.
+
+    The theme layer (app/design/frontend/Magentofullstackdev/hyperion/Magento_Catalog/layout/catalog_product_view.xml)
+    owns the ACTUAL block tree. This module file just strips the RequireJS-dependent
+    renderers injected by Magento_Swatches + Magento_Review + Magento_ConfigurableProduct so they
+    don't ghost-render alongside the Hyperion block tree. Keeping the theme as the single source
+    of truth for the tree avoids the double-merge pitfall that caused Phase 3 PDP rendering bugs.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Retired Luma PDP blocks - all RequireJS / Knockout dependent. -->
+        <referenceBlock name="product.info.social" remove="true"/>
+        <referenceBlock name="product.info.review" remove="true"/>
+        <referenceBlock name="product.info.upsell" remove="true"/>
+        <referenceBlock name="catalog.product.related" remove="true"/>
+
+        <!-- Magento_Swatches' configurable renderer is RequireJS-driven.
+             Hyperion ships <hyperion-swatches> instead - see SwatchConfig
+             ViewModel + the theme's product/view/swatches.phtml. -->
+        <referenceBlock name="product.info.options.swatches" remove="true"/>
+    </body>
+</page>

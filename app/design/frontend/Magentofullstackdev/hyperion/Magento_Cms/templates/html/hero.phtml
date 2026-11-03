@@ -1,0 +1,39 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion homepage hero section.
+ *
+ * Renders the "hyperion_hero" CMS block when it exists and is active.
+ * Falls back to a translated static layout when the block is absent.
+ *
+ * @var \Magentofullstackdev\HyperionCore\Block\Hero $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$heroContent = $block->getHeroContent();
+?>
+<?php if ($heroContent !== null): ?>
+    <?= /* @noEscape */ $heroContent ?>
+<?php else: ?>
+    <div class="bg-primary/10 rounded-2xl p-8 md:p-16 text-center lg:text-left flex flex-col lg:flex-row items-center gap-12 my-8 shadow-sm border border-primary/20">
+        <div class="lg:w-1/2 space-y-6">
+            <h2 class="text-4xl md:text-6xl font-extrabold text-secondary tracking-tight leading-tight">
+                <?= $escaper->escapeHtml(__('Welcome to our store')) ?>
+            </h2>
+            <p class="text-lg text-secondary md:max-w-lg mx-auto lg:mx-0">
+                <?= $escaper->escapeHtml(__('Shop our latest collection.')) ?>
+            </p>
+            <div class="pt-4 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                <a href="<?= $escaper->escapeUrl($block->getShopUrl()) ?>"
+                   class="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-center">
+                    <?= $escaper->escapeHtml(__('Shop Now')) ?>
+                </a>
+            </div>
+        </div>
+        <div class="lg:w-1/2">
+            <div class="aspect-video bg-primary/20 rounded-xl flex items-center justify-center text-primary font-medium shadow-inner">
+                <?= $escaper->escapeHtml(__('[ Featured Product Image ]')) ?>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>

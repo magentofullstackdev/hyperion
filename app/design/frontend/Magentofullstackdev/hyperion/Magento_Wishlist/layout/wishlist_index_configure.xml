@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    "Edit" of a wish list item: the product page with the item's options.
+
+    The Hyperion product page retires the Luma `product.info.main` tree, so
+    the core "Update Wish List" block is moved to the top of the content
+    area, where it renders as a banner whose button submits the product
+    form to `wishlist/index/updateItemOptions`.
+
+    The page renders the item's buy request (preselected options, quantity),
+    so it must not reach the full page cache: an empty cacheable="false"
+    child of the banner keeps the page private (the product view block skips
+    its own block cache in configure mode).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <move element="view.addto.wishlist" destination="content" before="-"/>
+        <referenceBlock name="view.addto.wishlist">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.wishlist.configure.private"
+                   cacheable="false"/>
+        </referenceBlock>
+    </body>
+</page>

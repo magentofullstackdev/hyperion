@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion override of Magento_LayeredNavigation's 1column page layout.
+
+    The vendor file at
+    `vendor/magento/module-layered-navigation/view/frontend/page_layout/1column.xml`
+    contains a single move:
+
+        <move element="catalog.leftnav" destination="content.top" after="-"/>
+
+    `content.top` renders the block at the very top of the `main` column -
+    which produces a vertical stack of filter cards ABOVE the
+    `hyperion.category.view` wrapper (i.e. above the category H1 and
+    breadcrumbs inside the wrapper). For Hyperion the 1column design
+    shows filters as a horizontal chip bar BELOW the H1, inside our
+    wrapper - see `category/view.phtml`'s `$leftnav->toHtml()` inside
+    `[data-hyperion-inline-filters]`.
+
+    This override replaces the vendor move with a move to
+    `hyperion.category.view`. The wrapper is a plain `Template` block
+    (no auto-render of children), so the only path that reaches the
+    DOM is our explicit inline call - exactly one filter bar on the
+    1column category page.
+
+    On 2col / 3col / default layouts the vendor's `2columns-left.xml`,
+    `2columns-right.xml`, `3columns.xml` page_layout files still run
+    and move `catalog.leftnav` into `sidebar.main` - so sidebars on
+    those layouts remain fully functional.
+
+    The additional sidebar wrapper (wishlist, compare, widgets; a
+    full-width row of cards on 1column, see Magento_Theme/page_layout/
+    1column.xml) goes into `hyperion.sidebar.inline`, an untagged container
+    that exists on every page; the category handle moves that container
+    into the category view, where `category/view.phtml` prints it right
+    under the inline filter bar, above the product grid. It must NOT be
+    moved into `hyperion.category.view` from here: a move whose destination
+    is missing (home page, customer pages) detaches the element, which is
+    then printed after the page wrapper, under the footer.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <move element="catalog.leftnav" destination="hyperion.category.view" after="-"/>
+    <move element="div.sidebar.additional" destination="hyperion.sidebar.inline" after="-"/>
+</layout>

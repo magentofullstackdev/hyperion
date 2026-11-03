@@ -1,0 +1,70 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion address book -- "Default Addresses" section.
+ *
+ * Renders the two default-address cards (billing + shipping). The
+ * additional-addresses list below is rendered by the sibling
+ * `customer_address_grid` block via address/grid.phtml.
+ *
+ * @var \Magento\Customer\Block\Address\Book $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$defaultBillingId = $block->getDefaultBilling();
+$defaultShippingId = $block->getDefaultShipping();
+?>
+<section class="space-y-4" aria-labelledby="hyperion-addressbook-default-heading">
+
+    <h2 id="hyperion-addressbook-default-heading"
+        class="text-xl font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Default Addresses')) ?>
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-3">
+            <h3 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Default Billing Address')) ?>
+            </h3>
+
+            <?php if ($defaultBillingId): ?>
+                <address class="text-sm text-secondary not-italic leading-relaxed">
+                    <?= /* @noEscape */ $block->getAddressHtml($block->getAddressById($defaultBillingId)) ?>
+                </address>
+                <a href="<?= $escaper->escapeUrl($block->getAddressEditUrl($defaultBillingId)) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Change Billing Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php else: ?>
+                <p class="text-sm text-secondary">
+                    <?= $escaper->escapeHtml(__('You have no default billing address in your address book.')) ?>
+                </p>
+            <?php endif; ?>
+        </article>
+
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-3">
+            <h3 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Default Shipping Address')) ?>
+            </h3>
+
+            <?php if ($defaultShippingId): ?>
+                <address class="text-sm text-secondary not-italic leading-relaxed">
+                    <?= /* @noEscape */ $block->getAddressHtml($block->getAddressById($defaultShippingId)) ?>
+                </address>
+                <a href="<?= $escaper->escapeUrl($block->getAddressEditUrl($defaultShippingId)) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Change Shipping Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php else: ?>
+                <p class="text-sm text-secondary">
+                    <?= $escaper->escapeHtml(__('You have no default shipping address in your address book.')) ?>
+                </p>
+            <?php endif; ?>
+        </article>
+    </div>
+</section>

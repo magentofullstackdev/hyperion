@@ -1,0 +1,37 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * "Email a Friend" link of the product page (child `sendfriend` of
+ * hyperion.product.view, rendered inside the wishlist / compare action row).
+ * Shown only when Magento_SendFriend is on and the visitor may use it
+ * (guests need `sendfriend/email/allow_guest`); the login state is part of
+ * the product block's cache key, so each variant is cached on its own.
+ *
+ * @var \Magento\Catalog\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+declare(strict_types=1);
+
+$product = $block->getProduct();
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\SendFriend $sendFriend */
+$sendFriend = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\SendFriend::class);
+if ($product === null || !$sendFriend->canEmailToFriend()) {
+    return;
+}
+?>
+<a href="<?= $escaper->escapeUrl($sendFriend->getUrl($product)) ?>"
+   data-hyperion-sendfriend-link
+   title="<?= $escaper->escapeHtmlAttr(__('Email a Friend')) ?>"
+   class="inline-flex items-center gap-2 px-4 py-2 text-sm
+          text-muted hover:text-primary
+          border border-subtle rounded-lg hover:border-primary/40
+          focus:outline-none focus:ring-2 focus:ring-primary
+          transition-colors">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+    </svg>
+    <span><?= $escaper->escapeHtml(__('Email a Friend')) ?></span>
+</a>

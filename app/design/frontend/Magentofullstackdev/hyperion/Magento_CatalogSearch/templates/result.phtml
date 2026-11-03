@@ -1,0 +1,115 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion search results page.
+ *
+ * @var \Magento\CatalogSearch\Block\Result $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$productList = $block->getProductListHtml();
+$queryText = $block->getSearchQueryText();
+$resultCount = (int) $block->getResultCount();
+?>
+
+<div class="mb-8">
+    <p class="text-sm text-muted font-medium tracking-wider uppercase">
+        <?= $escaper->escapeHtml(__('Search results for')) ?>
+    </p>
+    <h1 class="mt-1 text-3xl font-bold text-secondary tracking-tight">
+        <?= /* @noEscape */ $queryText ?>
+    </h1>
+</div>
+
+<?php if ($resultCount): ?>
+    <?php foreach ($block->getNoteMessages() as $message): ?>
+        <div class="mb-4 p-3 rounded-lg bg-accent/10 border border-accent/30 text-accent text-sm" role="status">
+            <?= /* @noEscape */ $message ?>
+        </div>
+    <?php endforeach; ?>
+    <?= /* @noEscape */ $productList ?>
+<?php else: ?>
+    <div class="py-16 text-center space-y-3" role="status">
+        <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <p class="text-muted text-lg">
+            <?= $escaper->escapeHtml($block->getNoResultText() ?: __('Your search returned no results.')) ?>
+        </p>
+        <?php foreach ($block->getNoteMessages() as $message): ?>
+            <p class="text-sm text-muted"><?= /* @noEscape */ $message ?></p>
+        <?php endforeach; ?>
+    </div>
+
+    <?php
+    /* Zero-results fallback (Magentofullstackdev_HyperionSearch): the products of the
+       longest word that matches, the matching categories and the top-level categories.
+       `optional()` keeps the page working when the module is disabled. */
+    $zeroResults = $viewModels->optional(\Magentofullstackdev\HyperionSearch\ViewModel\ZeroResults::class);
+    $similar = $zeroResults?->getSimilar();
+    $fallbackCategories = $zeroResults ? $zeroResults->getCategories() : [];
+    $popular = $zeroResults?->isEnabled() ? $zeroResults->getPopularCategories() : [];
+    $fallbackLink = 'inline-flex items-center gap-2 rounded-lg border border-subtle bg-surface px-4 py-2 text-sm '
+        . 'font-medium text-secondary hover:border-primary hover:text-primary transition-colors';
+    ?>
+    <?php if ($similar || $fallbackCategories || $popular): ?>
+        <div class="space-y-10" data-hyperion-zero-results>
+            <?php if ($similar): ?>
+                <section data-hyperion-zero-results-similar aria-labelledby="hyperion-similar-title">
+                    <div class="mb-4 p-3 rounded-lg bg-accent/10 border border-accent/30 text-accent text-sm" role="status">
+                        <?= $escaper->escapeHtml(__('Showing results for the similar term "%1" instead.', $similar['term'])) ?>
+                        <a href="<?= $escaper->escapeUrl($zeroResults->getSearchUrl($similar['term'])) ?>" class="underline ml-1">
+                            <?= $escaper->escapeHtml(__('See all')) ?>
+                        </a>
+                    </div>
+                    <h2 id="hyperion-similar-title" class="sr-only"><?= $escaper->escapeHtml(__('Similar products')) ?></h2>
+                    <ul class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <?php foreach ($similar['products'] as $product): ?>
+                            <li class="group rounded-lg border border-subtle bg-surface overflow-hidden">
+                                <a href="<?= $escaper->escapeUrl((string) $product['url']) ?>" class="block">
+                                    <span class="block aspect-[4/5] bg-surface-raised overflow-hidden">
+                                        <?php if (!empty($product['image'])): ?>
+                                            <img src="<?= $escaper->escapeUrl((string) $product['image']) ?>" alt=""
+                                                 class="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                                 loading="lazy" decoding="async">
+                                        <?php endif; ?>
+                                    </span>
+                                    <span class="block p-3">
+                                        <span class="block text-sm font-medium text-secondary line-clamp-2"><?= $escaper->escapeHtml((string) $product['name']) ?></span>
+                                        <span class="block mt-1 text-sm font-semibold text-secondary"><?= $escaper->escapeHtml((string) $product['price_formatted']) ?></span>
+                                    </span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php endif; ?>
+
+            <?php if ($fallbackCategories): ?>
+                <section data-hyperion-zero-results-categories aria-labelledby="hyperion-matching-categories-title">
+                    <h2 id="hyperion-matching-categories-title" class="text-sm font-bold uppercase tracking-wider text-secondary mb-3">
+                        <?= $escaper->escapeHtml(__('Matching categories')) ?>
+                    </h2>
+                    <ul class="flex flex-wrap gap-2">
+                        <?php foreach ($fallbackCategories as $category): ?>
+                            <li><a href="<?= $escaper->escapeUrl($category['url']) ?>" class="<?= /* @noEscape */ $fallbackLink ?>"><?= $escaper->escapeHtml($category['path']) ?></a></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php endif; ?>
+
+            <?php if ($popular): ?>
+                <section data-hyperion-zero-results-popular aria-labelledby="hyperion-popular-categories-title">
+                    <h2 id="hyperion-popular-categories-title" class="text-sm font-bold uppercase tracking-wider text-secondary mb-3">
+                        <?= $escaper->escapeHtml(__('Popular categories')) ?>
+                    </h2>
+                    <ul class="flex flex-wrap gap-2">
+                        <?php foreach ($popular as $category): ?>
+                            <li><a href="<?= $escaper->escapeUrl($category['url']) ?>" class="<?= /* @noEscape */ $fallbackLink ?>"><?= $escaper->escapeHtml($category['name']) ?></a></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </section>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+<?php endif; ?>

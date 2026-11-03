@@ -1,0 +1,203 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion product list toolbar -- sort order, page size, and result count.
+ *
+ * All select changes trigger HTMX GET requests that swap the product grid
+ * fragment without a full page reload. hx-include collects the selects and
+ * the hidden inputs (mode, sort direction) so order, direction, limit and
+ * mode travel together. The grid / list switch (`catalog/frontend/list_mode`,
+ * `product_list_mode`) is a pair of links: HTMX on category pages, plain
+ * links on search.
+ *
+ * The URL the browser shows after a swap is the `HX-Push-Url` header of the
+ * fragment response (the PAGE URL with the current query, built server side
+ * by HyperionCatalog\Model\Listing\FragmentResponse): no control carries
+ * `hx-push-url="true"`, which would push the fragment route. The `href` of
+ * every link goes through the Listing view model because this toolbar is
+ * re-rendered inside the fragment, where core's `getPagerUrl()` (built with
+ * `_current`) resolves to the fragment route.
+ *
+ * @var \Magento\Catalog\Block\Product\ProductList\Toolbar $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+// Resolve the Hyperion list block to obtain fragment URL and grid target ID.
+// The list block (category listing or search results) and its grid fragment
+// endpoint come from the Listing view model, so search results swap like a category.
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$listProduct = $listing->getListBlock($block->getLayout());
+$fragmentUrl = $listing->getFragmentUrl($listProduct);
+$gridId = $listing->getGridTargetId();
+
+$sortOptions = $block->getAvailableOrders();
+$pageSizes = $block->getAvailableLimit();
+$currentSort = $block->getCurrentOrder();
+$currentDir = $block->getCurrentDirection();
+$nextDir = $currentDir === 'asc' ? 'desc' : 'asc';
+$currentSize = (int) $block->getLimit();
+$modes = $block->isEnabledViewSwitcher() ? (array) $block->getModes() : [];
+$currentMode = (string) $block->getCurrentMode();
+// The direction rides along only once the shopper has chosen one (the request
+// carries it); the default direction never shows up in the pushed URL.
+$requestedDir = $listing->getRequestedDirection();
+$hxInclude = '[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[type=hidden]';
+// The direction toggle sets the direction itself: it includes everything but
+// the direction input, otherwise the two values would collide in the query.
+$hxIncludeForDirection = '[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[name=product_list_mode]';
+
+// Magento's Toolbar block tracks an `is_bottom` flag set by the second
+// invocation in list.phtml. The TOP toolbar shows result count + sort +
+// page-size selectors; the BOTTOM toolbar renders the pager only.
+$isBottom = (bool) $block->getIsBottom();
+$pagerHtml = (string) $block->getPagerHtml();
+?>
+
+<?php if ($isBottom): ?>
+    <?php /* Bottom toolbar -- pager only. Renders nothing when only one page. */ ?>
+    <?php if ($pagerHtml !== ''): ?>
+        <div class="py-4 border-t border-subtle">
+            <?= /* @noEscape */ $pagerHtml ?>
+        </div>
+    <?php endif; ?>
+    <?php return; ?>
+<?php endif; ?>
+
+<?php /* Beside a rail the column is narrow between md and lg: the two groups wrap
+        onto their own rows instead of overflowing the column. */ ?>
+<div class="flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-4 py-4
+            border-b border-subtle text-sm text-secondary"
+     data-hyperion-toolbar>
+
+    <div class="flex items-center gap-4">
+        <p class="text-muted whitespace-nowrap">
+            <?= $escaper->escapeHtml(__('%1 products', $block->getTotalNum())) ?>
+        </p>
+        <?php if (count($modes) > 1): ?>
+            <div class="flex items-center gap-1" role="group" aria-label="<?= $escaper->escapeHtmlAttr(__('View as')) ?>" data-hyperion-view-mode>
+                <?php foreach ($modes as $code => $label): ?>
+                    <?php
+                    $isActive = $code === $currentMode;
+                    $modeUrl = $listing->toPublicUrl($listProduct, (string) $block->getPagerUrl(['product_list_mode' => $code, 'p' => null]));
+                    $modeClass = 'inline-flex items-center justify-center w-8 h-8 rounded border focus:outline-none focus:ring-2 focus:ring-primary '
+                        . ($isActive ? 'border-primary bg-primary/10 text-primary' : 'border-subtle text-muted hover:text-primary');
+                    ?>
+                    <a href="<?= $escaper->escapeUrl($modeUrl) ?>"
+                       <?php if ($fragmentUrl !== ''): ?>
+                           hx-get="<?= $escaper->escapeUrl($fragmentUrl . '&product_list_mode=' . $code) ?>"
+                           hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                           hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                           hx-swap="outerHTML"
+                           hx-include="[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[name=product_list_dir]"
+                           hx-push-url="<?= $escaper->escapeHtmlAttr($modeUrl) ?>"
+                       <?php endif; ?>
+                       class="<?= $escaper->escapeHtmlAttr($modeClass) ?>"
+                       aria-label="<?= $escaper->escapeHtmlAttr($label) ?>"
+                       aria-current="<?= $isActive ? 'true' : 'false' ?>"
+                       data-hyperion-view-mode-link="<?= $escaper->escapeHtmlAttr($code) ?>">
+                        <?php if ($code === 'list'): ?>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                        <?php else: ?>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5h6v6H4zM14 5h6v6h-6zM4 13h6v6H4zM14 13h6v6h-6z"/></svg>
+                        <?php endif; ?>
+                    </a>
+                <?php endforeach; ?>
+                <input type="hidden" name="product_list_mode" value="<?= $escaper->escapeHtmlAttr($currentMode) ?>">
+            </div>
+        <?php endif; ?>
+        <?php if ($requestedDir !== ''): ?>
+            <input type="hidden" name="product_list_dir" value="<?= $escaper->escapeHtmlAttr($requestedDir) ?>">
+        <?php endif; ?>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-4">
+
+        <?php if (!empty($sortOptions)): ?>
+            <label class="flex items-center gap-2">
+                <span class="text-muted whitespace-nowrap">
+                    <?= $escaper->escapeHtml(__('Sort by')) ?>
+                </span>
+                <select name="product_list_order"
+                        hx-get="<?= $escaper->escapeUrl($fragmentUrl) ?>"
+                        hx-trigger="change"
+                        hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                        hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                        hx-swap="outerHTML"
+                        hx-include="<?= $escaper->escapeHtmlAttr($hxInclude) ?>"
+                        class="bg-surface border border-subtle rounded px-2 py-1
+                               focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?php foreach ($sortOptions as $key => $label): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($key) ?>"
+                                <?= $key === $currentSort ? 'selected' : '' ?>>
+                            <?= $escaper->escapeHtml($label) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <?php
+                // Direction toggle: a standard GET link to the page (degrades
+                // gracefully), swapping the grid through the fragment URL like
+                // the sort select.
+                $directionUrl = $listing->toPublicUrl($listProduct, (string) $block->getPagerUrl([
+                    'product_list_order' => $currentSort,
+                    'product_list_dir' => $nextDir,
+                ]));
+                ?>
+                <a href="<?= $escaper->escapeUrl($directionUrl) ?>"
+                   <?php if ($fragmentUrl !== ''): ?>
+                   hx-get="<?= $escaper->escapeUrl($fragmentUrl . '&product_list_dir=' . $nextDir) ?>"
+                   hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                   hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                   hx-swap="outerHTML"
+                   hx-include="<?= $escaper->escapeHtmlAttr($hxIncludeForDirection) ?>"
+                   <?php endif; ?>
+                   class="flex-shrink-0 text-muted hover:text-primary focus:outline-none
+                          focus:ring-2 focus:ring-primary rounded"
+                   data-hyperion-sort-direction="<?= $escaper->escapeHtmlAttr($nextDir) ?>"
+                   aria-label="<?= $escaper->escapeHtmlAttr(
+                       $currentDir === 'asc' ? __('Sort Descending') : __('Sort Ascending')
+                   ) ?>">
+                    <?php if ($currentDir === 'desc'): ?>
+                        <svg class="w-4 h-4 rotate-180" fill="none" stroke="currentColor"
+                             viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
+                        </svg>
+                    <?php else: ?>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                             viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/>
+                        </svg>
+                    <?php endif; ?>
+                </a>
+            </label>
+        <?php endif; ?>
+
+        <?php if (!empty($pageSizes)): ?>
+            <label class="flex items-center gap-2">
+                <span class="text-muted whitespace-nowrap">
+                    <?= $escaper->escapeHtml(__('Show')) ?>
+                </span>
+                <select name="product_list_limit"
+                        hx-get="<?= $escaper->escapeUrl($fragmentUrl) ?>"
+                        hx-trigger="change"
+                        hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                        hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                        hx-swap="outerHTML"
+                        hx-include="<?= $escaper->escapeHtmlAttr($hxInclude) ?>"
+                        class="bg-surface border border-subtle rounded px-2 py-1
+                               focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?php foreach ($pageSizes as $key => $label): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($key) ?>"
+                                <?= (int) $key === $currentSize ? 'selected' : '' ?>>
+                            <?= $escaper->escapeHtml($label) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+        <?php endif; ?>
+
+    </div>
+</div>

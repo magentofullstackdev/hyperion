@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    `hyperion_checkout/general/enabled`: renders the Lit checkout on /checkout
+    when 1; the stock Knockout checkout does not run on the Hyperion theme.
+    Magentofullstackdev\HyperionCheckout\Model\Plugin\Layout\CheckoutHandlePlugin
+    strips the `hyperion_checkout_index` handle while the flag is 0, so the
+    stock Magento_Checkout layout wins without a code change. Default 0 so an
+    install opts in:
+        bin/magento config:set hyperion_checkout/general/enabled 1
+        bin/magento cache:flush
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion_checkout>
+            <general>
+                <enabled>0</enabled>
+            </general>
+        </hyperion_checkout>
+    </default>
+</config>

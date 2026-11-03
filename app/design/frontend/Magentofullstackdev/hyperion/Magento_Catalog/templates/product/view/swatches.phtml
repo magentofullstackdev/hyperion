@@ -1,0 +1,84 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion PDP swatches -- mounts <hyperion-swatches> for configurable products.
+ *
+ * @var \Magentofullstackdev\HyperionCatalog\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+/**
+ * $block for this template is the plain Template child "hyperion.product.swatches"
+ * declared in catalog_product_view.xml, not the parent Hyperion PDP block.
+ * We reach up to the parent (Magentofullstackdev\HyperionCatalog\Block\Product\View) via the
+ * layout to access the current Product + type helpers, and read SwatchConfig
+ * from this block's layout-XML argument.
+ */
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\SwatchConfig|null $swatchVm */
+$swatchVm = $block->getData('swatch_config_view_model');
+
+$parentView = $block->getLayout()->getBlock('hyperion.product.view');
+$product = ($parentView instanceof \Magentofullstackdev\HyperionCatalog\Block\Product\View)
+    ? $parentView->getProduct()
+    : null;
+$isConfigurable = ($parentView instanceof \Magentofullstackdev\HyperionCatalog\Block\Product\View)
+    && $parentView->isConfigurable();
+
+if ($product === null || !$isConfigurable || $swatchVm === null) {
+    return;
+}
+
+if (!$swatchVm->isConfigurableWithSwatches($product)) {
+    return;
+}
+
+// JSON blob already run through htmlspecialchars -- safe for attribute context.
+$configAttr = $swatchVm->getEncodedConfigAttribute($product);
+
+// Currency format: fallback to "$%s" until SwatchConfig exposes a dedicated
+// accessor. A follow-up ViewModel refactor can replace this literal.
+$currencyFormat = '$%s';
+?>
+<div class="hyperion-swatches-wrapper">
+    <?php /*
+        `form-id` must match the PDP Add-to-Cart form's id (`product_addtocart_form`,
+        declared in view.phtml). The swatches component uses this to scope
+        document.getElementById(form-id) when syncing the `super_attribute[*]`
+        hidden inputs. If the ids drift, the POST carries empty super_attribute
+        values and Magento responds with "You need to choose options for your item."
+    */ ?>
+    <?php /*
+        `gallery-target` is intentionally omitted -- the new
+        <hyperion-gallery> subscribes to the bubbling
+        `hyperion:gallery-update` event this component emits from
+        _dispatchGalleryUpdate(), so there's no need to point at a
+        specific light-DOM <img>. Passing the image payload through
+        the event keeps the two components decoupled and lets the
+        gallery re-render its thumbnails as well as its main frame.
+    */ ?>
+    <hyperion-swatches
+            config="<?= /* @noEscape -- htmlspecialchars in SwatchConfig::getEncodedConfigAttribute() */ $configAttr ?>"
+            form-id="product_addtocart_form"
+            price-currency-format="<?= $escaper->escapeHtmlAttr($currencyFormat) ?>"
+            price-target="#hyperion-product-price"
+            stock-target="#hyperion-variant-stock">
+
+        <?php /*
+            Progressive-enhancement fallback.
+            If the component never upgrades (no JS / CSP blockage),
+            the user still sees a meaningful message and the form
+            can still be submitted via native select elements
+            rendered by the parent layout.
+        */ ?>
+        <?php /* Skeleton with the final height of the rows (no layout shift). */ ?>
+        <?= /* @noEscape -- a rendered template */ $block->setData('skeleton_rows', $swatchVm->getSkeletonRows($product))->setData('skeleton_compact', false)->fetchView($block->getTemplateFile('Magento_Catalog::product/swatches/skeleton.phtml')) ?>
+        <noscript>
+            <p class="text-sm text-muted">
+                <?= $escaper->escapeHtml(__('JavaScript is required to choose product options.')) ?>
+            </p>
+        </noscript>
+
+    </hyperion-swatches>
+</div>

@@ -1,0 +1,46 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Lit checkout mount shell.
+ *
+ * Rendered by Magentofullstackdev\HyperionCheckout\Block\Checkout on /checkout. The three
+ * elements below are the complete contract between the Magento backend
+ * and the Lit frontend:
+ *
+ *   1. #checkout-root -- the empty mount node the bundle inserts
+ *      <checkout-app> into.
+ *   2. #checkout-config -- a JSON island parsed once at boot. Delivered
+ *      as `<script type="application/json">` (not inline JS) for CSP
+ *      friendliness and DevTools inspectability.
+ *   3. A module <script> tag and a stylesheet <link>.
+ *
+ * Both <script> tags are emitted via SecureHtmlRenderer so the
+ * CSP nonce is attached automatically. With `csp/mode/storefront/report_only=0`
+ * the bundle continues to load under restrict-mode policies.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Checkout $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$beginCheckoutJson = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\GtagCheckout::class)
+    ->getBeginCheckoutJson();
+?>
+<div id="checkout-root"></div>
+<?php if ($beginCheckoutJson !== ''): ?>
+<span data-hyperion-gtag-event="begin_checkout" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($beginCheckoutJson) ?>" hidden></span>
+<?php endif; ?>
+<?= /* @noEscape */ $secureRenderer->renderTag(
+    'script',
+    ['type' => 'application/json', 'id' => 'checkout-config'],
+    $block->getCheckoutConfigJson(),
+    false
+) ?>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getStylesUrl()) ?>"/>
+<?= /* @noEscape */ $secureRenderer->renderTag(
+    'script',
+    ['type' => 'module', 'src' => $block->getBundleUrl()],
+    null,
+    false
+) ?>

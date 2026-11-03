@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * PayPal Pay Later message of the core banner blocks (`header` and
+ * `sidebar` positions on the home, category, product and cart pages).
+ *
+ * The core block decides whether it shows (placement enabled, position
+ * matching the configured one); this template replaces its Knockout
+ * component with <hyperion-paypal-message>.
+ *
+ * @var \Magento\Paypal\Block\PayLater\Banner $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\PaypalPayLater|null $payLater */
+$payLater = $viewModels->optional(\Magentofullstackdev\HyperionCheckout\ViewModel\PaypalPayLater::class);
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\PaypalExpress|null $express */
+$express = $viewModels->optional(\Magentofullstackdev\HyperionCheckout\ViewModel\PaypalExpress::class);
+$placement = (string) $block->getData('placement');
+$sdkUrl = $payLater?->getSdkUrl() ?? '';
+if ($payLater === null || $express === null || $placement === '' || $sdkUrl === '') {
+    return;
+}
+
+$amount = 0.0;
+$amountSource = '';
+if ($placement === 'cart') {
+    $amount = $express->getCartAmount();
+    $amountSource = 'cart';
+    if ($amount <= 0) {
+        return;
+    }
+} elseif ($placement === 'product') {
+    $product = $block->getLayout()->getBlock('hyperion.product.view');
+    $product = $product && method_exists($product, 'getProduct') ? $product->getProduct() : null;
+    if ($product instanceof \Magento\Catalog\Model\Product) {
+        $amount = $express->getProductAmount($product);
+        $amountSource = 'product';
+    }
+}
+$withAmount = $amountSource !== '' && $amount > 0 && $payLater->canDisplayAmount();
+$isSidebar = (string) $block->getData('position') === $payLater::POSITION_SIDEBAR;
+?>
+<hyperion-paypal-message class="<?= $escaper->escapeHtmlAttr($isSidebar ? 'block mb-6' : 'block mb-4') ?>"
+    sdk-url="<?= $escaper->escapeUrl($sdkUrl) ?>"
+    sdk-attributes="<?= $escaper->escapeHtmlAttr($payLater->getSdkAttributesJson()) ?>"
+    message="<?= $escaper->escapeHtmlAttr($payLater->getAttributesJson($placement)) ?>"
+    <?php if ($withAmount): ?>
+        amount="<?= $escaper->escapeHtmlAttr(number_format($amount, 2, '.', '')) ?>"
+    <?php endif; ?>
+    <?php if ($amountSource !== ''): ?>
+        amount-source="<?= $escaper->escapeHtmlAttr($amountSource) ?>"
+    <?php endif; ?>>
+</hyperion-paypal-message>

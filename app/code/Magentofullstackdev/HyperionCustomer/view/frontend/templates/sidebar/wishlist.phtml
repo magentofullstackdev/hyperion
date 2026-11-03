@@ -1,0 +1,63 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "My Wish List" sidebar widget -- server-rendered.
+ *
+ * Returns empty when the customer has no wishlist items, letting the
+ * parent sidebar container collapse via `empty:hidden`.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magentofullstackdev\HyperionCustomer\ViewModel\SidebarWidgets|null $vm
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$vm = $block->getData('sidebar_widgets');
+if (!$vm || !$vm->isLoggedIn()) {
+    return;
+}
+$items = $vm->getWishlistItems();
+if (!$items) {
+    return;
+}
+$imageHelper = $this->helper(\Magento\Catalog\Helper\Image::class);
+?>
+<section class="bg-surface border border-subtle rounded-xl p-4 space-y-3"
+         aria-labelledby="hyperion-wishlist-sidebar-heading">
+
+    <header class="flex items-center justify-between gap-2">
+        <h2 id="hyperion-wishlist-sidebar-heading"
+            class="text-sm font-bold uppercase tracking-wider text-secondary">
+            <?= $escaper->escapeHtml(__('My Wish List')) ?>
+            <span class="text-muted font-medium">(<?= (int) $vm->getWishlistItemCount() ?>)</span>
+        </h2>
+        <a href="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
+           class="text-xs font-medium text-primary hover:text-primary-hover hover:underline">
+            <?= $escaper->escapeHtml(__('View All')) ?>
+        </a>
+    </header>
+
+    <ul role="list" class="space-y-3">
+        <?php foreach ($items as $item):
+            $product = $item->getProduct();
+            if (!$product) continue;
+        ?>
+            <li class="flex items-center gap-3 text-sm">
+                <a href="<?= $escaper->escapeUrl($product->getProductUrl()) ?>"
+                   class="shrink-0 w-12 h-12 rounded-md overflow-hidden bg-surface-raised border border-subtle
+                          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <img src="<?= $escaper->escapeUrl($imageHelper->init($product, 'product_small_image')->getUrl()) ?>"
+                         alt="<?= $escaper->escapeHtmlAttr($product->getName()) ?>"
+                         class="w-full h-full object-cover"
+                         loading="lazy">
+                </a>
+                <div class="flex-1 min-w-0">
+                    <a href="<?= $escaper->escapeUrl($product->getProductUrl()) ?>"
+                       class="block text-secondary hover:text-primary transition-colors truncate">
+                        <?= $escaper->escapeHtml($product->getName()) ?>
+                    </a>
+                </div>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+</section>

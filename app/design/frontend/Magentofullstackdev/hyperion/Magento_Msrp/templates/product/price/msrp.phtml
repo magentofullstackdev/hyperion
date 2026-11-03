@@ -1,0 +1,122 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * MSRP / MAP price box (replaces core's RequireJS "addToCart" widget markup).
+ *
+ * Core's FinalPriceBox hands the rendered actual price over as
+ * `real_price_html` whenever the product's MSRP is above its final price
+ * and MAP is enabled. Per display mode:
+ *
+ *   on gesture ("Click for price")  the struck MSRP plus a button that opens
+ *                                   <hyperion-msrp-popup>: product name,
+ *                                   MSRP, actual price, explanation and an
+ *                                   Add to Cart button that submits the
+ *                                   page's own add-to-cart form (tile or PDP)
+ *   in cart / before order confirm  the struck MSRP plus the core message
+ *                                   (the real price shows in the cart)
+ *
+ * The product page adds a "What's this?" link opening a second dialog.
+ * The dialog bodies travel inside inert <template> elements, so the
+ * actual price never renders on the page until the shopper asks for it.
+ *
+ * @var \Magento\Msrp\Pricing\Render\PriceBox $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+/** @var \Magento\Msrp\Pricing\Price\MsrpPriceInterface $priceType */
+$priceType = $block->getPrice();
+/** @var \Magento\Catalog\Model\Product $product */
+$product = $block->getSaleableItem();
+$productId = (int) $product->getId();
+$isPdp = $block->getZone() === \Magento\Framework\Pricing\Render::ZONE_ITEM_VIEW;
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\Msrp $msrpVm */
+$msrpVm = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Msrp::class);
+
+$amount = (float) $block->getMsrpPriceCalculator()->getMsrpPriceValue($product);
+$msrpPrice = '';
+if ($amount > 0) {
+    $msrpPrice = $block->renderAmount(
+        $priceType->getCustomAmount($amount),
+        [
+            'price_id' => $block->getData('price_id') ?: 'old-price-' . $productId,
+            'include_container' => false,
+            'skip_adjustments' => true,
+        ]
+    );
+}
+$realPriceHtml = (string) $block->getData('real_price_html');
+$showOnGesture = (bool) $priceType->isShowPriceOnGesture();
+$message = $showOnGesture ? '' : (string) $priceType->getMsrpPriceMessage();
+$productName = (string) $product->getName();
+$explanation = $showOnGesture ? $msrpVm->getExplanationMessage() : '';
+$whatsThis = $isPdp ? $msrpVm->getExplanationMessageWhatsThis() : '';
+$linkClasses = 'inline-flex items-center gap-1 rounded text-primary underline underline-offset-2'
+    . ' hover:text-primary-hover focus:outline-none focus:ring-2 focus:ring-primary';
+?>
+<div class="hyperion-msrp flex flex-col items-start <?= $isPdp ? 'gap-2' : 'gap-1' ?>"
+     data-hyperion-msrp="<?= $showOnGesture ? 'gesture' : 'message' ?>">
+
+    <?php if ($msrpPrice !== ''): ?>
+        <span class="old-price map-old-price inline-flex items-baseline gap-1 text-muted line-through <?= $isPdp ? 'text-base' : 'text-sm' ?>">
+            <?= /* @noEscape */ $msrpPrice ?>
+        </span>
+    <?php endif; ?>
+
+    <?php if ($showOnGesture): ?>
+        <hyperion-msrp-popup class="block"
+                             product-id="<?= (int) $productId ?>"
+                             product-name="<?= $escaper->escapeHtmlAttr($productName) ?>"
+                             add-label="<?= $escaper->escapeHtmlAttr(__('Add to Cart')) ?>"
+                             close-label="<?= $escaper->escapeHtmlAttr(__('Close')) ?>"
+                             <?= $product->isSaleable() ? '' : 'no-cart' ?>>
+            <button type="button"
+                    data-hyperion-msrp-open
+                    class="map-show-info <?= /* @noEscape */ $linkClasses ?> <?= $isPdp ? 'text-base font-semibold' : 'text-sm font-medium' ?>">
+                <?= $escaper->escapeHtml(__('Click for price')) ?>
+            </button>
+            <template data-hyperion-msrp-dialog>
+                <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2">
+                    <?php if ($msrpPrice !== ''): ?>
+                        <dt class="text-sm text-muted"><?= $escaper->escapeHtml(__('Price')) ?></dt>
+                        <dd class="old-price map-old-price text-base text-muted line-through">
+                            <?= /* @noEscape */ $msrpPrice ?>
+                        </dd>
+                    <?php endif; ?>
+                    <dt class="text-sm font-medium text-secondary"><?= $escaper->escapeHtml(__('Actual Price')) ?></dt>
+                    <dd class="actual-price text-xl font-bold text-secondary">
+                        <?= /* @noEscape */ $realPriceHtml ?>
+                    </dd>
+                </dl>
+                <?php if ($explanation !== ''): ?>
+                    <div class="map-text mt-4 text-sm leading-relaxed text-muted">
+                        <?= /* @noEscape */ $explanation ?>
+                    </div>
+                <?php endif; ?>
+            </template>
+        </hyperion-msrp-popup>
+    <?php elseif ($message !== ''): ?>
+        <span class="msrp-message text-sm text-secondary"><?= $escaper->escapeHtml($message) ?></span>
+    <?php endif; ?>
+
+    <?php if ($whatsThis !== ''): ?>
+        <hyperion-msrp-popup class="block"
+                             info
+                             product-name="<?= $escaper->escapeHtmlAttr($productName) ?>"
+                             close-label="<?= $escaper->escapeHtmlAttr(__('Close')) ?>">
+            <button type="button"
+                    data-hyperion-msrp-open
+                    class="map-show-info <?= /* @noEscape */ $linkClasses ?> text-xs text-muted">
+                <?= $escaper->escapeHtml(__("What's this?")) ?>
+            </button>
+            <template data-hyperion-msrp-dialog>
+                <div class="map-help-text text-sm leading-relaxed text-secondary">
+                    <?= /* @noEscape */ $whatsThis ?>
+                </div>
+            </template>
+        </hyperion-msrp-popup>
+    <?php endif; ?>
+</div>

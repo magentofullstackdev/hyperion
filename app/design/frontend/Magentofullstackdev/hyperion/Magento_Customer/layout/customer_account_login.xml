@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Reference the core block (never re-declare it): its button_lock_manager argument and the
+             form.additional.info child (reCAPTCHA) stay in place; only the template changes. -->
+        <referenceBlock name="customer_form_login" template="Magento_Customer::form/login.phtml"/>
+        <!-- The theme template renders the "new customer" panel itself, so the Luma wrapper and its
+             second block go once the form is out of it; require-cookie needs jQuery. -->
+        <move element="customer_form_login" destination="content"/>
+        <referenceBlock name="customer.new" remove="true"/>
+        <referenceContainer name="customer.login.container" remove="true"/>
+        <referenceBlock name="require-cookie" remove="true"/>
+        <referenceBlock name="page.main.title" remove="true"/>
+    </body>
+</page>

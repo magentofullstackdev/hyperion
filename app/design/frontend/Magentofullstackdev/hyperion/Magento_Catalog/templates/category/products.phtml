@@ -1,0 +1,12 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion category products wrapper.
+ *
+ * @var \Magento\Catalog\Block\Category\View $block
+ */
+?>
+<?php if (!$block->isContentMode() || $block->isMixedMode()): ?>
+    <?= $block->getProductListHtml() ?>
+<?php endif; ?>

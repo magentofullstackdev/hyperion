@@ -1,0 +1,616 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion PDP -- Hyvä-inspired layout, newversion architecture.
+ *
+ * Two-column on lg+ (gallery left, info right). Schema.org/Product
+ * microdata, native Magento price renderer (delegated to Hyperion
+ * Pricing ViewModel), <hyperion-swatches> for configurables,
+ * <hyperion-tabs> for the details section, native Lit
+ * <hyperion-image-zoom> for hover-zoom on the main image.
+ *
+ * @var \Magentofullstackdev\HyperionCatalog\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\ProductView|null $vm */
+$vm = $block->getData('product_view_view_model');
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\SwatchConfig|null $swatchVm */
+$swatchVm = $block->getData('swatch_config_view_model');
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\Pricing|null $pricing */
+$pricing = $block->getData('pricing_view_model');
+
+/** @var \Magentofullstackdev\HyperionImage\ViewModel\ImageConfig|null $imageCfg */
+// HyperionImage may be disabled: degrade gracefully to plain <img>.
+$imageCfg = $viewModels->optional(\Magentofullstackdev\HyperionImage\ViewModel\ImageConfig::class);
+
+$product = $block->getProduct();
+if ($product === null) {
+    echo '<div class="container py-16 text-center text-muted">'
+        . $escaper->escapeHtml(__('Product not available.'))
+        . '</div>';
+    return;
+}
+
+$productId = (int) $product->getId();
+$productName = $vm?->getProductName($product) ?? $escaper->escapeHtml($product->getName());
+$productNameAttr = $escaper->escapeHtmlAttr($product->getName());
+$sku = $vm?->getSku($product) ?? $escaper->escapeHtml((string) $product->getSku());
+$priceHtml = $pricing
+    ? $pricing->getPdpHtml($product)
+    : ($vm?->getPriceHtml($product) ?? '');
+$galleryImages = $vm?->getGalleryImages($product) ?? [];
+$shortDescription = $vm?->getShortDescription($product) ?? (string) $product->getShortDescription();
+$description = $vm?->getDescription($product) ?? (string) $product->getDescription();
+$actionUrl = $block->getAddToCartActionUrl();
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\CartConfigure $cartConfigure */
+$cartConfigure = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\CartConfigure::class);
+// Cart line "Edit" (checkout/cart/configure): core loads the item's buy request as the product's
+// preconfigured values (options, quantity) and the form posts them to updateItemOptions, which
+// replaces the line and redirects to the cart. A plain POST: the redirect is the answer.
+$isCartConfigure = $cartConfigure->isActive();
+if ($isCartConfigure) {
+    $actionUrl = $cartConfigure->getSubmitUrl();
+}
+// PageBuilder "Product - Full Width" page layout: `columns` has no site
+// container there (Magento_PageBuilder/page_layout), so the description and
+// the PageBuilder attributes span the page while the rest keeps the container.
+$isFullWidth = $block->isFullWidthLayout();
+$containerClass = 'container mx-auto px-4';
+$isConfigurable = $block->isConfigurable();
+$isAvailable = $product->isAvailable();
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Purchase $purchase */
+$purchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class);
+$canPurchase = $purchase->canPurchase();
+$isGrouped = $product->getTypeId() === 'grouped';
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\Stock $stockVm */
+$stockVm = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Stock::class);
+$qtyRules = $stockVm->getQtyInputAttributes($product);
+$qtyIncrement = $stockVm->getQtyIncrements($product);
+$lowStockVisible = $isAvailable && $stockVm->isLowStockVisible($product);
+$stockQtyLeft = $lowStockVisible ? $stockVm->getStockQtyLeft($product) : 0.0;
+$qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 2, '.', ''), '0'), '.');
+$hasFileOption = false;
+foreach ($product->getOptions() ?: [] as $customOption) {
+    if ($customOption->getType() === \Magento\Catalog\Api\Data\ProductCustomOptionInterface::OPTION_TYPE_FILE) {
+        $hasFileOption = true;
+        break;
+    }
+}
+// The fallback <img> shows BEFORE <hyperion-gallery> upgrades -- use
+// the cache-resized medium URL (~700 px) so LCP stays under control
+// even if the merchant uploaded a 4 MB original.
+$mainImage = $galleryImages[0]['img'] ?? '';
+// `data-hyperion-product-meta` is the record lib/product-history.js stores
+// as "recently viewed" (and as "recently compared" when the compare toggle
+// below succeeds); the GA4 `view_item` record feeds <hyperion-gtag>. Both are
+// per currency, like this cached block (its key carries the vary string).
+$summaryVm = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary::class);
+$productMeta = $summaryVm->toJson($summaryVm->fromProduct($product, 'product_small_image'));
+$gtag = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\GoogleGtag::class);
+$viewItemJson = $gtag->isEnabled() ? $gtag->toJson($gtag->viewItem($product)) : '';
+
+/*
+ * Pre-shape the base product's gallery for the <hyperion-gallery>
+ * component. The ViewModel returns role-resolved cache URLs (small /
+ * medium / large per `etc/view.xml`) plus their WebP/AVIF companion
+ * URLs (or empty string when the companion isn't on disk yet); we
+ * just rename `label` -> `caption` to match the component contract.
+ *
+ * The companion URLs flow into the JS layer so the Lit gallery can
+ * emit `<source type="image/webp">` for its main + thumb stages, and
+ * the PhotoSwipe lightbox can pick the modern format when the browser
+ * supports it. Empty string = render only the `<img>` baseline for
+ * that slide / format.
+ */
+$galleryPayload = [];
+foreach ($galleryImages as $image) {
+    $galleryPayload[] = [
+        'thumb' => (string) ($image['thumb'] ?? ''),
+        'img' => (string) ($image['img'] ?? ''),
+        'full' => (string) ($image['full'] ?? ''),
+        'thumbWebp' => (string) ($image['thumbWebp'] ?? ''),
+        'imgWebp' => (string) ($image['imgWebp'] ?? ''),
+        'fullWebp' => (string) ($image['fullWebp'] ?? ''),
+        'thumbAvif' => (string) ($image['thumbAvif'] ?? ''),
+        'imgAvif' => (string) ($image['imgAvif'] ?? ''),
+        'fullAvif' => (string) ($image['fullAvif'] ?? ''),
+        'caption' => (string) ($image['label'] ?? ''),
+        'isMain' => (bool) ($image['isMain'] ?? false),
+        'position' => (int) ($image['position'] ?? 0),
+        'type' => (string) ($image['type'] ?? 'image'),
+        'videoUrl' => (string) ($image['videoUrl'] ?? ''),
+        'videoTitle' => (string) ($image['videoTitle'] ?? ''),
+    ];
+}
+$galleryJson = json_encode(
+    $galleryPayload,
+    JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES
+);
+if ($galleryJson === false) {
+    $galleryJson = '[]';
+}
+
+// Collect configurable super_attribute IDs safely.
+$superAttributeIds = [];
+try {
+    if (
+        $isConfigurable
+        && $product->getTypeInstance() instanceof \Magento\ConfigurableProduct\Model\Product\Type\Configurable
+    ) {
+        foreach ($product->getTypeInstance()->getConfigurableAttributes($product) as $attr) {
+            $superAttributeIds[] = (int) $attr->getAttributeId();
+        }
+    }
+} catch (\Throwable $e) {
+    $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->error('product/view.phtml: configurable super attributes', $e);
+    $superAttributeIds = [];
+}
+?>
+<section id="<?= $escaper->escapeHtmlAttr($block->getFragmentTargetId()) ?>"
+         aria-labelledby="hyperion-product-title"
+         data-hyperion-product-view
+         data-hyperion-product-meta="<?= $escaper->escapeHtmlAttr($productMeta) ?>"
+         class="<?= $isFullWidth ? '' : $escaper->escapeHtmlAttr($containerClass) ?> py-6 lg:py-10"
+         itemscope itemtype="https://schema.org/Product">
+
+    <?php if ($viewItemJson !== ''): ?>
+        <span data-hyperion-gtag-event="view_item" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($viewItemJson) ?>" hidden></span>
+    <?php endif; ?>
+    <?php if ($isFullWidth): ?><div class="<?= $escaper->escapeHtmlAttr($containerClass) ?>"><?php endif; ?>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 mb-12">
+
+        <?php /* -- Gallery ------------------------------------- */ ?>
+        <div class="space-y-4" data-product-gallery>
+
+            <?php /*
+                <hyperion-gallery> drives the entire PDP media column:
+                  * Reads the base product's images from its `images`
+                    attribute (bridged above from the ProductView VM).
+                  * Listens for `hyperion:gallery-update` to swap in the
+                    selected variant's image set (dispatched by
+                    <hyperion-swatches>).
+                  * Lazy-loads PhotoSwipe v5 on first main-image click
+                    via dynamic `import('photoswipe/lightbox')` + the
+                    matching stylesheet -- zero lightbox bytes on initial
+                    PDP paint.
+                  * Retains the hover-zoom loupe from the legacy
+                    hyperion-image-zoom on fine-pointer devices.
+
+                The `<img>` child is a progressive-enhancement fallback:
+                it renders before the Lit bundle upgrades the element,
+                so the product image is visible from the first paint
+                and carries schema.org/image microdata.
+            */ ?>
+            <?php /* The labels the component prints in its shadow DOM, translated here (the
+                     chunk has no catalog); the English defaults live in the component. */ ?>
+            <hyperion-gallery
+                    class="block"
+                    alt="<?= /* @noEscape -- escaped above */ $productNameAttr ?>"
+                    zoom-scale="2.5"
+                    gallery-label="<?= $escaper->escapeHtmlAttr(__('Product image gallery')) ?>"
+                    expand-label="<?= $escaper->escapeHtmlAttr(__('Open fullscreen')) ?>"
+                    play-label="<?= $escaper->escapeHtmlAttr(__('Play video')) ?>"
+                    close-label="<?= $escaper->escapeHtmlAttr(__('Close')) ?>"
+                    image-label="<?= $escaper->escapeHtmlAttr(__('Image %1', '%1')) ?>"
+                    video-label="<?= $escaper->escapeHtmlAttr(__('Video %1', '%1')) ?>"
+                    images="<?= $escaper->escapeHtmlAttr($galleryJson) ?>">
+                <?php if ($mainImage !== ''): ?>
+                <picture>
+                    <?php /* The fallback <img> below is the LCP candidate and shows before the
+                           <hyperion-gallery> Lit element upgrades. Wrap it in <picture> so
+                           browsers fetch the WebP/AVIF companion when available -- saving up
+                           to ~30% on the largest image of the page. */ ?>
+                    <?php if ($mainImage !== '' && $imageCfg !== null && $imageCfg->hasAvifCompanion($mainImage)): ?>
+                        <source type="image/avif" srcset="<?= $escaper->escapeUrl($imageCfg->getAvifUrl($mainImage)) ?>">
+                    <?php endif; ?>
+                    <?php if ($mainImage !== '' && $imageCfg !== null && $imageCfg->hasWebpCompanion($mainImage)): ?>
+                        <source type="image/webp" srcset="<?= $escaper->escapeUrl($imageCfg->getWebpUrl($mainImage)) ?>">
+                    <?php endif; ?>
+                    <img src="<?= $escaper->escapeUrl($mainImage) ?>"
+                         alt="<?= /* @noEscape -- escaped above */ $productNameAttr ?>"
+                         class="block w-full aspect-square object-contain rounded-2xl bg-surface-raised"
+                         loading="eager"
+                         fetchpriority="high"
+                         itemprop="image">
+                </picture>
+                <?php endif; ?>
+                <?php if (count($galleryImages) > 1): ?>
+                    <?php /* Skeleton of the thumbnail strip the component renders under the main image
+                             (5rem thumbs, 0.75rem apart, 0.5rem of padding above and below): the media
+                             column has its final height before the chunk arrives (no layout shift). */ ?>
+                    <div class="flex gap-3 overflow-hidden py-2" data-hyperion-gallery-skeleton aria-hidden="true">
+                        <?php foreach ($galleryImages as $skeletonImage): ?>
+                            <span class="h-20 w-20 shrink-0 rounded-2xl bg-surface-raised"></span>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </hyperion-gallery>
+        </div>
+
+        <?php /* -- Info column -------------------------------- */ ?>
+        <div class="space-y-6">
+
+            <header class="space-y-2">
+                <h1 id="hyperion-product-title"
+                    class="text-3xl font-bold text-secondary tracking-tight"
+                    itemprop="name">
+                    <?= /* @noEscape -- escaped above (ProductView view model or escapeHtml fallback) */ $productName ?>
+                </h1>
+
+                <?php if ($sku !== ''): ?>
+                    <p class="text-sm text-muted">
+                        <?= $escaper->escapeHtml(__('SKU:')) ?>
+                        <span itemprop="sku"><?= /* @noEscape -- escaped above (ProductView view model or escapeHtml fallback) */ $sku ?></span>
+                    </p>
+                <?php endif; ?>
+
+                <?php /* Reviews summary (stars + count or "be the first") */ ?>
+                <?= $block->getReviewsSummaryHtml($product, false, true) ?>
+            </header>
+
+            <?php /* -- Price ----------------------------------- */ ?>
+            <?php /* The schema.org Offer (price, priceCurrency, availability) is emitted by the price
+                     render itself (item_view zone, the theme's price/amount/default.phtml): no scope here,
+                     a second Offer around it nested two Offers with the price in one and the
+                     availability in the other. */ ?>
+            <div id="hyperion-product-price"
+                 data-hyperion-pdp-price
+                 aria-live="polite">
+                <?= /* @noEscape */ $priceHtml ?>
+            </div>
+
+            <?php /* -- Quantity discounts ---------------------- */ ?>
+            <?php $tierPrices = $pricing?->getTierPrices($product) ?? []; ?>
+            <?php if ($tierPrices): ?>
+                <ul class="space-y-1 rounded-lg border border-subtle bg-surface-raised px-4 py-3 text-sm text-secondary"
+                    aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity discounts')) ?>">
+                    <?php foreach ($tierPrices as $tier): ?>
+                        <li>
+                            <?= $escaper->escapeHtml(__('Buy %1 for %2 each', $tier['qty'] * 1, $tier['price'])) ?>
+                            <?php if ($tier['save_percent'] > 0): ?>
+                                <span class="font-semibold text-success">
+                                    <?= $escaper->escapeHtml(__('save %1%', $tier['save_percent'])) ?>
+                                </span>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+
+            <?php /* Short description */ ?>
+            <?php if ($shortDescription): ?>
+                <div class="text-secondary leading-relaxed prose prose-sm max-w-none"
+                     itemprop="description">
+                    <?= /* @noEscape */ $shortDescription ?>
+                </div>
+            <?php endif; ?>
+
+            <?php /* -- Configurable swatches ------------------- */ ?>
+            <?php if ($isConfigurable): ?>
+                <?= $block->getChildHtml('product.info.swatches') ?>
+            <?php endif; ?>
+
+            <?php /* -- Downloadable "Trailers" (preview files) -
+                    Only emits when the product is a downloadable type with
+                    samples attached -- see Hyperion's Magento_Downloadable
+                    override layout handle. Rendered above the add-to-cart
+                    so the shopper can audition trailers before buying. */ ?>
+            <?= $block->getChildHtml('samples') ?>
+
+            <?php /* Persistent notification target for HTMX swaps.
+                    Emitted as <hyperion-notification> (Lit component) so
+                    an outerHTML swap from the HTMX add-to-cart / wishlist
+                    / compare response produces a dismissable toast with
+                    auto-hide. The placeholder itself carries `auto-close=0`
+                    so the hidden shell never tries to self-dismiss. */ ?>
+            <?php /* #hyperion-notification is global now: Magento_Theme::html/notifications.phtml */ ?>
+
+            <?php /* -- Add-to-cart form ------------------------ */ ?>
+            <?php if (!$canPurchase): ?>
+                <?php /* Purchasing is restricted for this visitor (catalog mode): the price stays, the form goes. */ ?>
+                <?php $restrictionMessage = $purchase->getRestrictionMessage(); ?>
+                <?php if ($restrictionMessage !== ''): ?>
+                    <p class="rounded-lg border border-subtle py-3 text-center text-sm font-medium text-muted"
+                       data-hyperion-purchase-restricted>
+                        <?= $escaper->escapeHtml($restrictionMessage) ?>
+                    </p>
+                <?php endif; ?>
+            <?php elseif ($isAvailable): ?>
+                <?php if ($isCartConfigure): ?>
+                    <p class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-subtle
+                              bg-surface-raised px-4 py-3 text-sm text-secondary"
+                       data-hyperion-cart-configure-notice>
+                        <span><?= $escaper->escapeHtml(__('You are editing an item of your shopping cart.')) ?></span>
+                        <a href="<?= $escaper->escapeUrl($cartConfigure->getCartUrl()) ?>"
+                           class="font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                            <?= $escaper->escapeHtml(__('Back to Cart')) ?>
+                        </a>
+                    </p>
+                <?php endif; ?>
+                <form id="product_addtocart_form"
+                      action="<?= $escaper->escapeUrl($actionUrl) ?>"
+                      method="post"
+                      <?php if ($hasFileOption): ?>
+                          enctype="multipart/form-data"
+                      <?php endif; ?>
+                      <?php if ($isCartConfigure): ?>
+                          data-hyperion-cart-configure="<?= (int) $cartConfigure->getItemId() ?>"
+                      <?php else: ?>
+                          <?php if ($hasFileOption): ?>
+                              hx-encoding="multipart/form-data"
+                          <?php endif; ?>
+                          hx-post="<?= $escaper->escapeUrl($actionUrl) ?>"
+                          hx-target="#hyperion-notification"
+                          hx-swap="outerHTML"
+                          hx-select="#hyperion-notification"
+                          hx-indicator="#hyperion-add-to-cart-indicator"
+                      <?php endif; ?>
+                      class="space-y-4"
+                      novalidate>
+
+                    <?= $block->getBlockHtml('formkey') ?>
+                    <input type="hidden" name="product" value="<?= (int) $productId ?>">
+
+                    <?php if ($isConfigurable && $superAttributeIds !== []): ?>
+                        <?php /* A buy request (wish list item edit) preselects the options. */ ?>
+                        <?php $preselected = (array) $product->getPreconfiguredValues()->getData('super_attribute'); ?>
+                        <?php foreach ($superAttributeIds as $attrId): ?>
+                            <input type="hidden"
+                                   name="super_attribute[<?= (int) $attrId ?>]"
+                                   value="<?= $escaper->escapeHtmlAttr(is_scalar($preselected[$attrId] ?? null) ? (string) $preselected[$attrId] : '') ?>"
+                                   data-hyperion-super="<?= (int) $attrId ?>">
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+
+                    <?php /* -- Downloadable "Downloads" (purchaseable links) -
+                            Must live INSIDE the form so the `links[]` checkboxes
+                            post with the cart add. Renders nothing for
+                            non-downloadable products (the child block is only
+                            registered by the downloadable layout handle). */ ?>
+                    <?= $block->getChildHtml('type_downloadable_options') ?>
+                    <?php /* Bundle, grouped and customizable options: same rule, they must post with the cart add. */ ?>
+                    <?= $block->getChildHtml('type_bundle_options') ?>
+                    <?= $block->getChildHtml('type_grouped_options') ?>
+                    <?= $block->getChildHtml('custom_options') ?>
+
+                    <?php /* A grouped product has one quantity per associated product instead. */ ?>
+                    <div class="flex items-center gap-3<?= $isGrouped ? ' hidden' : '' ?>">
+                        <label for="qty" class="text-sm font-medium text-secondary">
+                            <?= $escaper->escapeHtml(__('Qty')) ?>
+                        </label>
+                        <input type="number"
+                               id="qty" name="qty"
+                               value="<?= $escaper->escapeHtmlAttr($qtyText(max((float) $block->getProductDefaultQty(), $qtyRules['value']))) ?>"
+                               min="<?= $escaper->escapeHtmlAttr($qtyText($qtyRules['min'])) ?>"
+                               <?php if ($qtyRules['max'] > 0): ?>max="<?= $escaper->escapeHtmlAttr($qtyText($qtyRules['max'])) ?>"<?php endif; ?>
+                               <?php if ($qtyRules['step'] > 0): ?>step="<?= $escaper->escapeHtmlAttr($qtyText($qtyRules['step'])) ?>"<?php endif; ?>
+                               inputmode="numeric"
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity')) ?>"
+                               class="w-20 px-3 py-2 text-sm border border-subtle rounded-lg bg-surface
+                                      text-secondary
+                                      focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary">
+                    </div>
+                    <?php if ($qtyIncrement > 0 && !$isGrouped): ?>
+                        <p class="text-xs text-muted w-full" data-hyperion-qty-increments>
+                            <?= $escaper->escapeHtml(__('%1 is available to buy in increments of %2', $product->getName(), $qtyText($qtyIncrement))) ?>
+                        </p>
+                    <?php endif; ?>
+
+                    <button type="submit"
+                            class="inline-flex w-full items-center justify-center gap-2
+                                   px-6 py-3 rounded-lg font-bold uppercase tracking-wider
+                                   bg-primary text-on-primary shadow-sm
+                                   hover:bg-primary-hover hover:shadow-md
+                                   focus:outline-none focus:ring-2 focus:ring-primary
+                                   disabled:opacity-50 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span><?= $escaper->escapeHtml($isCartConfigure ? __('Update Cart') : __('Add to Cart')) ?></span>
+                        <?php if (!$isCartConfigure): ?>
+                            <span id="hyperion-add-to-cart-indicator"
+                                  class="htmx-indicator"
+                                  aria-live="polite"
+                                  aria-label="<?= $escaper->escapeHtmlAttr(__('Adding to cart...')) ?>"></span>
+                        <?php endif; ?>
+                    </button>
+                </form>
+                <?php /* The form key of an edge cached page is repaired by lib/form-key.js before a
+                         submit; without scripting the baked key is refused and the redirect's message
+                         cookie is never read (docs/known-limitations.md). */ ?>
+                <noscript>
+                    <p class="text-xs text-muted">
+                        <?= $escaper->escapeHtml(__('JavaScript is required to add this product to the cart.')) ?>
+                    </p>
+                </noscript>
+                <?php if (!$isCartConfigure): ?>
+                    <?php /* PayPal smart buttons (theme Magento_Paypal/layout/catalog_product_view.xml) */ ?>
+                    <?= $block->getChildHtml('paypal_buttons') ?>
+                <?php endif; ?>
+            <?php else: ?>
+                <p class="rounded-lg border border-subtle py-3 text-center text-sm font-medium text-muted">
+                    <?= $escaper->escapeHtml(__('Out of stock')) ?>
+                </p>
+                <?= $block->getChildHtml('productalert_stock') ?>
+            <?php endif; ?>
+
+            <?php /* -- Wishlist + Compare action row -----------
+                    Each form is wrapped in <hyperion-list-toggle>: the
+                    component reads membership from the header fragments
+                    (edge-cached pages cannot know it server-side), paints
+                    the `active` state and turns the click into a remove
+                    (`remove-url`) when the product is already listed.
+                    Without JS the form still POSTs the native add action. */ ?>
+            <?php /* Translated labels are long ("Zur Wunschliste hinzufügen"): the buttons never
+                     break their label, the row wraps instead. */ ?>
+            <div class="flex flex-wrap items-center gap-3 pt-6 border-t border-subtle">
+                <hyperion-list-toggle kind="wishlist"
+                                      product-id="<?= (int) $productId ?>"
+                                      remove-url="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/remove')) ?>"
+                                      remove-param="item"
+                                      add-label="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>"
+                                      remove-label="<?= $escaper->escapeHtmlAttr(__('Remove from Wish List')) ?>">
+                <?php /* The product form travels along so the wish list item keeps the chosen options and qty. */ ?>
+                <form action="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/add')) ?>"
+                      method="post"
+                      hx-post="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/add')) ?>"
+                      hx-include="#product_addtocart_form"
+                      hx-target="#hyperion-notification"
+                      hx-swap="outerHTML"
+                      hx-select="#hyperion-notification">
+                    <?= $block->getBlockHtml('formkey') ?>
+                    <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                    <button type="submit"
+                            title="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>"
+                            class="inline-flex items-center gap-2 px-4 py-2 text-sm whitespace-nowrap
+                                   text-muted hover:text-primary
+                                   border border-subtle rounded-lg hover:border-primary/40
+                                   focus:outline-none focus:ring-2 focus:ring-primary
+                                   transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
+                        <span data-hyperion-toggle-label><?= $escaper->escapeHtml(__('Add to Wish List')) ?></span>
+                    </button>
+                </form>
+                </hyperion-list-toggle>
+
+                <hyperion-list-toggle kind="compare"
+                                      product-id="<?= (int) $productId ?>"
+                                      remove-url="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/remove')) ?>"
+                                      add-label="<?= $escaper->escapeHtmlAttr(__('Compare')) ?>"
+                                      remove-label="<?= $escaper->escapeHtmlAttr(__('Remove from Compare')) ?>">
+                <form action="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/add')) ?>"
+                      method="post"
+                      hx-post="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/add')) ?>"
+                      hx-target="#hyperion-notification"
+                      hx-swap="outerHTML"
+                      hx-select="#hyperion-notification">
+                    <?= $block->getBlockHtml('formkey') ?>
+                    <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                    <button type="submit"
+                            title="<?= $escaper->escapeHtmlAttr(__('Add to Compare')) ?>"
+                            class="inline-flex items-center gap-2 px-4 py-2 text-sm whitespace-nowrap
+                                   text-muted hover:text-primary
+                                   border border-subtle rounded-lg hover:border-primary/40
+                                   focus:outline-none focus:ring-2 focus:ring-primary
+                                   transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                        <span data-hyperion-toggle-label><?= $escaper->escapeHtml(__('Compare')) ?></span>
+                    </button>
+                </form>
+                </hyperion-list-toggle>
+                <?= $block->getChildHtml('sendfriend') ?>
+            </div>
+
+            <?php /* -- Stock + price alerts -------------------- */ ?>
+            <div class="flex items-center gap-2 text-sm">
+                <?php if ($isAvailable): ?>
+                    <svg class="w-4 h-4 text-success" fill="none" stroke="currentColor"
+                         stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span class="text-success font-medium">
+                        <?= $escaper->escapeHtml(__('In Stock')) ?>
+                    </span>
+                    <?php if ($lowStockVisible): ?>
+                        <span class="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning-strong"
+                              data-hyperion-low-stock="<?= $escaper->escapeHtmlAttr($qtyText($stockQtyLeft)) ?>">
+                            <?= $escaper->escapeHtml(__('Only %1 left', $qtyText($stockQtyLeft))) ?>
+                        </span>
+                    <?php endif; ?>
+                    <?php if ($isConfigurable): ?>
+                        <?php /* "Only N left" of the matched variant: <hyperion-swatches> (`stock-target`) fills it
+                                 from the `stockNotices` of its config and hides it while no variant matches. No
+                                 display utility here: the `hidden` attribute must keep winning. */ ?>
+                        <p id="hyperion-variant-stock"
+                           data-hyperion-variant-stock
+                           class="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning-strong"
+                           hidden></p>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <svg class="w-4 h-4 text-error" fill="none" stroke="currentColor"
+                         stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    <span class="text-error font-medium">
+                        <?= $escaper->escapeHtml(__('Out of Stock')) ?>
+                    </span>
+                <?php endif; ?>
+            </div>
+
+            <?= $block->getChildHtml('productalert_price') ?>
+
+        </div>
+    </div>
+
+    <?php if ($isFullWidth): ?>
+        </div>
+        <?php if ($description): ?>
+            <div id="description" class="product-full-width-section mb-12">
+                <?= /* @noEscape */ $description ?>
+            </div>
+        <?php endif; ?>
+        <?= $block->getChildHtml('product.attributes.pagebuilder') ?>
+        <div class="<?= $escaper->escapeHtmlAttr($containerClass) ?>">
+    <?php endif; ?>
+
+    <?php /* -- Detail tabs (description / attributes / reviews) -- */ ?>
+    <?php
+    $tabs = [];
+    if ($description && !$isFullWidth) {
+        $tabs[] = ['label' => __('Details'), 'html' => '<div class="prose prose-sm max-w-none text-secondary">' . $description . '</div>'];
+    }
+    // trim(): a block without attributes still prints whitespace, which showed an empty tab
+    $attributesHtml = trim((string) $block->getChildHtml(
+        $isFullWidth ? 'product.attributes.non_pagebuilder' : 'product.attributes'
+    ));
+    if ($attributesHtml) {
+        $tabs[] = ['label' => __('Additional Information'), 'html' => $attributesHtml];
+    }
+    $reviewsHtml = trim((string) $block->getChildHtml('reviews.tab'));
+    if ($reviewsHtml) {
+        $tabs[] = ['label' => __('Reviews'), 'html' => $reviewsHtml];
+    }
+    ?>
+    <hyperion-tabs class="block border-t border-subtle pt-8">
+        <?php /* Skeleton of the tab strip the component renders (same text, padding and rule as its
+                 shadow buttons): until the chunk arrives `_components.css` shows this strip and the
+                 first panel only, with the panel's padding, so the section has its final height from
+                 the first paint; once defined the strip is hidden (no layout shift). */ ?>
+        <div class="flex border-b border-subtle" data-hyperion-tabs-skeleton aria-hidden="true">
+            <?php foreach ($tabs as $tab): ?>
+                <span class="-mb-px border-b-2 border-transparent px-4 py-3 text-transparent"><?= $escaper->escapeHtml($tab['label']) ?></span>
+            <?php endforeach; ?>
+        </div>
+        <?php foreach ($tabs as $tab): ?>
+            <hyperion-tab label="<?= $escaper->escapeHtmlAttr($tab['label']) ?>">
+                <?= /* @noEscape */ $tab['html'] ?>
+            </hyperion-tab>
+        <?php endforeach; ?>
+    </hyperion-tabs>
+
+    <?php /* -- Related / Upsell carousels ----------------------
+        Fetch by block name rather than child alias -- Magento's native
+        layout attaches these blocks to `content.aside`, and our layout-
+        XML `<move>` doesn't reliably re-parent them into the PDP
+        getChildHtml pool under every merge ordering. `getLayout()
+        ->getBlock('catalog.product.related')` walks the block graph by
+        registered name and returns the resolved instance whatever its
+        current parent is. */ ?>
+    <?= $block->getChildHtml('catalog.product.related') ?>
+    <?= $block->getChildHtml('product.info.upsell') ?>
+    <?php if ($isFullWidth): ?></div><?php endif; ?>
+
+</section>

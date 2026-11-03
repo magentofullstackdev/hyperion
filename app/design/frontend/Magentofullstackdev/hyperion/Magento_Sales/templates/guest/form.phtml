@@ -1,0 +1,109 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Guest "Orders and Returns" lookup form.
+ *
+ * Carries its own form key (core adds it with RequireJS) and switches
+ * between the email and ZIP code field with a few lines of plain
+ * JavaScript. Without JavaScript the lookup by email still works. Both
+ * fields are always posted: core reads `oar_email` and `oar_zip`
+ * unconditionally, so the inactive one is hidden, never disabled.
+ *
+ * The Orders and Returns CMS widget (Magento_Sales::widget/guest/form.phtml)
+ * renders the same form with `hyperion_form_id` set on the block, which
+ * prefixes every id so the widget and this page can coexist.
+ *
+ * @var \Magento\Sales\Block\Widget\Guest\Form $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+$formId = (string) ($block->getData('hyperion_form_id') ?: 'oar-widget-orders-and-returns-form');
+$prefix = $block->getData('hyperion_form_id') ? $formId . '-' : '';
+$id = static fn (string $name): string => $prefix . $name;
+$labelClass = 'block text-sm font-medium text-secondary mb-1';
+$inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary'
+    . ' focus:border-primary outline-none text-sm';
+?>
+<form id="<?= $escaper->escapeHtmlAttr($formId) ?>"
+      action="<?= $escaper->escapeUrl($block->getActionUrl()) ?>"
+      method="post"
+      name="guest_post"
+      class="<?= $block->getData('hyperion_compact') ? 'space-y-4' : 'max-w-xl space-y-5 py-4' ?>">
+    <?= $block->getBlockHtml('formkey') ?>
+
+    <div>
+        <label for="<?= $escaper->escapeHtmlAttr($id('oar-order-id')) ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+            <?= $escaper->escapeHtml(__('Order ID')) ?> <span class="text-error" aria-hidden="true">*</span>
+        </label>
+        <input type="text" id="<?= $escaper->escapeHtmlAttr($id('oar-order-id')) ?>" name="oar_order_id" required
+               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+    </div>
+
+    <div>
+        <label for="<?= $escaper->escapeHtmlAttr($id('oar-billing-lastname')) ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+            <?= $escaper->escapeHtml(__('Billing Last Name')) ?> <span class="text-error" aria-hidden="true">*</span>
+        </label>
+        <input type="text" id="<?= $escaper->escapeHtmlAttr($id('oar-billing-lastname')) ?>" name="oar_billing_lastname" required
+               autocomplete="family-name"
+               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+    </div>
+
+    <div>
+        <label for="<?= $escaper->escapeHtmlAttr($id('quick-search-type-id')) ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+            <?= $escaper->escapeHtml(__('Find Order By')) ?>
+        </label>
+        <select name="oar_type" id="<?= $escaper->escapeHtmlAttr($id('quick-search-type-id')) ?>"
+                class="<?= $escaper->escapeHtmlAttr($inputClass) ?> bg-surface">
+            <option value="email"><?= $escaper->escapeHtml(__('Email')) ?></option>
+            <option value="zip"><?= $escaper->escapeHtml(__('ZIP Code')) ?></option>
+        </select>
+    </div>
+
+    <div data-oar-field="email">
+        <label for="<?= $escaper->escapeHtmlAttr($id('oar_email')) ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+            <?= $escaper->escapeHtml(__('Email')) ?> <span class="text-error" aria-hidden="true">*</span>
+        </label>
+        <input type="email" id="<?= $escaper->escapeHtmlAttr($id('oar_email')) ?>" name="oar_email" required autocomplete="email"
+               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+    </div>
+
+    <div data-oar-field="zip" hidden>
+        <label for="<?= $escaper->escapeHtmlAttr($id('oar_zip')) ?>" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+            <?= $escaper->escapeHtml(__('Billing ZIP Code')) ?> <span class="text-error" aria-hidden="true">*</span>
+        </label>
+        <input type="text" id="<?= $escaper->escapeHtmlAttr($id('oar_zip')) ?>" name="oar_zip" autocomplete="postal-code"
+               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+    </div>
+
+    <button type="submit"
+            class="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover
+                   transition-colors shadow-md text-sm uppercase tracking-wider">
+        <?= $escaper->escapeHtml(__('Continue')) ?>
+    </button>
+</form>
+<?php
+$script = <<<'JS'
+(function () {
+    var form = document.getElementById('%FORM_ID%');
+    if (!form) { return; }
+    var type = form.querySelector('[name="oar_type"]');
+    function sync() {
+        form.querySelectorAll('[data-oar-field]').forEach(function (field) {
+            var active = field.getAttribute('data-oar-field') === type.value;
+            var input = field.querySelector('input');
+            field.hidden = !active;
+            input.required = active;
+        });
+    }
+    type.addEventListener('change', sync);
+    sync();
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag(
+    'script',
+    ['type' => 'text/javascript'],
+    str_replace('%FORM_ID%', $escaper->escapeJs($formId), $script),
+    false
+) ?>

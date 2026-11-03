@@ -1,0 +1,45 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Skeleton of a product's swatches (no layout shift): rendered as light
+ * children of <hyperion-swatches> with the SAME geometry as the rows the
+ * component renders (pills 2rem high with the option text in transparent
+ * ink so they wrap exactly like the real ones, 1.375rem circles for the
+ * visual chips, the attribute label line outside the compact mode), so the
+ * tile or the product column has its final height before the component's
+ * chunk arrives. The upgraded component renders no slot, which hides these
+ * children; `_components.css` hides them for a defined element in any case.
+ *
+ * Rendered through fetchView() with `skeleton_rows` (SwatchConfig::getSkeletonRows)
+ * and `skeleton_compact` set on the calling block.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$rows = (array) $block->getData('skeleton_rows');
+$compact = (bool) $block->getData('skeleton_compact');
+if ($rows === []) {
+    return;
+}
+?>
+<div class="flex flex-col <?= $compact ? 'gap-1.5' : 'gap-4' ?>" data-hyperion-swatch-skeleton aria-hidden="true">
+    <?php foreach ($rows as $row): ?>
+        <?php /* No gap under the label: the component's legend sits like a fieldset legend, its row measures 53px = 21 + 32. */ ?>
+        <div class="flex flex-col">
+            <?php if (!$compact): ?>
+                <?php /* A text-like bar inside the 1.3125rem label line (0.8125rem bar + 0.5rem below). */ ?>
+                <span class="mb-2 block h-[0.8125rem] w-16 rounded bg-surface-raised"></span>
+            <?php endif; ?>
+            <div class="flex flex-wrap gap-2">
+                <?php foreach ($row['options'] as $option): ?>
+                    <?php if (!empty($option['visual'])): ?>
+                        <span class="inline-flex h-8 items-center"><span class="block h-[1.375rem] w-[1.375rem] rounded-full bg-surface-raised"></span></span>
+                    <?php else: ?>
+                        <span class="inline-flex h-8 min-w-8 items-center justify-center rounded border border-transparent bg-surface-raised px-3 text-sm text-transparent select-none"><?= $escaper->escapeHtml((string) ($option['text'] ?? '')) ?></span>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endforeach; ?>
+</div>

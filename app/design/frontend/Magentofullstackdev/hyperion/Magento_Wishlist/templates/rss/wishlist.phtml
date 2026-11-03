@@ -1,0 +1,25 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * RSS feed link of the wish list (only when `rss/wishlist/active` is on;
+ * view.phtml prints this block only for a non-empty wish list).
+ *
+ * @var \Magento\Wishlist\Block\Rss\Link $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->isRssAllowed() || !$block->getLink()) {
+    return;
+}
+?>
+<a href="<?= $escaper->escapeUrl($block->getLink()) ?>"
+   class="inline-flex items-center gap-1 text-sm font-medium text-muted hover:text-primary transition-colors
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+   data-hyperion-wishlist-rss>
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+         viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+    </svg>
+    <?= $escaper->escapeHtml(__('RSS Feed')) ?>
+</a>

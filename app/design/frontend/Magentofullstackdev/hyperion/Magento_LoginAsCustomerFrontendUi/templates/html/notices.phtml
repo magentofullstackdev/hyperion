@@ -1,0 +1,24 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Login as Customer" banner placeholder, rendered in `after.body.start`
+ * on every page by core's Magento_LoginAsCustomerFrontendUi layout.
+ *
+ * Pages are edge-cached, so nothing session-bound is decided here: the
+ * placeholder exists whenever the feature is switched on, and the single
+ * header-state request (`hyperion/header/state`) fills it out-of-band
+ * with the banner when the session is an admin impersonation (fragment
+ * `hyperion_customer_lac_notice` of Magentofullstackdev_HyperionCustomer).
+ * No Knockout, no customer-data sections, no `x-magento-init`.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$loginAsCustomer = $viewModels->optional(\Magentofullstackdev\HyperionCustomer\ViewModel\LoginAsCustomer::class);
+?>
+<?php if ($loginAsCustomer?->isEnabled()): ?>
+    <div id="hyperion-lac-notice"></div>
+<?php endif; ?>

@@ -1,0 +1,27 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: "Edit" link to the configure page
+ * (`wishlist/index/configure`), where the options can be changed.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Edit $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = $block->getItem();
+$product = $item->getProduct();
+if (!$product->isVisibleInSiteVisibility()) {
+    return;
+}
+?>
+<a href="<?= $escaper->escapeUrl($block->getItemConfigureUrl($item)) ?>"
+   class="inline-flex items-center gap-1 p-1.5 text-xs text-muted hover:text-primary transition-colors
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+   aria-label="<?= $escaper->escapeHtmlAttr(__('Edit %1', $product->getName())) ?>">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+         viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+    </svg>
+    <?= $escaper->escapeHtml(__('Edit')) ?>
+</a>

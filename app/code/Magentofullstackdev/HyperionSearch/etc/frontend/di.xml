@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- The suggestions are session-agnostic (they vary by X-Magento-Vary only): public at the edge. -->
+    <type name="Magentofullstackdev\HyperionCore\Model\PublicRouteRegistry">
+        <arguments>
+            <argument name="paths" xsi:type="array">
+                <item name="search_suggest" xsi:type="string">/hyperion/search/suggest</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- Rate limit group of the suggestions (Anti-Abuse Shield). -->
+    <type name="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\RateLimitPlugin">
+        <arguments>
+            <argument name="routes" xsi:type="array">
+                <item name="hyperion_search_suggest" xsi:type="string">search_suggest</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

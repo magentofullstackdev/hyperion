@@ -1,0 +1,38 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: remove the item.
+ *
+ * With HTMX the POST goes to `wishlist/index/remove` after the site
+ * confirmation dialog (`hx-confirm`). HyperionCore's RemovePlugin answers
+ * with the toast plus the out-of-band header counter; the toast is picked
+ * with `hx-select-oob` and the card itself is dropped (`hx-swap="delete"`).
+ * HTMX adds the values of the enclosing form, so `form_key` travels along.
+ * Without JavaScript the same button submits the outer form to the remove
+ * URL through `formaction` and the native redirect reloads the page.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Remove $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = $block->getItem();
+$removeUrl = $block->getUrl('wishlist/index/remove', ['item' => (int) $item->getWishlistItemId()]);
+?>
+<button type="submit"
+        formaction="<?= $escaper->escapeUrl($removeUrl) ?>"
+        hx-post="<?= $escaper->escapeUrl($removeUrl) ?>"
+        hx-target="closest article"
+        hx-swap="delete"
+        hx-select-oob="#hyperion-notification"
+        hx-confirm="<?= $escaper->escapeHtmlAttr(__('Remove this item from your wish list?')) ?>"
+        data-hyperion-wishlist-remove
+        class="inline-flex items-center gap-1 p-1.5 text-xs text-muted hover:text-error transition-colors
+               focus:outline-none focus-visible:ring-2 focus-visible:ring-error rounded"
+        aria-label="<?= $escaper->escapeHtmlAttr(__('Remove %1 from wish list', $item->getProduct()->getName())) ?>">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+         viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3"/>
+    </svg>
+    <?= $escaper->escapeHtml(__('Remove')) ?>
+</button>

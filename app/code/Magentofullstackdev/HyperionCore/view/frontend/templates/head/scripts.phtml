@@ -1,0 +1,119 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion global head scripts + critical CSS + resource hints.
+ *
+ * Render order is the performance contract:
+ *
+ *   1. Resource hints (preconnect, dns-prefetch, modulepreload) so the
+ *      browser opens TCP/TLS to the media host while it parses the
+ *      rest of <head>.
+ *   2. Inline critical CSS -- handcrafted ~2 KB stylesheet that paints
+ *      the header, container, and base typography before any network
+ *      request completes. Avoids the FOUC the entry-CSS preload would
+ *      otherwise produce.
+ *   3. Load the main entry CSS via `<link rel="stylesheet">`. Synchronous
+ *      so the parser blocks until it applies -- combined with the inlined
+ *      critical CSS the FCP is already painted, so the block here is
+ *      brief. We deliberately avoid the `rel="preload" + onload` swap
+ *      pattern: browser-cached responses can fire `load` before the
+ *      onload handler is bound, leaving the link stuck on `preload`
+ *      and the page rendering with critical CSS only -- symptom was
+ *      widgets and navigation looking unstyled because Tailwind never
+ *      applied.
+ *   4. HTMX configuration (meta tag, read by htmx when it starts), then
+ *      HTMX (defer) and the entry module (`type=module` is implicitly
+ *      deferred) -- load after the parser is past this block.
+ *
+ * URLs are cache-busted by Vite's manifest.json (read by
+ * Magentofullstackdev\HyperionCore\Block\AssetManifest). When the
+ * manifest is missing the block falls back to un-hashed paths and logs
+ * a warning so the page still loads in dev.
+ *
+ * Layout-XML hook: pass `preconnect_origins` as an array argument to
+ * add additional origins (CDNs, font hosts, analytics endpoints).
+ *
+ * The inline style and the inline script go through $secureRenderer->renderTag() so Magento CSP
+ * adds its nonce to both when a merchant tightens style-src / script-src (the attributes and the
+ * content are rendered as given; nothing is escaped).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\HtmxConfig $htmxConfig */
+$htmxConfig = $block->getData('htmx_config');
+
+/** @var \Magentofullstackdev\HyperionCore\Block\AssetManifest $assetManifest */
+$assetManifest = $block->getData('asset_manifest');
+
+$htmxScriptUrl = $htmxConfig->getScriptUrl();
+$entryJsUrl = $assetManifest->getAssetUrl('entry');
+$entryCssUrls = $assetManifest->getEntryCssUrls('entry');
+$criticalCss = $assetManifest->getCriticalCss();
+
+// Preconnect to the media host when it's served from a different origin
+// than the storefront (typical CDN setup). Same-origin media gets no
+// hint -- browsers already have the connection open.
+$mediaBaseUrl = $block->getUrl('', ['_type' => \Magento\Framework\UrlInterface::URL_TYPE_MEDIA]);
+$mediaHost = parse_url($mediaBaseUrl, PHP_URL_HOST) ?: '';
+$request = $block->getRequest();
+$currentHost = $request instanceof \Magento\Framework\App\Request\Http ? $request->getHttpHost() : '';
+
+/** @var string[] $preconnectOrigins extra origins via layout XML */
+$preconnectOrigins = (array) $block->getData('preconnect_origins');
+
+?>
+<?php if ($mediaHost !== '' && $mediaHost !== $currentHost): ?>
+<link rel="preconnect" href="//<?= $escaper->escapeHtmlAttr($mediaHost) ?>" crossorigin>
+<link rel="dns-prefetch" href="//<?= $escaper->escapeHtmlAttr($mediaHost) ?>">
+<?php endif; ?>
+<?php foreach ($preconnectOrigins as $origin): ?>
+    <?php if (is_string($origin) && $origin !== ''): ?>
+<link rel="preconnect" href="<?= $escaper->escapeUrl($origin) ?>" crossorigin>
+    <?php endif; ?>
+<?php endforeach; ?>
+<link rel="modulepreload" href="<?= $escaper->escapeUrl($entryJsUrl) ?>">
+<?php if ($criticalCss !== ''): ?>
+<?= /* @noEscape */ $secureRenderer->renderTag('style', ['data-hyperion-critical' => ''], $criticalCss, false) ?>
+<?php endif; ?>
+<?php /* Cross-document view transitions (theme _motion.css). A navigation that goes
+         through a POST (the forms) and a redirect makes Chrome abort the transition it started and
+         reject its promises at the first render of the new document, before any module runs, which
+         shows up as a page error nobody can handle later. So: no transition out of a submitted
+         form (nothing to abort), and the rejection of an aborted or skipped transition is marked
+         handled; every other rejection stays visible. Inline on purpose: it must run first. */
+$viewTransitionJs = <<<'JS'
+(function () {
+    var submitted = false;
+    addEventListener('submit', function () { submitted = true; }, true);
+    var observe = function (transition) {
+        // A navigation aborted or replaced while the transition is captured rejects these
+        // promises on the page that is going away; nobody awaits them.
+        if (!transition) { return; }
+        ['ready', 'finished', 'updateCallbackDone'].forEach(function (name) {
+            if (transition[name] && transition[name].catch) { transition[name].catch(function () {}); }
+        });
+    };
+    addEventListener('pageswap', function (event) {
+        if (submitted && event.viewTransition) { event.viewTransition.skipTransition(); }
+        observe(event.viewTransition);
+    });
+    addEventListener('pagereveal', function (event) { observe(event.viewTransition); });
+    addEventListener('unhandledrejection', function (event) {
+        var reason = event.reason;
+        var message = String(reason && reason.message !== undefined ? reason.message : reason);
+        if (/^Transition was (aborted|skipped)/.test(message)) { event.preventDefault(); }
+    });
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $viewTransitionJs, false) ?>
+<?php foreach ($entryCssUrls as $cssUrl): ?>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($cssUrl) ?>" media="all" data-hyperion-theme-css>
+<?php endforeach; ?>
+<meta name="htmx-config" content="<?= $escaper->escapeHtmlAttr($htmxConfig->getConfigJson()) ?>">
+<script type="text/javascript" src="<?= $escaper->escapeUrl($htmxScriptUrl) ?>" defer></script>
+<script type="module" src="<?= $escaper->escapeUrl($entryJsUrl) ?>"></script>

@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion Mega Menu.
+
+    One global tree per group (parent, level and position live on the item);
+    `hyperion_megamenu_item_store` holds the per store view values a
+    merchant overrides (title, badge, target, status, position), every column
+    nullable with null meaning "use default". No node is ever cloned per
+    store: a store only item lists its stores in `store_ids`.
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="hyperion_megamenu_group" resource="default" engine="innodb" comment="Hyperion Mega Menu Groups">
+        <column xsi:type="int" name="group_id" unsigned="true" nullable="false" identity="true" comment="Group ID"/>
+        <column xsi:type="varchar" name="identifier" nullable="false" length="64" comment="Identifier (main_navigation, footer_links, ...)"/>
+        <column xsi:type="varchar" name="title" nullable="false" length="255" comment="Title"/>
+        <column xsi:type="varchar" name="menu_type" nullable="false" length="32" default="mega-horizontal" comment="Menu Type"/>
+        <column xsi:type="varchar" name="website_ids" nullable="false" length="255" default="0" comment="Website IDs (comma separated, 0 = all)"/>
+        <column xsi:type="varchar" name="devices" nullable="false" length="16" default="both" comment="Devices (both, desktop, mobile)"/>
+        <column xsi:type="int" name="root_category_id" unsigned="true" nullable="true" comment="Root Category for the import"/>
+        <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
+        <column xsi:type="int" name="priority" nullable="false" default="0" comment="Priority (highest wins when several groups match)"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="group_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="HYPERION_MEGAMENU_GROUP_IDENTIFIER">
+            <column name="identifier"/>
+        </constraint>
+        <index referenceId="HYPERION_MEGAMENU_GROUP_IS_ACTIVE_PRIORITY" indexType="btree">
+            <column name="is_active"/>
+            <column name="priority"/>
+        </index>
+    </table>
+    <table name="hyperion_megamenu_item" resource="default" engine="innodb" comment="Hyperion Mega Menu Items">
+        <column xsi:type="int" name="item_id" unsigned="true" nullable="false" identity="true" comment="Item ID"/>
+        <column xsi:type="int" name="group_id" unsigned="true" nullable="false" comment="Group ID"/>
+        <column xsi:type="int" name="parent_id" unsigned="true" nullable="false" default="0" comment="Parent Item ID (0 = root level)"/>
+        <column xsi:type="varchar" name="title" nullable="false" length="255" comment="Title"/>
+        <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
+        <column xsi:type="smallint" name="level" unsigned="true" nullable="false" default="0" comment="Level (0 = root)"/>
+        <column xsi:type="int" name="position" nullable="false" default="0" comment="Position among siblings"/>
+        <column xsi:type="varchar" name="item_type" nullable="false" length="32" default="custom" comment="Item Type"/>
+        <column xsi:type="varchar" name="item_target_value" nullable="true" length="255" comment="Target (category id, SKU, CMS identifier, URL)"/>
+        <column xsi:type="varchar" name="url_target" nullable="false" length="16" default="_self" comment="Link target"/>
+        <column xsi:type="smallint" name="dropdown_width" unsigned="true" nullable="false" default="0" comment="Dropdown width (0 simple, 1..12 grid columns)"/>
+        <column xsi:type="smallint" name="is_container" unsigned="true" nullable="false" default="1" comment="Mega panel inside the site container"/>
+        <column xsi:type="varchar" name="custom_class" nullable="true" length="255" comment="Custom CSS class"/>
+        <column xsi:type="smallint" name="nofollow" unsigned="true" nullable="false" default="0" comment="rel=nofollow"/>
+        <column xsi:type="varchar" name="badge_text" nullable="true" length="64" comment="Badge text"/>
+        <column xsi:type="varchar" name="badge_color" nullable="true" length="32" comment="Badge color token"/>
+        <column xsi:type="varchar" name="customer_group_ids" nullable="true" length="255" comment="Customer group IDs (comma separated, empty = all)"/>
+        <column xsi:type="varchar" name="store_ids" nullable="true" length="255" comment="Store IDs the item is limited to (comma separated, empty = all)"/>
+        <column xsi:type="smallint" name="children_depth" unsigned="true" nullable="false" default="0" comment="Live subcategory levels rendered under a category item"/>
+        <column xsi:type="int" name="source_category_id" unsigned="true" nullable="true" comment="Category the import created the item from"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="item_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="HYPERION_MEGAMENU_ITEM_GROUP_ID_HYPERION_MEGAMENU_GROUP_GROUP_ID"
+                    table="hyperion_megamenu_item" column="group_id"
+                    referenceTable="hyperion_megamenu_group" referenceColumn="group_id" onDelete="CASCADE"/>
+        <index referenceId="HYPERION_MEGAMENU_ITEM_GROUP_ID_PARENT_ID_POSITION" indexType="btree">
+            <column name="group_id"/>
+            <column name="parent_id"/>
+            <column name="position"/>
+        </index>
+    </table>
+    <table name="hyperion_megamenu_item_store" resource="default" engine="innodb" comment="Hyperion Mega Menu Item Store Values">
+        <column xsi:type="int" name="row_id" unsigned="true" nullable="false" identity="true" comment="Row ID"/>
+        <column xsi:type="int" name="item_id" unsigned="true" nullable="false" comment="Item ID"/>
+        <column xsi:type="smallint" name="store_id" unsigned="true" nullable="false" comment="Store ID"/>
+        <column xsi:type="varchar" name="title" nullable="true" length="255" comment="Title (null = default)"/>
+        <column xsi:type="varchar" name="badge_text" nullable="true" length="64" comment="Badge text (null = default)"/>
+        <column xsi:type="varchar" name="badge_color" nullable="true" length="32" comment="Badge color (null = default)"/>
+        <column xsi:type="varchar" name="item_target_value" nullable="true" length="255" comment="Target (null = default)"/>
+        <column xsi:type="smallint" name="is_active" unsigned="true" nullable="true" comment="Is Active (null = default)"/>
+        <column xsi:type="int" name="position" nullable="true" comment="Position (null = default)"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="row_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="HYPERION_MEGAMENU_ITEM_STORE_ITEM_ID_HYPERION_MEGAMENU_ITEM_ITEM_ID"
+                    table="hyperion_megamenu_item_store" column="item_id"
+                    referenceTable="hyperion_megamenu_item" referenceColumn="item_id" onDelete="CASCADE"/>
+        <constraint xsi:type="foreign" referenceId="HYPERION_MEGAMENU_ITEM_STORE_STORE_ID_STORE_STORE_ID"
+                    table="hyperion_megamenu_item_store" column="store_id"
+                    referenceTable="store" referenceColumn="store_id" onDelete="CASCADE"/>
+        <constraint xsi:type="unique" referenceId="HYPERION_MEGAMENU_ITEM_STORE_ITEM_ID_STORE_ID">
+            <column name="item_id"/>
+            <column name="store_id"/>
+        </constraint>
+    </table>
+</schema>

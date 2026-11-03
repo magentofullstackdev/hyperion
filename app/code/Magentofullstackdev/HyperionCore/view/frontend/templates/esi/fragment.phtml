@@ -1,0 +1,26 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Edge-composed fragment placeholder. See Block\EsiFragment for the three
+ * modes (ESI include, inline child, HTMX fetch). The fragment endpoint must
+ * return INNER content (no wrapping element) so every mode hydrates the
+ * same wrapper span identically.
+ *
+ * @var \Magentofullstackdev\HyperionCore\Block\EsiFragment $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$url = $escaper->escapeUrl($block->getFragmentUrl());
+$id = $escaper->escapeHtmlAttr($block->getElementId());
+$trigger = $escaper->escapeHtmlAttr($block->getHxTrigger());
+?>
+<?php if ($block->supportsEsi()): ?>
+<span id="<?= /* @noEscape -- escaped above */ $id ?>"><esi:include src="<?= /* @noEscape -- escaped above */ $url ?>" onerror="continue"/></span>
+<?php elseif ($block->hasInline()): ?>
+<span id="<?= /* @noEscape -- escaped above */ $id ?>"><?= /* @noEscape -- child block output */ $block->getInlineHtml() ?></span>
+<?php else: ?>
+<span id="<?= /* @noEscape -- escaped above */ $id ?>"
+      hx-get="<?= /* @noEscape -- escaped above */ $url ?>"
+      hx-trigger="<?= /* @noEscape -- escaped above */ $trigger ?>"
+      hx-swap="innerHTML"><?= /* @noEscape -- markup supplied by layout XML */ $block->getPlaceholder() ?></span>
+<?php endif; ?>

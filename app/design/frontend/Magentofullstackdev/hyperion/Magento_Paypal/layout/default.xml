@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal on every page.
+
+    The in-context component block only boots the RequireJS checkout
+    widgets. The Bml banners are the retired "Bill Me Later" images; Pay
+    Later messages replace them (Magento_Paypal::paylater/banner.phtml
+    renders <hyperion-paypal-message>).
+
+    Core mounts the header messages in top.container, which sits above
+    the breadcrumbs; the message belongs to the content, so the container
+    moves under them.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="paypal.express-in-context.component" remove="true"/>
+        <referenceBlock name="bml.center.logo" remove="true"/>
+        <referenceBlock name="bml.right.logo" remove="true"/>
+        <move element="top.container" destination="page.top" after="breadcrumbs"/>
+    </body>
+</page>

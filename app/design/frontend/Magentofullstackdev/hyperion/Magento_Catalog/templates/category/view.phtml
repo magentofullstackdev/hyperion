@@ -1,0 +1,113 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion category page shell.
+ *
+ * For 2col / 3col page layouts, layered nav is mounted into `sidebar.main`
+ * by Magento_LayeredNavigation/layout/catalog_category_view_type_layered.xml
+ * and the page-layout XMLs in Magento_Theme/page_layout/* arrange the
+ * sidebar beside `main` via flex.
+ *
+ * For 1column page layouts there is NO sidebar.main, so the layered-nav
+ * block is orphaned. To keep filters available for shoppers on those
+ * pages, this template detects the active page_layout and re-renders the
+ * `catalog.leftnav` block INLINE above the product grid as a
+ * full-width filter bar.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+// Title and description are child blocks. On the category-full-width page
+// layout they are moved above the columns (with the image and the CMS
+// block), so getChildHtml() returns nothing here and the header is skipped.
+$titleHtml = trim((string) $block->getChildHtml('category.title'));
+$descriptionHtml = trim((string) $block->getChildHtml('category.description'));
+
+// Render the layered-nav block INLINE only when we're on a 1column page.
+//
+// On 1column pages `Magento_LayeredNavigation/page_layout/1column.xml`
+// moves `catalog.leftnav` into `hyperion.category.view` -- so the block's
+// parent in the layout tree equals our wrapper name. On 2col / 3col pages
+// the vendor's `2columns-left.xml` / `2columns-right.xml` / `3columns.xml`
+// page_layout files move it into `sidebar.main`, where it renders as the
+// vertical filter cards sidebar -- and rendering it inline here too would
+// duplicate the filter UI.
+$inlineLayeredNavHtml = '';
+$leftnav = $block->getLayout()->getBlock('catalog.leftnav');
+if ($leftnav) {
+    $leftnavParent = (string) $block->getLayout()->getParentName($leftnav->getNameInLayout());
+    if ($leftnavParent === $block->getNameInLayout()) {
+        try {
+            $inlineLayeredNavHtml = (string) $leftnav->toHtml();
+        } catch (\Throwable $e) {
+            $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->error('category/view.phtml: inline layered navigation', $e);
+            $inlineLayeredNavHtml = '';
+        }
+    }
+}
+?>
+<section aria-labelledby="hyperion-category-title">
+
+    <?php if ($titleHtml !== '' || $descriptionHtml !== ''): ?>
+        <header class="mb-6">
+            <?= /* @noEscape */ $titleHtml ?>
+            <?php /*
+                Category description lives directly under the H1 so the copy
+                reads as a subtitle for the landing page.
+            */ ?>
+            <?= /* @noEscape */ $descriptionHtml ?>
+        </header>
+    <?php endif; ?>
+
+    <?php /*
+        Category image (when the merchandiser uploads a hero image on the
+        category record) and CMS static block (when the category is in
+        Content / Mixed mode) -- rendered above the filters and product grid
+        so they appear at the top of the landing, matching the behavior of
+        the Magento core category view.phtml but inside Hyperion's wrapper.
+    */ ?>
+    <?= $block->getChildHtml('category.image') ?>
+    <?= $block->getChildHtml('category.cms') ?>
+
+    <?php if ($inlineLayeredNavHtml !== ''): ?>
+        <?php /*
+            1column inline filter bar. The layered-nav template emits
+            <details> cards; on 1column we override its layout to a
+            horizontal flex row of compact dropdown chips via the
+            data-hyperion-inline-filters wrapper class (see _topmenu.css
+            sibling and the relevant rules in _theme overrides).
+        */ ?>
+        <div class="mb-6" data-hyperion-inline-filters>
+            <?= /* @noEscape */ $inlineLayeredNavHtml ?>
+        </div>
+    <?php endif; ?>
+
+    <?php /*
+        1column only: the additional sidebar wrapper (wishlist, compare,
+        widgets) sits in the `hyperion.sidebar.inline` container, moved
+        into this block by catalog_category_view.xml, and renders here as
+        a row of cards under the filters, above the product grid. On
+        2 / 3 column pages the container is empty (the wrapper is pinned
+        to the rail) and getChildHtml() prints nothing.
+    */ ?>
+    <?php $additionalSidebarHtml = trim((string) $block->getChildHtml('hyperion.sidebar.inline')); ?>
+    <?php if ($additionalSidebarHtml !== ''): ?>
+        <div class="mb-6" data-hyperion-inline-sidebar>
+            <?= /* @noEscape */ $additionalSidebarHtml ?>
+        </div>
+    <?php endif; ?>
+
+    <?php /*
+        Persistent notification region for cart/wishlist/compare feedback.
+        HTMX refuses to fire a request whose hx-target resolves to no
+        element; every per-tile form in list.phtml targets this id.
+        Emitted as <hyperion-notification> so HTMX's outerHTML swap
+        replaces the placeholder with a fully upgraded custom element
+        (close button + 15s auto-dismiss, see hyperion-notification.js).
+    */ ?>
+    <?php /* #hyperion-notification is global now: Magento_Theme::html/notifications.phtml */ ?>
+
+    <?= $block->getChildHtml('category.products') ?>
+</section>

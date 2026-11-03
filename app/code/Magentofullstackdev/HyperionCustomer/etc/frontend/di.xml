@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Wishlist\Controller\Shared\Index">
+        <plugin name="hyperion_customer_shared_wishlist_not_found"
+                type="Magentofullstackdev\HyperionCustomer\Plugin\Wishlist\Controller\Shared\IndexPlugin"/>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Model\Htmx\HeaderStatePool">
+        <arguments>
+            <argument name="fragments" xsi:type="array">
+                <item name="account_menu" xsi:type="array">
+                    <item name="handle" xsi:type="string">hyperion_customer_welcome</item>
+                    <item name="block" xsi:type="string">hyperion.customer.welcome.fragment</item>
+                    <item name="target_id" xsi:type="string">hyperion-account-menu</item>
+                    <item name="sort_order" xsi:type="number">10</item>
+                </item>
+                <item name="wishlist" xsi:type="array">
+                    <item name="handle" xsi:type="string">hyperion_customer_wishlist</item>
+                    <item name="block" xsi:type="string">hyperion.customer.wishlist.fragment</item>
+                    <item name="sort_order" xsi:type="number">20</item>
+                </item>
+                <item name="login_as_customer_notice" xsi:type="array">
+                    <item name="handle" xsi:type="string">hyperion_customer_lac_notice</item>
+                    <item name="block" xsi:type="string">hyperion.customer.lac.notice</item>
+                    <item name="sort_order" xsi:type="number">90</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>

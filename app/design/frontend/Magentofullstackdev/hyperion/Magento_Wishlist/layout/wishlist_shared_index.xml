@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Public shared wishlist page (/wishlist/shared/index/code/<sharing_code>/).
+
+    The shared.phtml template renders its own h1 from the block header, so
+    page.main.title is removed. The item options block is attached as a
+    child so the template can list the options the owner selected (the core
+    Share\Wishlist block has no details renderer of its own).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <referenceBlock name="customer.wishlist">
+            <block class="Magento\Wishlist\Block\Customer\Wishlist\Item\Options"
+                   name="customer.wishlist.shared.item.options"
+                   as="item_options"/>
+        </referenceBlock>
+    </body>
+</page>

@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion 2columns-left page layout.
+
+    Inherits the grid from 1column and gives it two columns on md+: a
+    16rem rail on the LEFT that holds `div.sidebar.main` (the layered
+    navigation, moved there by Magento_LayeredNavigation's own page_layout
+    file) with `div.sidebar.additional` (wishlist, compare, widgets)
+    stacked UNDER it, and `main` spanning both rows on the right, exactly
+    like Luma's 2columns-left. The rows are `auto 1fr`: the first row is
+    exactly as tall as the filters, so the additional sidebar sits right
+    under them whatever the height of `main` (with two `auto` rows the
+    grid would split the content's extra height between the rows and open
+    a gap). On mobile the grid is one column in DOM order: main, filters,
+    additional. `empty:hidden` drops a wrapper from the flow when nothing
+    is mounted inside, so a page without filters shows the additional
+    sidebar at the top of the rail; when NO rail has anything visible
+    (account pages, which core declares 2columns-left; a guest on a page
+    whose only rail content is the wishlist / compare sidebars) the
+    `.page-columns` rules of _components.css make the grid one column
+    again, otherwise `main` would keep an empty 16rem rail beside it.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="1column"/>
+    <referenceContainer name="columns"
+                        htmlClass="page-columns container mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[16rem_1fr] gap-6 md:grid-rows-[auto_1fr] md:items-start flex-grow"/>
+    <referenceContainer name="main"
+                        htmlClass="column main min-w-0 w-full md:col-start-2 md:row-start-1 md:row-span-2"/>
+    <referenceContainer name="div.sidebar.main"
+                        htmlClass="sidebar sidebar-main w-full md:col-start-1 md:row-start-1 empty:hidden"/>
+    <!-- The 1column files of every module are merged into this layout too:
+         Magento_LayeredNavigation/page_layout/1column.xml moves the additional
+         wrapper into the inline container (under the inline filters of a
+         1column category page); here it belongs to the rail, so it is moved
+         back next to the filters. -->
+    <move element="div.sidebar.additional" destination="columns" after="div.sidebar.main"/>
+    <referenceContainer name="div.sidebar.additional"
+                        htmlClass="sidebar sidebar-additional w-full md:col-start-1 md:row-start-2 empty:hidden"/>
+</layout>

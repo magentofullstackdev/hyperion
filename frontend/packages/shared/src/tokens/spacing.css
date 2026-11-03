@@ -1,0 +1,14 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * @magentofullstackdev/hyperion-shared -- spacing tokens.
+ *
+ * Section-level rhythm for theme chrome and content surfaces. Component-
+ * specific spacing (slider gap, swatch size, panel width, etc.) lives
+ * in the consuming package because it is component-specific, not part
+ * of the global design contract.
+ */
+:root {
+    --spacing-section: 2rem;
+}

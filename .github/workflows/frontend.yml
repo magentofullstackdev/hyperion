@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MIT
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Build, typecheck, lint, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r typecheck
+      - run: pnpm -r lint
+      - run: pnpm -r test
+      - run: pnpm -r build
+      - name: Committed build assets must match the sources
+        run: |
+          cd ..
+          # The trailing /* is what makes the pathspec match the files inside the asset directories.
+          git status --porcelain -- 'app/**/web/assets/*' 'app/**/web/css/*' 'app/**/web/manifest.json' 'app/**/.vite/manifest.json' 'app/**/web/THIRD_PARTY_LICENSES.txt'
+          test -z "$(git status --porcelain -- 'app/**/web/assets/*' 'app/**/web/css/*' 'app/**/web/manifest.json' 'app/**/.vite/manifest.json' 'app/**/web/THIRD_PARTY_LICENSES.txt')"
+      - name: Publishable tarballs
+        run: pnpm -r exec pnpm pack --pack-destination /tmp/tarballs && ls -la /tmp/tarballs

@@ -1,0 +1,102 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion customer dashboard "Contact Information" + "Newsletter" cards.
+ *
+ * Layout: two
+ * equal-height cards side by side on md+, stacking on mobile. The core
+ * Dashboard\Info block exposes the current customer object plus the
+ * newsletter-subscription status; we keep Magento's accessors so the
+ * rest of the ecosystem (two-factor auth plugins, B2B company modules)
+ * continues to stack on top of this template.
+ *
+ * @var \Magento\Customer\Block\Account\Dashboard\Info $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$customer = $block->getCustomer();
+$isNewsletterEnabled = $block->isNewsletterEnabled();
+$isSubscribed = $block->getIsSubscribed();
+$changePasswordUrl = $block->getChangePasswordUrl();
+$editCustomerInfoUrl = $block->getUrl('customer/account/edit');
+$editNewsletterUrl = $block->getUrl('newsletter/manage');
+?>
+<article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+    <div class="flex items-start gap-4">
+        <span class="shrink-0 w-10 h-10 rounded-full bg-primary/10 text-primary
+                     inline-flex items-center justify-center" aria-hidden="true">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+        </span>
+
+        <div class="flex-1 space-y-1">
+            <h3 class="text-base font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Contact Information')) ?>
+            </h3>
+            <p class="text-sm text-secondary">
+                <?= $escaper->escapeHtml($block->getName()) ?><br>
+                <?php if ($customer && $customer->getEmail()): ?>
+                    <a href="mailto:<?= $escaper->escapeHtmlAttr($customer->getEmail()) ?>"
+                       class="text-muted hover:text-primary transition-colors">
+                        <?= $escaper->escapeHtml($customer->getEmail()) ?>
+                    </a>
+                <?php endif; ?>
+            </p>
+        </div>
+    </div>
+
+    <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <a href="<?= $escaper->escapeUrl($editCustomerInfoUrl) ?>"
+           class="inline-flex items-center gap-1 text-primary hover:text-primary-hover font-medium">
+            <?= $escaper->escapeHtml(__('Edit')) ?>
+            <span aria-hidden="true">-></span>
+        </a>
+        <a href="<?= $escaper->escapeUrl($changePasswordUrl) ?>"
+           class="inline-flex items-center gap-1 text-primary hover:text-primary-hover font-medium">
+            <?= $escaper->escapeHtml(__('Change Password')) ?>
+            <span aria-hidden="true">-></span>
+        </a>
+    </div>
+
+    <?= $block->getChildHtml('customer.account.dashboard.info.extra') ?>
+</article>
+
+<?php if ($isNewsletterEnabled): ?>
+    <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+        <div class="flex items-start gap-4">
+            <span class="shrink-0 w-10 h-10 rounded-full bg-primary/10 text-primary
+                         inline-flex items-center justify-center" aria-hidden="true">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8m-18 8V8a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                </svg>
+            </span>
+
+            <div class="flex-1 space-y-1">
+                <h3 class="text-base font-semibold text-secondary">
+                    <?= $escaper->escapeHtml(__('Newsletters')) ?>
+                </h3>
+                <p class="text-sm text-secondary">
+                    <?= $isSubscribed
+                        ? $escaper->escapeHtml(__('You are subscribed to our newsletter.'))
+                        : $escaper->escapeHtml(__("You aren't subscribed to our newsletter.")) ?>
+                </p>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <a href="<?= $escaper->escapeUrl($editNewsletterUrl) ?>"
+               class="inline-flex items-center gap-1 text-primary hover:text-primary-hover font-medium">
+                <?= $escaper->escapeHtml(__('Edit')) ?>
+                <span aria-hidden="true">-></span>
+            </a>
+        </div>
+    </article>
+<?php endif; ?>
+
+<?= $block->getChildHtml('additional_blocks') ?>

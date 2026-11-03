@@ -1,0 +1,95 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Select custom option: drop-down, multiple select, radio buttons or
+ * checkboxes. Each value carries its price in `data-price`.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options\Type\Select $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magento\Catalog\Api\Data\ProductCustomOptionInterface as Option;
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$option = $block->getOption();
+$optionId = (int) $option->getId();
+$type = (string) $option->getType();
+$isRequired = (bool) $option->getIsRequire();
+$vm = $viewModels->require(CustomOptions::class);
+$optionsBlock = $block->getParentBlock();
+$preconfigured = $block->getProduct()->getPreconfiguredValues()->getData('options/' . $optionId);
+$selected = array_map('strval', (array) $preconfigured);
+$isMultiple = in_array($type, [Option::OPTION_TYPE_CHECKBOX, Option::OPTION_TYPE_MULTIPLE], true);
+$fieldName = 'options[' . $optionId . ']' . ($isMultiple ? '[]' : '');
+$fieldId = 'select_' . $optionId;
+$selectClass = 'w-full px-4 py-2.5 text-sm border border-subtle rounded-lg bg-surface text-secondary'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+$choiceClass = 'h-4 w-4 border-subtle text-primary focus:ring-2 focus:ring-primary';
+$valueChoiceClass = $choiceClass . ($type === Option::OPTION_TYPE_RADIO ? '' : ' rounded');
+?>
+<fieldset class="space-y-2">
+    <legend class="text-sm font-medium text-secondary">
+        <?= $escaper->escapeHtml($option->getTitle()) ?>
+        <?php if ($isRequired): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+    </legend>
+
+    <?php if ($type === Option::OPTION_TYPE_DROP_DOWN || $type === Option::OPTION_TYPE_MULTIPLE): ?>
+        <select id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                name="<?= $escaper->escapeHtmlAttr($fieldName) ?>"
+                aria-label="<?= $escaper->escapeHtmlAttr($option->getTitle()) ?>"
+                <?php if ($isMultiple): ?>multiple<?php endif; ?>
+                <?php if ($isRequired): ?>required<?php endif; ?>
+                class="<?= $escaper->escapeHtmlAttr($selectClass) ?>">
+            <?php if (!$isMultiple): ?>
+                <option value=""><?= $escaper->escapeHtml(__('-- Please Select --')) ?></option>
+            <?php endif; ?>
+            <?php foreach ($option->getValues() as $value): ?>
+                <?php
+                $valueId = (int) $value->getOptionTypeId();
+                $price = $vm->getPrice($optionsBlock, $optionId, $valueId);
+                ?>
+                <option value="<?= (int) $valueId ?>"
+                        data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                        <?php if (in_array((string) $valueId, $selected, true)): ?>selected<?php endif; ?>>
+                    <?= $escaper->escapeHtml(trim($value->getTitle() . ' ' . $vm->formatNotice($price))) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    <?php else: ?>
+        <div class="space-y-2">
+            <?php if ($type === Option::OPTION_TYPE_RADIO && !$isRequired): ?>
+                <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer">
+                    <input type="radio"
+                           name="<?= $escaper->escapeHtmlAttr($fieldName) ?>"
+                           value=""
+                           data-price="0"
+                           <?php if (!$selected): ?>checked<?php endif; ?>
+                           class="<?= $escaper->escapeHtmlAttr($choiceClass) ?>">
+                    <span><?= $escaper->escapeHtml(__('None')) ?></span>
+                </label>
+            <?php endif; ?>
+            <?php foreach ($option->getValues() as $value): ?>
+                <?php
+                $valueId = (int) $value->getOptionTypeId();
+                $price = $vm->getPrice($optionsBlock, $optionId, $valueId);
+                ?>
+                <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer">
+                    <input type="<?= $type === Option::OPTION_TYPE_RADIO ? 'radio' : 'checkbox' ?>"
+                           name="<?= $escaper->escapeHtmlAttr($fieldName) ?>"
+                           value="<?= (int) $valueId ?>"
+                           data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                           <?php if (in_array((string) $valueId, $selected, true)): ?>checked<?php endif; ?>
+                           <?php if ($isRequired && $type === Option::OPTION_TYPE_RADIO): ?>required<?php endif; ?>
+                           class="<?= $escaper->escapeHtmlAttr($valueChoiceClass) ?>">
+                    <span><?= $escaper->escapeHtml($value->getTitle()) ?></span>
+                    <span class="text-muted"><?= $escaper->escapeHtml($vm->formatNotice($price)) ?></span>
+                </label>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</fieldset>

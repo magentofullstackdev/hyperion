@@ -1,0 +1,66 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion cart page upsell / cross-sell -- rendered inside <hyperion-carousel>.
+ *
+ * @var \Magento\Checkout\Block\Cart\Crosssell $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$items = $block->getItems();
+if (!$items || count($items) === 0) {
+    return;
+}
+
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer $imageViewModel */
+$imageViewModel = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer::class);
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Pricing $pricingViewModel */
+$pricingViewModel = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Pricing::class);
+
+/** @var \Magentofullstackdev\HyperionImage\ViewModel\ImageConfig|null $imageCfg */
+// HyperionImage may be disabled: degrade gracefully to plain <img>.
+$imageCfg = $viewModels->optional(\Magentofullstackdev\HyperionImage\ViewModel\ImageConfig::class);
+?>
+<section class="mt-10" aria-labelledby="cart-upsell-heading">
+    <h2 id="cart-upsell-heading" class="text-xl font-bold text-secondary mb-4">
+        <?= $escaper->escapeHtml(__('You may also like')) ?>
+    </h2>
+
+    <hyperion-carousel gap="16" class="block"
+                       prev-label="<?= $escaper->escapeHtmlAttr(__('Previous slide')) ?>"
+                       next-label="<?= $escaper->escapeHtmlAttr(__('Next slide')) ?>"
+                       dot-label="<?= $escaper->escapeHtmlAttr(__('Go to page')) ?>">
+        <?php foreach ($items as $_item):
+            $imageUrl = $imageViewModel->getUrl($_item, 'category_page_grid');
+        ?>
+            <article class="bg-surface rounded-xl border border-subtle overflow-hidden hover:shadow-md transition-shadow">
+                <a href="<?= $escaper->escapeUrl($_item->getProductUrl()) ?>"
+                   class="block aspect-square overflow-hidden bg-surface-raised">
+                    <picture>
+                        <?php if ($imageCfg !== null && $imageCfg->hasAvifCompanion($imageUrl)): ?>
+                            <source type="image/avif" srcset="<?= $escaper->escapeUrl($imageCfg->getAvifUrl($imageUrl)) ?>">
+                        <?php endif; ?>
+                        <?php if ($imageCfg !== null && $imageCfg->hasWebpCompanion($imageUrl)): ?>
+                            <source type="image/webp" srcset="<?= $escaper->escapeUrl($imageCfg->getWebpUrl($imageUrl)) ?>">
+                        <?php endif; ?>
+                        <img src="<?= $escaper->escapeUrl($imageUrl) ?>"
+                             alt="<?= $escaper->escapeHtmlAttr($_item->getName()) ?>"
+                             loading="lazy"
+                             width="300"
+                             height="300"
+                             class="w-full h-full object-cover"/>
+                    </picture>
+                </a>
+                <div class="p-3 space-y-1">
+                    <a href="<?= $escaper->escapeUrl($_item->getProductUrl()) ?>"
+                       class="block text-sm font-medium text-secondary hover:text-primary line-clamp-2 transition-colors">
+                        <?= $escaper->escapeHtml($_item->getName()) ?>
+                    </a>
+                    <div class="text-sm font-bold text-secondary">
+                        <?= /* @noEscape */ $pricingViewModel->getProductPriceHtml($_item) ?>
+                    </div>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </hyperion-carousel>
+</section>

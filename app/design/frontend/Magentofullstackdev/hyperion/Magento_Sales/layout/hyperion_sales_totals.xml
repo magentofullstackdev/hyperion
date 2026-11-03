@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Totals rendered as a list under the Hyperion item tables (customer and guest pages) -->
+        <referenceBlock name="order_totals" template="Magento_Sales::order/totals/summary.phtml"/>
+        <referenceBlock name="invoice_totals" template="Magento_Sales::order/totals/summary.phtml"/>
+        <referenceBlock name="creditmemo_totals" template="Magento_Sales::order/totals/summary.phtml"/>
+        <referenceBlock name="tax" template="Magento_Tax::order/totals/tax.phtml"/>
+    </body>
+</page>

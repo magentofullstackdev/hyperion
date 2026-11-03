@@ -1,0 +1,95 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion customer dashboard "Address Book" section.
+ *
+ * Rendered as its own block below the contact info row. The card
+ * surrounds two address slots (billing + shipping) that reuse the
+ * <hyperion-address-card> component for consistency with the full
+ * address book page.
+ *
+ * @var \Magento\Customer\Block\Account\Dashboard\Address $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$manageAddressesUrl = $block->getAddressBookUrl();
+$billingHtml = $block->getPrimaryBillingAddressHtml();
+$shippingHtml = $block->getPrimaryShippingAddressHtml();
+$billingEditUrl = $block->getPrimaryBillingAddressEditUrl();
+$shippingEditUrl = $block->getPrimaryShippingAddressEditUrl();
+$hasBillingAddress = $billingEditUrl !== '';
+$hasShippingAddress = $shippingEditUrl !== '';
+?>
+<section class="space-y-4" aria-labelledby="hyperion-dashboard-addr-heading">
+
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+        <h2 id="hyperion-dashboard-addr-heading"
+            class="text-xl font-semibold text-secondary">
+            <?= $escaper->escapeHtml(__('Address Book')) ?>
+        </h2>
+
+        <a href="<?= $escaper->escapeUrl($manageAddressesUrl) ?>"
+           class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+            <?= $escaper->escapeHtml(__('Manage Addresses')) ?>
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-3">
+            <h3 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Default Billing Address')) ?>
+            </h3>
+
+            <?php if ($hasBillingAddress): ?>
+                <address class="text-sm text-secondary not-italic leading-relaxed">
+                    <?= /* @noEscape */ $billingHtml ?>
+                </address>
+                <a href="<?= $escaper->escapeUrl($billingEditUrl) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Edit Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php else: ?>
+                <p class="text-sm text-secondary">
+                    <?= $escaper->escapeHtml(__('You have not set a default billing address.')) ?>
+                </p>
+                <a href="<?= $escaper->escapeUrl($block->getUrl('customer/address/new')) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Edit Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php endif; ?>
+        </article>
+
+        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-3">
+            <h3 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Default Shipping Address')) ?>
+            </h3>
+
+            <?php if ($hasShippingAddress): ?>
+                <address class="text-sm text-secondary not-italic leading-relaxed">
+                    <?= /* @noEscape */ $shippingHtml ?>
+                </address>
+                <a href="<?= $escaper->escapeUrl($shippingEditUrl) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Edit Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php else: ?>
+                <p class="text-sm text-secondary">
+                    <?= $escaper->escapeHtml(__('You have not set a default shipping address.')) ?>
+                </p>
+                <a href="<?= $escaper->escapeUrl($block->getUrl('customer/address/new')) ?>"
+                   class="inline-flex items-center gap-1 text-sm font-medium
+                          text-primary hover:text-primary-hover">
+                    <?= $escaper->escapeHtml(__('Edit Address')) ?>
+                    <span aria-hidden="true">-></span>
+                </a>
+            <?php endif; ?>
+        </article>
+    </div>
+</section>

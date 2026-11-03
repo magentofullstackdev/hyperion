@@ -1,0 +1,45 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Price amount, core's `Magento_Catalog::product/price/amount/default.phtml`
+ * with one addition: when the amount carries the schema.org Offer (item_view
+ * zone, the product page price box) the offer's `availability` is emitted
+ * next to `price` and `priceCurrency`, inside the same scope. The product
+ * page used to wrap the box in a second Offer to carry it, which nested two
+ * Offers with the price in one and the availability in the other.
+ *
+ * Markup, classes and data attributes are core's: `_pricing.css` styles
+ * them and <hyperion-swatches> rewrites the `.price` span of the PDP box.
+ *
+ * @var \Magento\Framework\Pricing\Render\Amount $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$saleable = $block->getSaleableItem();
+$availability = null;
+if ($block->getSchema() && $saleable instanceof \Magento\Catalog\Model\Product) {
+    $availability = $saleable->isAvailable() ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+}
+?>
+<span class="price-container <?= $escaper->escapeHtmlAttr($block->getAdjustmentCssClasses()) ?>"
+        <?= $block->getSchema() ? ' itemprop="offers" itemscope itemtype="http://schema.org/Offer"' : '' ?>>
+    <?php if ($block->getDisplayLabel()): ?>
+        <span class="price-label"><?= $escaper->escapeHtml($block->getDisplayLabel()) ?></span>
+    <?php endif; ?>
+    <span <?php if ($block->getPriceId()): ?> id="<?= $escaper->escapeHtmlAttr($block->getPriceId()) ?>"<?php endif; ?>
+        <?= ($block->getPriceDisplayLabel()) ? 'data-label="' . $escaper->escapeHtmlAttr($block->getPriceDisplayLabel() . $block->getPriceDisplayInclExclTaxes()) . '"' : '' ?>
+        data-price-amount="<?= $escaper->escapeHtmlAttr($block->getDisplayValue()) ?>"
+        data-price-type="<?= $escaper->escapeHtmlAttr($block->getPriceType()) ?>"
+        class="price-wrapper <?= $escaper->escapeHtmlAttr($block->getPriceWrapperCss()) ?>"
+    ><?= $escaper->escapeHtml($block->formatCurrency($block->getDisplayValue(), (bool) $block->getIncludeContainer()), ['span']) ?></span>
+    <?php if ($block->hasAdjustmentsHtml()): ?>
+        <?= $block->getAdjustmentsHtml() ?>
+    <?php endif; ?>
+    <?php if ($block->getSchema()): ?>
+        <meta itemprop="price" content="<?= $escaper->escapeHtmlAttr($block->getDisplayValue()) ?>" />
+        <meta itemprop="priceCurrency" content="<?= $escaper->escapeHtmlAttr($block->getDisplayCurrencyCode()) ?>" />
+        <?php if ($availability !== null): ?>
+            <meta itemprop="availability" content="<?= $escaper->escapeUrl($availability) ?>" />
+        <?php endif; ?>
+    <?php endif; ?>
+</span>

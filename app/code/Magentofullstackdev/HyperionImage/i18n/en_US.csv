@@ -1,0 +1,9 @@
+AVIF,AVIF
+"Auto (Imagick if available, else GD)","Auto (Imagick if available, else GD)"
+Encoder,Encoder
+"GD (force)","GD (force)"
+"Hyperion Theme","Hyperion Theme"
+"Imagick (force)","Imagick (force)"
+"Queue (recommended) -- async via cron consumer","Queue (recommended) -- async via cron consumer"
+"Sync -- immediate (slow first render; only for envs without cron)","Sync -- immediate (slow first render; only for envs without cron)"
+WebP,WebP

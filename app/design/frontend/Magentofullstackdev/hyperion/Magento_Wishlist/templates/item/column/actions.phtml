@@ -1,0 +1,22 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: wrapper around a group of child columns. The
+ * Tailwind classes come from the `css_class` layout argument
+ * (Magento_Wishlist/layout/wishlist_index_index.xml).
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Actions $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$children = $block->getChildNames();
+if (!$children) {
+    return;
+}
+?>
+<div class="<?= $escaper->escapeHtmlAttr($block->getCssClass()) ?>">
+    <?php foreach ($children as $childName): ?>
+        <?= /* @noEscape */ $block->getLayout()->renderElement($childName, false) ?>
+    <?php endforeach; ?>
+</div>

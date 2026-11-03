@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Theme-level checkout layout is intentionally minimal. The actual block
+    tree and Luma-removals live in the module-level file at
+    app/code/Magentofullstackdev/HyperionCheckout/view/frontend/layout/checkout_index_index.xml
+    so the ownership story stays: "module = checkout architecture, theme =
+    overrides only".
+
+    Any theme-specific visual overrides (e.g. swapping a child template,
+    adding a decorative block around the form) should be added here rather
+    than in the module-level layout so that module logic and presentation
+    remain cleanly separated.
+-->
+<page layout="1column"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body/>
+</page>

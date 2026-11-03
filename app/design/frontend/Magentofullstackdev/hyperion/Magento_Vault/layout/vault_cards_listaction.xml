@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Stored Payment Methods inside the account shell. Payment Services (Adobe) swaps the
+             list template for a Knockout one and adds an "Add card" button that needs RequireJS:
+             the Hyperion template is restored and the button removed (its renderer child stays,
+             so its tokens still list). Braintree wraps both lists in its Knockout "update payment
+             method" page (`stored.cards.customer.update`, add card / PayPal / Google Pay forms):
+             that wrapper goes, the lists stay (Braintree tokens still render through its renderers;
+             adding a card from the account is not supported, see known-limitations). -->
+        <move element="vault.cards.list" destination="content" before="hyperion.account.shell.close"/>
+        <move element="vault.token.list" destination="content" before="hyperion.account.shell.close"/>
+        <referenceBlock name="vault.cards.list">
+            <!-- an action, not the template attribute: Payment Services sets its template through
+                 setTemplate() too, and actions run after the attributes in scheduling order -->
+            <action method="setTemplate">
+                <argument name="template" xsi:type="string">Magento_Vault::cards_list.phtml</argument>
+            </action>
+        </referenceBlock>
+        <referenceBlock name="paymentservices.card.addcardbutton" remove="true"/>
+        <referenceBlock name="stored.cards.customer.update" remove="true"/>
+    </body>
+</page>

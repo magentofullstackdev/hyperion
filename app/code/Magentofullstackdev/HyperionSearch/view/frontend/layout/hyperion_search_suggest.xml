@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Layout handle of Magentofullstackdev\HyperionSearch\Controller\Search\Suggest:
+    the controller renders `hyperion.search.suggest` alone (no page chrome),
+    the fragment swaps into `#header-search-suggestions` of the header.
+    `cacheable="false"` keeps the page cache layout plugin from adding its
+    own public headers next to the controller's.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magento\Framework\View\Element\Template"
+               name="hyperion.search.suggest"
+               cacheable="false"
+               template="Magentofullstackdev_HyperionSearch::suggest.phtml">
+            <arguments>
+                <argument name="suggest" xsi:type="object">Magentofullstackdev\HyperionSearch\ViewModel\Suggest</argument>
+            </arguments>
+        </block>
+    </body>
+</page>

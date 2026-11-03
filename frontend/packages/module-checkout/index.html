@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Hyperion Checkout dev harness</title>
+    </head>
+    <body>
+        <!--
+            Dev harness. Mirrors the mount shape that
+            Magentofullstackdev\HyperionCheckout\Block\Checkout emits in
+            production. The #checkout-config payload is a local fixture in
+            src/fixtures/checkoutConfig.guest.json. Vite's dev server serves
+            this page at http://localhost:5175/.
+        -->
+        <div id="checkout-root"></div>
+        <script type="application/json" id="checkout-config">
+            {"hyperion":{"checkoutVersion":"2.0.0","enabled":true},"storeCode":"en","formKey":"dev-harness","defaultCountryId":"US","priceFormat":{"pattern":"$%s","decimalSymbol":".","groupSymbol":",","groupLength":3,"precision":2,"requiredPrecision":2,"integerRequired":1,"decimalRequired":true},"quoteData":{"entity_id":"dev","is_virtual":0,"items_qty":1},"totalsData":{"grand_total":0,"total_segments":[]},"isGuestCheckoutAllowed":true,"paymentMethods":[],"shippingMethodsConfig":{},"checkoutAgreements":[]}
+        </script>
+        <link rel="stylesheet" href="/src/styles/dev-harness.css">
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>

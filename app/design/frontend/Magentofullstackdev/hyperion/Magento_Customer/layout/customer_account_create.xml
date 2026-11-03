@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="require-cookie" remove="true"/>
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <referenceBlock name="customer_form_register" template="Magento_Customer::form/register.phtml"/>
+    </body>
+</page>

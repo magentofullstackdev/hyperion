@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/consumer.xsd">
+    <!--
+        `maxIdleTime="5"` gives us clean batch boundaries. Without
+        it, the framework's `CallbackInvoker` defaults idle-time to
+        PHP_INT_MAX and the consumer loops forever on an empty
+        queue (when `consumers_wait_for_messages` in env.php is 1 -
+        Magento's default). That kept our BatchInvalidator's
+        shutdown hook from ever firing on low-traffic stores: the
+        consumer would process a few messages, then sit idle waiting
+        for the next one - flush never happened until 10000 messages
+        had been drained.
+
+        With idle=5s the consumer exits cleanly after a quiet period,
+        firing the shutdown handler -> cache tag invalidation of the
+        converted products.
+        Cron restarts the consumer on the next tick when new messages
+        arrive. Net effect: one invalidation per "burst of conversions".
+    -->
+    <consumer name="hyperion.image.convert"
+              queue="hyperion.image.convert"
+              connection="db"
+              maxIdleTime="5"
+              handler="Magentofullstackdev\HyperionImage\Queue\Consumer::process"/>
+</config>

@@ -1,0 +1,45 @@
+{
+    "name": "magentofullstackdev/module-hyperion-customer",
+    "description": "Hyperion Customer: wishlist, compare and account fragments of the header state, order cancellation, Login as Customer banner",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "0.9.0-beta.1",
+    "homepage": "https://hyperionfront.dev",
+    "authors": [
+        {
+            "name": "Sergiu Ro",
+            "email": "sergiu.ro@magentofullstack.dev",
+            "homepage": "https://magentofullstack.dev",
+            "role": "Lead Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/magentofullstackdev/hyperion/issues",
+        "source": "https://github.com/magentofullstackdev/hyperion"
+    },
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "magento/framework": "^103.0.6",
+        "magento/module-customer": "*",
+        "magento/module-payment": "*",
+        "magento/module-sales": "*",
+        "magento/module-tax": "*",
+        "magento/module-wishlist": "*",
+        "magento/module-catalog": "*",
+        "magento/module-directory": "*",
+        "magento/module-store": "*",
+        "magentofullstackdev/module-hyperion-core": "self.version"
+    },
+    "suggest": {
+        "magento/module-order-cancellation": "Magento 2.4.7+: self-service order cancellation from the account order pages (Hyperion renders its own UI, no Magento_OrderCancellationUi scripts).",
+        "magento/module-login-as-customer": "Magento 2.4+: the admin impersonation banner delivered through the Hyperion header-state request."
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Magentofullstackdev\\HyperionCustomer\\": ""
+        }
+    }
+}

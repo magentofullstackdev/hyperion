@@ -1,0 +1,31 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion account shell -- opening chrome.
+ *
+ * Renders the page H1 + the outer grid that wraps the account
+ * navigation (rendered by the next sibling block) and the
+ * `#hyperion-account-content` region that HTMX swaps on nav clicks.
+ *
+ * The closing `</section></div></section>` is emitted by
+ * Magentofullstackdev_HyperionCustomer::account/shell-close.phtml so every account
+ * page ends the grid cleanly without per-template duplication.
+ *
+ * @var \Magentofullstackdev\HyperionCustomer\Block\Account\Shell $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$heading = $block->getPageHeading();
+?>
+<section class="container mx-auto px-4 py-6 lg:py-10 space-y-8"
+         aria-labelledby="hyperion-account-heading"
+         data-hyperion-account-shell>
+
+    <header>
+        <h1 id="hyperion-account-heading"
+            class="text-3xl md:text-4xl font-bold text-secondary tracking-tight">
+            <?= $escaper->escapeHtml($heading) ?>
+        </h1>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[16rem_minmax(0,1fr)] gap-6 lg:gap-10">

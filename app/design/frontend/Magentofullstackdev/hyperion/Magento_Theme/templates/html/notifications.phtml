@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Global UI feedback elements, mounted once per page in `after.body.start`
+ * (Magento_Theme/layout/default.xml).
+ *
+ *   1. `#hyperion-notification`: the persistent, hidden toast placeholder
+ *      every HTMX action response swaps (`hx-target="#hyperion-notification"`
+ *      or `hx-swap-oob`). It used to be rendered per page (PDP, PLP, cart,
+ *      account shell), which left pages such as the home page without a
+ *      target: an action fired from the header (mini-cart remove) had
+ *      nowhere to show its message.
+ *   2. `<hyperion-confirm>`: the site-styled confirmation dialog used in
+ *      place of `window.confirm()` for every `hx-confirm` and by the
+ *      mini-cart remove buttons (see entry.js and hyperion-confirm.js).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<hyperion-notification id="hyperion-notification"
+     data-hyperion-notification
+     role="status"
+     aria-live="polite"
+     auto-close="0"
+     close-label="<?= $escaper->escapeHtmlAttr(__('Dismiss notification')) ?>"
+     hidden></hyperion-notification>
+<hyperion-confirm confirm-label="<?= $escaper->escapeHtmlAttr(__('OK')) ?>"
+                  cancel-label="<?= $escaper->escapeHtmlAttr(__('Cancel')) ?>"></hyperion-confirm>

@@ -1,0 +1,7 @@
+"Allowed Customer Groups","Groupes de clients autorisés"
+"Catalog Mode","Mode catalogue"
+"Customer groups that may still purchase. Leave NOT LOGGED IN out to require a login before buying. With no group selected nobody can buy.","Groupes de clients qui peuvent encore acheter. Excluez NOT LOGGED IN pour exiger une connexion avant l'achat. Sans aucun groupe sélectionné, personne ne peut acheter."
+"Enable Catalog Mode","Activer le mode catalogue"
+"Please log in to purchase items.","Veuillez vous connecter pour acheter des articles."
+"Visitors outside the allowed customer groups browse the catalog with prices but cannot buy: Add to Cart buttons, PayPal buttons, reorder and the mini-cart are not rendered, and the cart and checkout routes redirect to the login page. Flush the page cache after changing these settings.","Les visiteurs hors des groupes de clients autorisés parcourent le catalogue avec les prix mais ne peuvent pas acheter : les boutons Ajouter au panier, les boutons PayPal, la commande à nouveau et le mini-panier ne sont pas affichés, et les routes du panier et de la commande redirigent vers la page de connexion. Videz le cache des pages après avoir modifié ces paramètres."
+"Your account is not allowed to purchase items.","Votre compte n'est pas autorisé à acheter des articles."

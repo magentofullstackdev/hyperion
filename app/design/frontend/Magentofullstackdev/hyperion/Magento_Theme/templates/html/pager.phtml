@@ -1,0 +1,145 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion pagination, used by every pager block of the storefront.
+ *
+ * On the product list the links also carry an hx-get against the product grid
+ * fragment URL, so a page change swaps only the grid; the URL the browser then
+ * shows is the `HX-Push-Url` header of the fragment response (the page URL),
+ * and the href goes through the Listing view model because the pager is
+ * re-rendered inside the fragment, where core builds it on the fragment route.
+ * Everywhere else (order history, reviews, downloads, address book, wish list)
+ * they are plain links. Standard href values are always present for no-JS use
+ * and SEO.
+ *
+ * The item range is printed when the block asks for amounts; nothing is
+ * rendered for an empty collection.
+ *
+ * @var \Magento\Theme\Block\Html\Pager $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+if ($block->getCollection() === null || !$block->getTotalNum()) {
+    return;
+}
+
+// Resolve the Hyperion list block to obtain the fragment URL and grid target ID.
+// The list block (category listing or search results) and its grid fragment
+// endpoint come from the Listing view model, so search results swap like a category.
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$listProduct = $listing->getListBlock($block->getLayout());
+$fragmentUrl = $listing->getFragmentUrl($listProduct);
+$gridId = $listing->getGridTargetId();
+
+$current = (int) $block->getCurrentPage();
+$last = (int) $block->getLastPageNum();
+$pages = $block->getFramePages();
+$showAmounts = (bool) $block->getShowAmounts();
+if ($last <= 1 && !$showAmounts) {
+    return;
+}
+
+/** hx-* attributes for a page link: only where a grid fragment endpoint exists. */
+$hxAttributes = static function (int $page) use ($fragmentUrl, $gridId, $escaper): string {
+    if ($fragmentUrl === '') {
+        return '';
+    }
+    // The toolbar's selects and hidden inputs ride along, so a page change keeps sort, direction, size and mode.
+    return ' hx-get="' . $escaper->escapeUrl($fragmentUrl) . '&p=' . $page . '"'
+        . ' hx-target="#' . $escaper->escapeHtmlAttr($gridId) . '"'
+        . ' hx-include="[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[type=hidden]"'
+        . ' hx-swap="outerHTML"'
+        . ' hx-indicator="#' . $escaper->escapeHtmlAttr($gridId) . '"';
+};
+/** The public page URL of a core built pager URL (inside a fragment core builds it on the fragment route). */
+$pageHref = static fn (string $url): string => $listing->toPublicUrl($listProduct, $url);
+$limits = $block->isShowPerPage() ? (array) $block->getAvailableLimit() : [];
+?>
+<?php if ($showAmounts): ?>
+    <p class="py-2 text-sm text-muted">
+        <?php if ($last > 1): ?>
+            <?= $escaper->escapeHtml(__(
+                'Items %1 to %2 of %3 total',
+                $block->getFirstNum(),
+                $block->getLastNum(),
+                $block->getTotalNum()
+            )) ?>
+        <?php else: ?>
+            <?= $escaper->escapeHtml(__('%1 Item(s)', $block->getTotalNum())) ?>
+        <?php endif; ?>
+    </p>
+<?php endif; ?>
+<?php if (count($limits) > 1): ?>
+    <nav class="flex items-center justify-center gap-2 py-2 text-sm" aria-label="<?= $escaper->escapeHtmlAttr(__('Items per page')) ?>" data-hyperion-limiter>
+        <span class="text-muted"><?= $escaper->escapeHtml(__('Show')) ?></span>
+        <?php foreach ($limits as $limit => $label): ?>
+            <?php if ($block->isLimitCurrent($limit)): ?>
+                <span class="px-2 py-1 rounded border border-primary bg-primary/10 text-primary font-medium" aria-current="true"><?= $escaper->escapeHtml($label) ?></span>
+            <?php else: ?>
+                <a href="<?= $escaper->escapeUrl($pageHref((string) $block->getLimitUrl($limit))) ?>"
+                   class="px-2 py-1 rounded border border-subtle text-muted hover:text-primary hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary">
+                    <?= $escaper->escapeHtml($label) ?>
+                </a>
+            <?php endif; ?>
+        <?php endforeach; ?>
+        <span class="text-muted"><?= $escaper->escapeHtml(__('per page')) ?></span>
+    </nav>
+<?php endif; ?>
+<?php if ($last <= 1): ?>
+    <?php return; ?>
+<?php endif; ?>
+<nav class="flex items-center justify-center gap-1 py-4"
+     aria-label="<?= $escaper->escapeHtmlAttr(__('Pagination')) ?>">
+
+    <?php if ($block->getPreviousPageUrl()): ?>
+        <a href="<?= $escaper->escapeUrl($pageHref((string) $block->getPreviousPageUrl())) ?>"
+           <?= /* @noEscape */ $hxAttributes($current - 1) ?>
+           class="px-3 py-2 rounded border border-subtle text-secondary
+                  hover:bg-surface-raised hover:text-primary
+                  focus:outline-none focus:ring-2 focus:ring-primary"
+           aria-label="<?= $escaper->escapeHtmlAttr(__('Previous page')) ?>">
+            <span aria-hidden="true">&lsaquo;</span>
+        </a>
+    <?php else: ?>
+        <span class="px-3 py-2 rounded border border-subtle text-muted cursor-default"
+              aria-hidden="true">
+            &lsaquo;
+        </span>
+    <?php endif; ?>
+
+    <?php foreach ($pages as $page): ?>
+        <?php $pageInt = (int) $page; ?>
+        <?php if ($pageInt === $current): ?>
+            <span class="px-3 py-2 rounded bg-primary text-on-primary font-semibold"
+                  aria-current="page">
+                <?= (int) $pageInt ?>
+            </span>
+        <?php else: ?>
+            <a href="<?= $escaper->escapeUrl($pageHref((string) $block->getPageUrl($pageInt))) ?>"
+               <?= /* @noEscape */ $hxAttributes($pageInt) ?>
+               class="px-3 py-2 rounded border border-subtle text-secondary
+                      hover:bg-surface-raised hover:text-primary
+                      focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= (int) $pageInt ?>
+            </a>
+        <?php endif; ?>
+    <?php endforeach; ?>
+
+    <?php if ($block->getNextPageUrl()): ?>
+        <a href="<?= $escaper->escapeUrl($pageHref((string) $block->getNextPageUrl())) ?>"
+           <?= /* @noEscape */ $hxAttributes($current + 1) ?>
+           class="px-3 py-2 rounded border border-subtle text-secondary
+                  hover:bg-surface-raised hover:text-primary
+                  focus:outline-none focus:ring-2 focus:ring-primary"
+           aria-label="<?= $escaper->escapeHtmlAttr(__('Next page')) ?>">
+            <span aria-hidden="true">&rsaquo;</span>
+        </a>
+    <?php else: ?>
+        <span class="px-3 py-2 rounded border border-subtle text-muted cursor-default"
+              aria-hidden="true">
+            &rsaquo;
+        </span>
+    <?php endif; ?>
+
+</nav>

@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="hyperion_search" translate="label" sortOrder="215" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Search</label>
+            <tab>hyperion</tab>
+            <resource>Magentofullstackdev_HyperionSearch::config</resource>
+            <group id="general" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Relevance</label>
+                <field id="fuzziness" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Typo Tolerance (Fuzziness)</label>
+                    <source_model>Magentofullstackdev\HyperionSearch\Model\Config\Source\Fuzziness</source_model>
+                    <comment>Lets a query with a typo ("joust dufle") still match ("Joust Duffle Bag"). AUTO allows one edit for words of 3 to 5 characters and two edits above; the first character must always match. Applies to the text fields of the search engine queries, suggestions included.</comment>
+                </field>
+                <field id="fuzzy_min_query_length" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Minimum Query Length for Typo Tolerance</label>
+                    <validate>validate-digits validate-zero-or-greater</validate>
+                    <comment>Shorter queries are matched exactly; fuzzy matching on two or three characters returns noise.</comment>
+                    <depends><field id="fuzziness" negative="1">off</field></depends>
+                </field>
+                <field id="sku_boost" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>SKU Match Weight</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                    <comment>Multiplier applied to the relevance of exact and partial SKU matches, so a product found by its SKU ranks above products found by a word of their description. 1 keeps the engine's weights.</comment>
+                </field>
+                <field id="promoted_skus" translate="label comment" type="textarea" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Promoted SKUs</label>
+                    <comment>Comma separated SKUs. When one of them matches a search query it is boosted to the top of the results (it is never added to results it does not match).</comment>
+                </field>
+                <field id="promoted_boost" translate="label comment" type="text" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Promoted SKU Weight</label>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                    <comment>Relevance multiplier of the promoted products.</comment>
+                </field>
+                <field id="stop_words" translate="label comment" type="textarea" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Stop Words</label>
+                    <comment>Comma or space separated words removed from a search query before it runs ("the", "for", "shop"). The query is left untouched when only stop words remain. Per store view, so each language keeps its own list.</comment>
+                </field>
+                <field id="zero_results_fallback" translate="label comment" type="select" sortOrder="70" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Fallback on Zero Results</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>When a multi-word search has no result, the results page shows the products of the longest word that does match, the matching categories and the top-level categories instead of a dead end.</comment>
+                </field>
+            </group>
+            <group id="suggest" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Autocomplete</label>
+                <field id="products" translate="label comment" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Products</label>
+                    <validate>validate-digits validate-zero-or-greater</validate>
+                    <comment>Products shown in the search dropdown (search engine results, best first; four fill one row of the desktop grid). 0 hides the section.</comment>
+                </field>
+                <field id="terms" translate="label comment" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Popular Search Terms</label>
+                    <validate>validate-digits validate-zero-or-greater</validate>
+                    <comment>Query suggestions from the search terms of the store with their result counts. 0 hides the section.</comment>
+                </field>
+                <field id="categories" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Categories</label>
+                    <validate>validate-digits validate-zero-or-greater</validate>
+                    <comment>Active categories of the store whose name matches the query, shown with their path. 0 hides the section.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

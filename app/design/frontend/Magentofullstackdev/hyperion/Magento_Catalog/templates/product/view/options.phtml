@@ -1,0 +1,37 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Customizable options, server-rendered inside the PDP add-to-cart form.
+ *
+ * Field contract is Magento's own (`options[<id>]`, `options[<id>][]`,
+ * `options_<id>_file`); date and time options post ISO values that
+ * HyperionCatalog's DateIsoInputPlugin normalises. Every priced control
+ * carries `data-price`; <hyperion-custom-options> adds the selected ones
+ * to the base price and mirrors the total into the PDP price element.
+ * The form submits the same fields without JavaScript.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$options = $block->decorateArray($block->getOptions());
+if (!$options) {
+    return;
+}
+$vm = $viewModels->require(CustomOptions::class);
+$basePrice = (string) $vm->getBasePrice($block->getProduct());
+?>
+<hyperion-custom-options class="block space-y-5"
+                         data-base-price="<?= $escaper->escapeHtmlAttr($basePrice) ?>"
+                         data-currency="<?= $escaper->escapeHtmlAttr($vm->getCurrencyCode()) ?>"
+                         data-locale="<?= $escaper->escapeHtmlAttr($vm->getLocale()) ?>"
+                         data-price-target="#hyperion-product-price">
+    <?php foreach ($options as $option): ?>
+        <?= $block->getOptionHtml($option) ?>
+    <?php endforeach; ?>
+</hyperion-custom-options>

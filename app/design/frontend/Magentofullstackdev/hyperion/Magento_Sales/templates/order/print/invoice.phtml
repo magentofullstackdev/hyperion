@@ -1,0 +1,61 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Print invoice(s) of an order (one invoice, or every invoice of the order).
+ * Rows come from the core item renderers (.hyperion-order-table); totals
+ * from the `invoice_totals` child (summary list, hyperion_sales_totals).
+ *
+ * @var \Magento\Sales\Block\Order\PrintOrder\Invoice $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$order = $block->getOrder();
+$invoices = $block->getInvoice() ? [$block->getInvoice()] : iterator_to_array($order->getInvoiceCollection());
+$details = (string) $block->getTemplateFile('Magento_Sales::order/print/details.phtml');
+?>
+<div class="container mx-auto px-4 pb-10 space-y-8" data-hyperion-print="invoice">
+    <?php if ($invoices === []): ?>
+        <p class="text-sm text-muted" data-hyperion-print-empty>
+            <?= $escaper->escapeHtml(__('There are no invoices for this order.')) ?>
+        </p>
+    <?php endif; ?>
+    <?php foreach ($invoices as $invoice): ?>
+        <section class="space-y-4" aria-label="<?= $escaper->escapeHtmlAttr(__('Invoice #')) ?><?= $escaper->escapeHtmlAttr($invoice->getIncrementId()) ?>">
+            <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+                <h2 class="text-base font-semibold text-secondary">
+                    <?= $escaper->escapeHtml(__('Invoice #')) ?><?= $escaper->escapeHtml($invoice->getIncrementId()) ?>
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Items Invoiced')) ?>">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Product Name')) ?></th>
+                                <th scope="col" class="col sku"><?= $escaper->escapeHtml(__('SKU')) ?></th>
+                                <th scope="col" class="col price"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                                <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty Invoiced')) ?></th>
+                                <th scope="col" class="col subtotal"><?= $escaper->escapeHtml(__('Subtotal')) ?></th>
+                            </tr>
+                        </thead>
+                        <?php foreach ($invoice->getItemsCollection() as $item): ?>
+                            <?php if (!$item->getOrderItem()->getParentItem()): ?>
+                                <tbody><?= $block->getItemHtml($item) ?></tbody>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </table>
+                </div>
+                <?= $block->getInvoiceTotalsHtml($invoice) ?>
+            </article>
+            <?php
+            $block->addData([
+                'print_is_virtual' => (bool) $order->getIsVirtual(),
+                'print_shipping_address_html' => $order->getIsVirtual() ? '' : $block->formatAddress($invoice->getShippingAddress(), 'html'),
+                'print_billing_address_html' => $block->formatAddress($order->getBillingAddress(), 'html'),
+                'print_shipping_method' => (string) $order->getShippingDescription(),
+                'print_tracks' => [],
+            ]);
+            ?>
+            <?= /* @noEscape */ $block->fetchView($details) ?>
+        </section>
+    <?php endforeach; ?>
+</div>

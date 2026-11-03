@@ -1,0 +1,78 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Magento's built-in image CAPTCHA (Stores > Configuration > Customers >
+ * Customer Configuration > CAPTCHA). Core shows it on login after a few
+ * failed attempts even on a default install, so the theme has to render
+ * it: image, answer field and a reload button that calls the core
+ * `captcha/refresh` endpoint with fetch (core uses a RequireJS widget).
+ *
+ * @var \Magento\Captcha\Block\Captcha\DefaultCaptcha $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+/** @var \Magento\Captcha\Model\DefaultModel $captcha */
+$captcha = $block->getCaptchaModel();
+$formId = (string) $block->getFormId();
+$fieldId = 'captcha_' . $formId;
+$isRequired = $block->hasData('frontend_validation') ? (bool) $block->getData('frontend_validation') : true;
+?>
+<div class="space-y-2" data-hyperion-captcha="<?= $escaper->escapeHtmlAttr($formId) ?>">
+    <label for="<?= $escaper->escapeHtmlAttr($fieldId) ?>" class="block text-sm font-medium text-secondary">
+        <?= $escaper->escapeHtml(__('Please type the letters and numbers below')) ?>
+        <?php if ($isRequired): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+    </label>
+    <div class="flex flex-wrap items-center gap-3">
+        <img src="<?= $escaper->escapeUrl($captcha->getImgSrc()) ?>"
+             height="<?= (int) $block->getImgHeight() ?>"
+             alt="<?= $escaper->escapeHtmlAttr(__('Please type the letters and numbers below')) ?>"
+             class="rounded border border-subtle bg-surface-raised"
+             data-hyperion-captcha-image>
+        <button type="button"
+                data-hyperion-captcha-reload="<?= $escaper->escapeUrl($block->getRefreshUrl()) ?>"
+                class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline
+                       focus:outline-none focus:ring-2 focus:ring-primary rounded">
+            <?= $escaper->escapeHtml(__('Reload captcha')) ?>
+        </button>
+    </div>
+    <input type="text"
+           id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+           name="<?= $escaper->escapeHtmlAttr(\Magento\Captcha\Helper\Data::INPUT_NAME_FIELD_VALUE) ?>[<?= $escaper->escapeHtmlAttr($formId) ?>]"
+           autocomplete="off"
+           autocapitalize="off"
+           spellcheck="false"
+           <?php if ($isRequired): ?>required<?php endif; ?>
+           class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary
+                  focus:border-primary outline-none text-sm">
+    <?php if ($captcha->isCaseSensitive()): ?>
+        <p class="text-xs text-muted"><?= $escaper->escapeHtml(__('Attention: Captcha is case sensitive.')) ?></p>
+    <?php endif; ?>
+</div>
+<?php
+$script = <<<'JS'
+(function () {
+    if (window.hyperionCaptchaReload) { return; }
+    window.hyperionCaptchaReload = true;
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-hyperion-captcha-reload]');
+        if (!button) { return; }
+        var root = button.closest('[data-hyperion-captcha]');
+        var image = root.querySelector('[data-hyperion-captcha-image]');
+        button.disabled = true;
+        fetch(button.getAttribute('data-hyperion-captcha-reload'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ formId: root.getAttribute('data-hyperion-captcha') })
+        }).then(function (response) { return response.json(); })
+            .then(function (data) { if (data && data.imgSrc) { image.src = data.imgSrc; } })
+            .catch(function () {})
+            .then(function () { button.disabled = false; });
+    });
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

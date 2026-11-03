@@ -1,0 +1,45 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion "Allow remote shopping assistance" opt-in (register + account edit).
+ *
+ * Core fills the `assistance_allowed` hidden field from the checkbox with a
+ * RequireJS widget on submit. Here the hidden field carries DENIED and the
+ * checkbox, which comes later in the form under the same name, carries
+ * ALLOWED: PHP keeps the last value, so the right status is posted without
+ * any JavaScript.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+use Magento\LoginAsCustomerAssistance\Api\IsAssistanceEnabledInterface;
+
+/** @var \Magento\LoginAsCustomerAssistance\ViewModel\ShoppingAssistanceViewModel $viewModel */
+$viewModel = $block->getData('view_model');
+if (!$viewModel || !$viewModel->isLoginAsCustomerEnabled()) {
+    return;
+}
+$tooltip = (string) $viewModel->getAssistanceCheckboxTooltip();
+?>
+<div>
+    <input type="hidden" name="assistance_allowed" value="<?= (int) IsAssistanceEnabledInterface::DENIED ?>"/>
+    <div class="flex items-start gap-2">
+        <input type="checkbox"
+               name="assistance_allowed"
+               id="assistance_allowed_checkbox"
+               value="<?= (int) IsAssistanceEnabledInterface::ALLOWED ?>"
+               <?= $viewModel->isAssistanceAllowed() ? 'checked' : '' ?>
+               <?php if ($tooltip !== ''): ?>aria-describedby="assistance_allowed_note"<?php endif; ?>
+               class="mt-0.5 w-4 h-4 text-primary border-subtle rounded focus:ring-2 focus:ring-primary"/>
+        <label for="assistance_allowed_checkbox" class="text-sm text-secondary">
+            <?= $escaper->escapeHtml(__($viewModel->getAssistanceCheckboxTitle())) ?>
+        </label>
+    </div>
+    <?php if ($tooltip !== ''): ?>
+        <p id="assistance_allowed_note" class="mt-1 text-xs text-muted">
+            <?= $escaper->escapeHtml(__($tooltip)) ?>
+        </p>
+    <?php endif; ?>
+</div>

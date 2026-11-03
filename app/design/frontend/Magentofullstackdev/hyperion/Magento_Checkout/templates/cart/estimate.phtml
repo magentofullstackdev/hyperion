@@ -1,0 +1,164 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Cart "Estimate Shipping and Tax" panel, inside the summary card.
+ *
+ * One form posts to Magentofullstackdev\HyperionCheckout\Controller\Cart\Estimate
+ * (HTMX, the whole cart body is swapped back, the summary included): the
+ * destination (country, region, postcode through <hyperion-region-select>)
+ * and, once rates are collected, the chosen method as a radio. Picking a
+ * radio submits at once; the Estimate button submits the destination.
+ * Without JavaScript the same form posts and the controller redirects back.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
+use Magentofullstackdev\HyperionCore\ViewModel\FormKey;
+use Magentofullstackdev\HyperionCustomer\ViewModel\AddressForm;
+
+/** @var CartData $cartData */
+$cartData = $viewModels->require(CartData::class);
+/** @var AddressForm $addressForm */
+$addressForm = $viewModels->require(AddressForm::class);
+$formKey = $viewModels->require(FormKey::class)->getFormKey();
+
+$estimate = $cartData->getEstimateAddress();
+$rates = $cartData->getShippingRates();
+$selected = $cartData->getSelectedShippingMethod();
+$countryId = $estimate['country_id'];
+$regionsForCountry = $addressForm->getRegionsForCountry($countryId);
+$requiredCountries = $addressForm->getCountriesWithRequiredStates();
+$optionalZipCountries = $addressForm->getCountriesWithOptionalZip();
+$optionalRegionAllowed = $addressForm->isOptionalRegionAllowed();
+$regionRequired = in_array($countryId, $requiredCountries, true);
+$regionFieldHidden = $regionsForCountry !== [] && !$regionRequired && !$optionalRegionAllowed;
+$open = $cartData->hasEstimate();
+$inputClass = 'w-full px-3 py-2 border border-subtle rounded-lg bg-surface text-sm text-secondary '
+    . 'focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+$labelClass = 'block text-xs font-medium text-muted mb-1';
+?>
+<details class="group mb-4 rounded-lg border border-subtle"
+         data-hyperion-cart-estimate
+         <?= $open ? 'open' : '' ?>>
+    <summary class="flex items-center justify-between cursor-pointer select-none px-3 py-2 text-sm
+                    font-medium text-secondary hover:text-primary
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg">
+        <?= $escaper->escapeHtml(__('Estimate Shipping and Tax')) ?>
+        <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor"
+             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </summary>
+
+    <form action="<?= $escaper->escapeUrl($block->getUrl('hyperion/cart/estimate')) ?>"
+          method="post"
+          hx-post="<?= $escaper->escapeUrl($block->getUrl('hyperion/cart/estimate')) ?>"
+          hx-target="#hyperion-cart-items"
+          hx-swap="outerHTML"
+          hx-trigger="submit, change from:[name=estimate_method]"
+          class="px-3 pb-3 space-y-3"
+          data-hyperion-cart-estimate-form>
+        <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
+
+        <hyperion-region-select
+                class="block space-y-3"
+                regions="<?= $escaper->escapeHtmlAttr($addressForm->getRegionsJson()) ?>"
+                required-countries="<?= $escaper->escapeHtmlAttr((string) json_encode($requiredCountries)) ?>"
+                optional-zip-countries="<?= $escaper->escapeHtmlAttr((string) json_encode($optionalZipCountries)) ?>"
+                region-id="<?= $escaper->escapeHtmlAttr($estimate['region_id']) ?>"
+                region="<?= $escaper->escapeHtmlAttr($estimate['region']) ?>"
+                placeholder="<?= $escaper->escapeHtmlAttr(__('Please select a region, state or province.')) ?>"
+                <?= $optionalRegionAllowed ? 'optional-allowed' : '' ?>>
+            <div>
+                <label for="estimate_country_id" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml(__('Country')) ?>
+                </label>
+                <select name="country_id" id="estimate_country_id" data-country-select required
+                        class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+                    <?php foreach ($addressForm->getCountryOptions() as $option): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"
+                                <?= $option['value'] === $countryId ? 'selected' : '' ?>>
+                            <?= $escaper->escapeHtml($option['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div data-region-field <?= $regionFieldHidden ? 'hidden' : '' ?>>
+                <label for="estimate_region_id" data-region-label class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml(__('State/Province')) ?>
+                </label>
+                <select name="<?= $regionsForCountry !== [] ? 'region_id' : '' ?>"
+                        id="estimate_region_id"
+                        data-region-select
+                        <?= $regionsForCountry === [] ? 'hidden' : '' ?>
+                        <?= $regionRequired && $regionsForCountry !== [] ? 'required' : '' ?>
+                        class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+                    <option value=""><?= $escaper->escapeHtml(__('Please select a region, state or province.')) ?></option>
+                    <?php foreach ($regionsForCountry as $regionOption): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr((string) $regionOption['id']) ?>"
+                                <?= (string) $regionOption['id'] === $estimate['region_id'] ? 'selected' : '' ?>>
+                            <?= $escaper->escapeHtml((string) $regionOption['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="text"
+                       name="<?= $regionsForCountry === [] ? 'region' : '' ?>"
+                       id="estimate_region"
+                       data-region-input
+                       value="<?= $escaper->escapeHtmlAttr($estimate['region']) ?>"
+                       <?= $regionsForCountry !== [] ? 'hidden' : '' ?>
+                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+            </div>
+
+            <div>
+                <label for="estimate_postcode" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml(__('Zip/Postal Code')) ?>
+                </label>
+                <input type="text" name="postcode" id="estimate_postcode" data-postcode-input
+                       value="<?= $escaper->escapeHtmlAttr($estimate['postcode']) ?>"
+                       autocomplete="postal-code"
+                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+            </div>
+        </hyperion-region-select>
+
+        <button type="submit"
+                class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
+                       bg-surface border border-subtle text-secondary
+                       hover:border-primary hover:text-primary transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Estimate')) ?>
+        </button>
+
+        <?php if ($rates !== []): ?>
+            <fieldset class="space-y-2 pt-2 border-t border-subtle" data-hyperion-cart-estimate-rates>
+                <legend class="text-xs font-medium text-muted pt-2">
+                    <?= $escaper->escapeHtml(__('Shipping method')) ?>
+                </legend>
+                <?php foreach ($rates as $rate): ?>
+                    <label class="flex items-center justify-between gap-3 text-sm text-secondary cursor-pointer">
+                        <span class="flex items-center gap-2">
+                            <input type="radio"
+                                   name="estimate_method"
+                                   value="<?= $escaper->escapeHtmlAttr($rate['code']) ?>"
+                                   <?= $rate['code'] === $selected ? 'checked' : '' ?>
+                                   class="text-primary focus:ring-primary">
+                            <span><?= $escaper->escapeHtml($rate['title']) ?></span>
+                        </span>
+                        <span class="font-medium"><?= $escaper->escapeHtml($rate['formatted_price']) ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </fieldset>
+        <?php elseif ($countryId !== '' && $estimate['postcode'] !== ''): ?>
+            <p class="text-xs text-muted" data-hyperion-cart-estimate-empty>
+                <?= $escaper->escapeHtml(__('Sorry, no quotes are available for this order at this time.')) ?>
+            </p>
+        <?php endif; ?>
+    </form>
+</details>

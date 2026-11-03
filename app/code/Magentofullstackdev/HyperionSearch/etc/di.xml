@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Typo tolerance and SKU weight on every match clause the engine builds (Elasticsearch and OpenSearch share the builder). -->
+    <type name="Magento\Elasticsearch\SearchAdapter\Query\Builder\MatchQuery">
+        <plugin name="hyperion_search_fuzziness_and_sku_weight"
+                type="Magentofullstackdev\HyperionSearch\Plugin\Elasticsearch\MatchQueryPlugin"/>
+    </type>
+    <!-- Promoted SKUs: the assembled search query is wrapped in a function_score (OpenSearch's Mapper delegates to this one). -->
+    <type name="Magento\Elasticsearch\ElasticAdapter\SearchAdapter\Mapper">
+        <plugin name="hyperion_search_promoted_skus"
+                type="Magentofullstackdev\HyperionSearch\Plugin\Elasticsearch\MapperPlugin"/>
+    </type>
+    <!-- Stop words leave the query before the search term model reads it. -->
+    <type name="Magento\Search\Model\QueryFactory">
+        <plugin name="hyperion_search_stop_words"
+                type="Magentofullstackdev\HyperionSearch\Plugin\Search\QueryFactoryPlugin"/>
+    </type>
+    <!-- Every change of the fulltext index (save, cron, import, reindex: CLI and cron run in the global
+         area) drops the cached autocomplete answers, in the application cache and at the edge. -->
+    <type name="Magento\CatalogSearch\Model\Indexer\Fulltext">
+        <plugin name="hyperion_search_flush_suggest_cache"
+                type="Magentofullstackdev\HyperionSearch\Plugin\CatalogSearch\FulltextIndexerPlugin"/>
+    </type>
+</config>

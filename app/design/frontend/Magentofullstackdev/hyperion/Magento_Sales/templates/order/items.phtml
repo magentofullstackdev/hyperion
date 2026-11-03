@@ -1,0 +1,69 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion order items table. Rows come from the core item renderers
+ * (one <tr> per item, styled through .hyperion-order-table). Gift
+ * messages saved in the cart are shown above the table (order level) and
+ * under their item (Magentofullstackdev_HyperionCheckout::order/gift-message.phtml).
+ *
+ * @var \Magento\Sales\Block\Order\Items $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\GiftMessage|null $giftVm */
+$giftVm = $viewModels->optional(\Magentofullstackdev\HyperionCheckout\ViewModel\GiftMessage::class);
+$order = $block->getOrder();
+$giftBlock = null;
+if ($giftVm && $order) {
+    $giftBlock = $block->getLayout()->createBlock(\Magento\Framework\View\Element\Template::class)
+        ->setTemplate('Magentofullstackdev_HyperionCheckout::order/gift-message.phtml');
+}
+$orderGift = $giftBlock ? $giftVm->getOrderMessage($order) : null;
+?>
+<?php if ($orderGift !== null): ?>
+    <div class="mb-4">
+        <?= $giftBlock->setData(['values' => $orderGift, 'title' => __('Gift Message')])->toHtml() ?>
+    </div>
+<?php endif; ?>
+<?php if ($block->isPagerDisplayed()): ?>
+    <?= $block->getPagerHtml() ?>
+<?php endif; ?>
+
+<div class="overflow-x-auto">
+    <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Items Ordered')) ?>">
+        <thead>
+            <tr>
+                <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Product Name')) ?></th>
+                <th scope="col" class="col sku"><?= $escaper->escapeHtml(__('SKU')) ?></th>
+                <th scope="col" class="col price"><?= $escaper->escapeHtml(__('Price')) ?></th>
+                <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty')) ?></th>
+                <th scope="col" class="col subtotal"><?= $escaper->escapeHtml(__('Subtotal')) ?></th>
+            </tr>
+        </thead>
+        <?php foreach ($block->getItems() as $item): ?>
+            <?php if (!$item->getParentItem()): ?>
+                <tbody>
+                    <?= $block->getItemHtml($item) ?>
+                    <?php $itemGift = $giftBlock ? $giftVm->getOrderItemMessage($item) : null; ?>
+                    <?php if ($itemGift !== null): ?>
+                        <tr class="hyperion-order-gift">
+                            <td colspan="5" class="col gift">
+                                <?= $giftBlock->setData([
+                                    'values' => $itemGift,
+                                    'title' => __('Gift message for this item'),
+                                ])->toHtml() ?>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            <?php endif; ?>
+        <?php endforeach; ?>
+    </table>
+</div>
+
+<?php if ($block->isPagerDisplayed()): ?>
+    <?= $block->getPagerHtml() ?>
+<?php endif; ?>
+
+<?= $block->getChildHtml('order_totals') ?>

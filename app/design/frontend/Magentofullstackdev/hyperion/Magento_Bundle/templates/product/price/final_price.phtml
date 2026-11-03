@@ -1,0 +1,112 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Bundle final price box, core's `Magento_Bundle::product/price/final_price.phtml`
+ * (From / To range, "As low as", or the single amount) with one addition: on
+ * the product page (item_view zone) the box carries a schema.org
+ * AggregateOffer with `lowPrice` / `highPrice` (the From / To amounts),
+ * `priceCurrency` and `availability`. Core's amount render emits an Offer
+ * only for a single final price, so a bundle used to have no offer at all
+ * (or, before the theme's price/amount template, an Offer without a price).
+ *
+ * Markup and classes of the visible part are core's: `_pricing.css` styles
+ * `.price-from` / `.price-to` / `.old-price`.
+ *
+ * @var \Magento\Bundle\Pricing\Render\FinalPriceBox $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$idSuffix = $block->getIdSuffix() ? $block->getIdSuffix() : '';
+
+/** @var \Magento\Bundle\Pricing\Price\FinalPrice $finalPriceModel */
+$finalPriceModel = $block->getPrice();
+$minimalPrice = $finalPriceModel->getMinimalPrice();
+$maximalPrice = $finalPriceModel->getMaximalPrice();
+/** @var \Magento\Framework\Pricing\Price\PriceInterface $regularPriceModel */
+$regularPriceModel = $block->getPriceType('regular_price');
+$maximalRegularPrice = $regularPriceModel->getMaximalPrice();
+$minimalRegularPrice = $regularPriceModel->getMinimalPrice();
+$regularPriceAttributes = [
+    'display_label'     => __('Regular Price'),
+    'price_id'          => $block->getPriceId('old-price-' . $idSuffix),
+    'include_container' => true,
+    'skip_adjustments'  => false,
+];
+$renderMinimalRegularPrice = $block->renderAmount($minimalRegularPrice, $regularPriceAttributes);
+
+// The structured data of the product page: the price box of a tile or a
+// widget (item_list zone) stays without it, like core's Offer.
+$saleable = $block->getSaleableItem();
+$withOffer = $block->getZone() === \Magento\Framework\Pricing\Render::ZONE_ITEM_VIEW
+    && $saleable instanceof \Magento\Catalog\Model\Product;
+$currencyCode = '';
+if ($withOffer) {
+    /** @var \Magentofullstackdev\HyperionCatalog\ViewModel\BundleOptions|null $bundleVm */
+    $bundleVm = $viewModels->optional(\Magentofullstackdev\HyperionCatalog\ViewModel\BundleOptions::class);
+    $currencyCode = $bundleVm ? $bundleVm->getCurrencyCode() : '';
+}
+?>
+<?php if ($saleable->getPriceView()): ?>
+    <p class="minimal-price">
+        <?= /* @noEscape */ $block->renderAmount($minimalPrice, [
+            'display_label'     => __('As low as'),
+            'price_id'          => $block->getPriceId('from-'),
+            'include_container' => true,
+        ]) ?>
+        <?php if ($minimalPrice < $minimalRegularPrice): ?>
+            <span class="old-price">
+                <?= /* @noEscape */ $renderMinimalRegularPrice ?>
+            </span>
+        <?php endif ?>
+    </p>
+<?php else: ?>
+    <?php if ($block->showRangePrice()): ?>
+        <p class="price-from">
+            <?= /* @noEscape */ $block->renderAmount($minimalPrice, [
+                'display_label'     => __('From'),
+                'price_id'          => $block->getPriceId('from-'),
+                'price_type'        => 'minPrice',
+                'include_container' => true,
+            ]) ?>
+            <?php if ($minimalPrice < $minimalRegularPrice): ?>
+                <span class="old-price">
+                    <?= /* @noEscape */ $renderMinimalRegularPrice ?>
+                </span>
+            <?php endif ?>
+        </p>
+        <p class="price-to">
+            <?= /* @noEscape */ $block->renderAmount($maximalPrice, [
+                'display_label'     => __('To'),
+                'price_id'          => $block->getPriceId('to-'),
+                'price_type'        => 'maxPrice',
+                'include_container' => true,
+            ]) ?>
+            <?php if ($maximalPrice < $maximalRegularPrice): ?>
+                <span class="old-price">
+                    <?= /* @noEscape */ $block->renderAmount($maximalRegularPrice, $regularPriceAttributes) ?>
+                </span>
+            <?php endif ?>
+        </p>
+    <?php else: ?>
+        <?= /* @noEscape */ $block->renderAmount($minimalPrice, [
+            'price_id'          => $block->getPriceId('product-price-'),
+            'include_container' => true,
+        ]) ?>
+        <?php if ($minimalPrice < $minimalRegularPrice): ?>
+            <span class="old-price">
+                <?= /* @noEscape */ $renderMinimalRegularPrice ?>
+            </span>
+        <?php endif ?>
+    <?php endif ?>
+<?php endif ?>
+<?php if ($withOffer): ?>
+    <span itemprop="offers" itemscope itemtype="http://schema.org/AggregateOffer" data-hyperion-bundle-offer>
+        <meta itemprop="lowPrice" content="<?= $escaper->escapeHtmlAttr((string) $minimalPrice->getValue()) ?>" />
+        <meta itemprop="highPrice" content="<?= $escaper->escapeHtmlAttr((string) $maximalPrice->getValue()) ?>" />
+        <?php if ($currencyCode !== ''): ?>
+            <meta itemprop="priceCurrency" content="<?= $escaper->escapeHtmlAttr($currencyCode) ?>" />
+        <?php endif; ?>
+        <meta itemprop="availability" content="<?= $escaper->escapeUrl($saleable->isAvailable() ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock') ?>" />
+    </span>
+<?php endif; ?>

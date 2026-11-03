@@ -1,0 +1,123 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion review list -- server-rendered, no KO/RequireJS.
+ *
+ * @var \Magento\Review\Block\Product\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+use Magento\Review\Block\Product\View as ProductReview;
+use Magento\Framework\Escaper;
+
+/** @var ProductReview $block */
+/** @var Escaper $escaper */
+
+$reviewCollection = $block->getReviewsCollection();
+
+if ($toolbar = $block->getChildBlock('review_list.toolbar')) {
+    $toolbar->setCollection($reviewCollection);
+}
+
+$reviewCollection->load()->addRateVotes();
+$items = $reviewCollection->getItems();
+
+if (!count($items)) {
+    return;
+}
+
+$format = $block->getDateFormat() ?: \IntlDateFormatter::SHORT;
+$formatLong = $block->getDateFormat() ?: \IntlDateFormatter::LONG;
+$productName = $block->getProduct()->getName();
+$ratingSteps = 5;
+?>
+<section id="customer-review-list"
+         class="mt-8 scroll-mt-8"
+         aria-label="<?= $escaper->escapeHtmlAttr(__('Customer Reviews')) ?>"
+         itemscope
+         itemtype="https://schema.org/Product">
+
+    <h2 class="text-xl font-bold text-secondary mb-4">
+        <?= $escaper->escapeHtml(__('Customer Reviews')) ?>
+    </h2>
+
+    <div class="space-y-6">
+        <?php foreach ($items as $review): ?>
+            <article class="bg-surface rounded-2xl border border-subtle shadow-sm p-6"
+                     itemscope itemprop="review" itemtype="https://schema.org/Review">
+
+                <?php if (count($review->getRatingVotes())): ?>
+                    <div class="mb-3 space-y-1">
+                        <?php foreach ($review->getRatingVotes() as $vote): ?>
+                            <?php
+                            $percent = $vote->getPercent();
+                            $filled = is_numeric($percent) ? (int) floor($percent / 100 * $ratingSteps) : 0;
+                            $empty = $ratingSteps - $filled;
+                            ?>
+                            <div class="flex items-center gap-2"
+                                 itemprop="reviewRating"
+                                 itemscope
+                                 itemtype="https://schema.org/Rating">
+                                <span class="hidden" itemprop="ratingValue"><?= (int) $filled ?></span>
+                                <span class="hidden" itemprop="bestRating"><?= (int) $ratingSteps ?></span>
+                                <?php if (count($review->getRatingVotes()) > 1): ?>
+                                    <span class="text-xs text-muted w-16">
+                                        <?= $escaper->escapeHtml($vote->getRatingCode()) ?>
+                                    </span>
+                                <?php endif; ?>
+                                <div class="flex items-center gap-0.5"
+                                     role="img"
+                                     aria-label="<?= $escaper->escapeHtmlAttr(__('%1 rating. %2 out of %3 stars', $productName, $filled, $ratingSteps)) ?>">
+                                    <?php for ($i = 0; $i < $filled; $i++): ?>
+                                        <svg class="w-4 h-4 text-accent" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                        </svg>
+                                    <?php endfor; ?>
+                                    <?php for ($i = 0; $i < $empty; $i++): ?>
+                                        <svg class="w-4 h-4 text-muted" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                        </svg>
+                                    <?php endfor; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <h3 class="font-semibold text-secondary mb-1" itemprop="name">
+                    <?= $escaper->escapeHtml($review->getTitle()) ?>
+                </h3>
+
+                <p class="text-sm text-muted mb-3">
+                    <?= $escaper->escapeHtml(__('Review by')) ?>
+                    <strong itemprop="author" itemscope itemtype="https://schema.org/Person">
+                        <span itemprop="name"><?= $escaper->escapeHtml($review->getNickname()) ?></span>
+                    </strong>
+                    <?php /* The machine readable value is ISO 8601 (HTML and schema.org); the display dates follow the locale. */ ?>
+                    <time class="ml-2"
+                          itemprop="datePublished"
+                          datetime="<?= $escaper->escapeHtmlAttr(date('Y-m-d', strtotime((string) $review->getCreatedAt()) ?: 0)) ?>">
+                        <span class="sr-only">
+                            <?= $escaper->escapeHtml($block->formatDate($review->getCreatedAt(), $formatLong)) ?>
+                        </span>
+                        <span aria-hidden="true">
+                            <?= $escaper->escapeHtml($block->formatDate($review->getCreatedAt(), $format)) ?>
+                        </span>
+                    </time>
+                </p>
+
+                <div class="text-sm text-secondary leading-relaxed" itemprop="description">
+                    <?= /* @noEscape */ nl2br($escaper->escapeHtml($review->getDetail())) ?>
+                </div>
+            </article>
+        <?php endforeach; ?>
+    </div>
+
+    <?php if ($toolbar): ?>
+        <div class="mt-6">
+            <?= $toolbar->toHtml() ?>
+        </div>
+    <?php endif; ?>
+</section>

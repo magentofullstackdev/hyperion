@@ -1,0 +1,72 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion review list pager -- HTMX-driven pagination.
+ * Swaps #customer-review-list in place without a full page reload.
+ *
+ * @var \Magento\Theme\Block\Html\Pager $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if ($block->getCollection()->getLastPageNumber() <= 1) {
+    return;
+}
+
+$pages = $block->getPages();
+$productId = 0;
+$product = $block->getLayout()->getBlock('review_list')
+    ? $block->getLayout()->getBlock('review_list')->getProduct()
+    : null;
+if ($product) {
+    $productId = (int) $product->getId();
+}
+
+$makeUrl = static function (int $page) use ($block, $productId): string {
+    return rtrim((string) $block->getUrl('hyperion/review_product/listajax'), '/')
+        . '?product_id=' . $productId . '&p=' . $page;
+};
+
+$htmxAttrs = function (string $url): string {
+    return sprintf(
+        'hx-get="%s" hx-target="#customer-review-list" hx-swap="outerHTML" hx-push-url="false"',
+        htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+    );
+};
+?>
+<nav class="flex items-center justify-center gap-1 mt-6" aria-label="<?= $escaper->escapeHtmlAttr(__('Reviews pagination')) ?>">
+    <?php if (!$block->isFirstPage()): ?>
+        <button type="button"
+                class="p-2 text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                aria-label="<?= $escaper->escapeHtmlAttr(__('Previous page')) ?>"
+                <?= /* @noEscape */ $htmxAttrs($makeUrl((int) $block->getCurrentPage() - 1)) ?>>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+    <?php endif; ?>
+
+    <?php foreach ($pages as $page): ?>
+        <?php if ($block->isPageCurrent($page)): ?>
+            <span class="w-10 h-10 flex items-center justify-center text-sm font-bold text-white bg-primary rounded-lg" aria-current="page">
+                <?= $escaper->escapeHtml($page) ?>
+            </span>
+        <?php else: ?>
+            <button type="button"
+                    class="w-10 h-10 flex items-center justify-center text-sm text-secondary hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
+                    <?= /* @noEscape */ $htmxAttrs($makeUrl((int) $page)) ?>>
+                <?= $escaper->escapeHtml($page) ?>
+            </button>
+        <?php endif; ?>
+    <?php endforeach; ?>
+
+    <?php if (!$block->isLastPage()): ?>
+        <button type="button"
+                class="p-2 text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                aria-label="<?= $escaper->escapeHtmlAttr(__('Next page')) ?>"
+                <?= /* @noEscape */ $htmxAttrs($makeUrl((int) $block->getCurrentPage() + 1)) ?>>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </button>
+    <?php endif; ?>
+</nav>

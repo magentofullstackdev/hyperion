@@ -1,0 +1,79 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Order status pill + actions (reorder, cancel, print) of the account
+ * order pages. `#hyperion-order-actions` is the out-of-band swap target
+ * of Controller\Order\Cancel, so it must stay the outermost element.
+ *
+ * @var \Magentofullstackdev\HyperionCustomer\Block\Order\Actions $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCustomer\ViewModel\Sales\OrderActions;
+
+$order = $block->getOrder();
+if ($order === null) {
+    return;
+}
+$actions = $block->showActions() ? $viewModels->require(OrderActions::class) : null;
+$reasons = $actions?->getCancellationReasons($order) ?? [];
+$buttonClass = 'inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold'
+    . ' border border-subtle text-secondary hover:bg-surface-raised transition-colors'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary';
+?>
+<div id="hyperion-order-actions"
+     class="flex items-center gap-3 flex-wrap"
+     <?= $block->getData('oob') ? 'hx-swap-oob="outerHTML"' : '' ?>>
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+                 bg-primary/10 text-primary border border-primary/30">
+        <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
+    </span>
+
+    <?php if ($actions?->canReorder($order)): ?>
+        <form action="<?= $escaper->escapeUrl($actions->getReorderUrl($order)) ?>" method="post" class="inline">
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($actions->getFormKey()) ?>"/>
+            <button type="submit" class="<?= $escaper->escapeHtmlAttr($buttonClass) ?>">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M4 4v5h5M20 20v-5h-5"/>
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M20 9A8 8 0 006.06 5.64L4 8M4 15a8 8 0 0013.94 3.36L20 16"/>
+                </svg>
+                <?= $escaper->escapeHtml(__('Reorder')) ?>
+            </button>
+        </form>
+    <?php endif; ?>
+
+    <?php if ($actions && $reasons !== []): ?>
+        <hyperion-order-cancel id="hyperion-order-cancel-<?= (int) $order->getId() ?>"
+                               action="<?= $escaper->escapeUrl($actions->getCancelUrl()) ?>"
+                               order-id="<?= (int) $order->getId() ?>"
+                               order-number="<?= $escaper->escapeHtmlAttr($order->getRealOrderId()) ?>"
+                               form-key="<?= $escaper->escapeHtmlAttr($actions->getFormKey()) ?>"
+                               context="view"
+                               variant="button"
+                               reasons="<?= $escaper->escapeHtmlAttr(json_encode(array_values($reasons))) ?>"
+                               trigger-label="<?= $escaper->escapeHtmlAttr(__('Cancel Order')) ?>"
+                               title-label="<?= $escaper->escapeHtmlAttr(__('Cancel order #%1', $order->getRealOrderId())) ?>"
+                               prompt-label="<?= $escaper->escapeHtmlAttr(__('Provide a cancellation reason:')) ?>"
+                               keep-label="<?= $escaper->escapeHtmlAttr(__('Keep Order')) ?>"
+                               confirm-label="<?= $escaper->escapeHtmlAttr(__('Cancel Order')) ?>"
+                               button-class="<?= $escaper->escapeHtmlAttr($buttonClass) ?>"></hyperion-order-cancel>
+    <?php endif; ?>
+
+    <?php if ($actions): ?>
+        <a href="<?= $escaper->escapeUrl($actions->getPrintUrl($order)) ?>"
+           target="_blank" rel="noopener"
+           class="<?= $escaper->escapeHtmlAttr($buttonClass) ?>">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            <?= $escaper->escapeHtml(__('Print Order')) ?>
+        </a>
+    <?php endif; ?>
+</div>

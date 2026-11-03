@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Order document tabs sit at the top of the account shell content column -->
+        <move element="sales.order.info.links" destination="content" after="hyperion.account.content.open"/>
+        <referenceBlock name="sales.order.info.links">
+            <arguments>
+                <argument name="css_class" xsi:type="string">hyperion-order-tabs</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

@@ -1,0 +1,76 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * File custom option. The PDP form switches to multipart encoding when
+ * the product has one (see product/view.phtml). When the item is edited
+ * from the cart the shopper chooses to keep, replace or remove the file
+ * already uploaded.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options\Type\File $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$option = $block->getOption();
+$optionId = (int) $option->getId();
+$vm = $viewModels->require(CustomOptions::class);
+$price = $vm->getPrice($block->getParentBlock(), $optionId);
+$fileInfo = $block->getFileInfo();
+$fileExists = $fileInfo->hasData();
+$fieldName = 'options_' . $optionId . '_file';
+$extensions = array_filter(array_map('trim', explode(',', (string) $option->getFileExtension())));
+$accept = implode(',', array_map(static fn (string $ext): string => '.' . ltrim($ext, '.'), $extensions));
+?>
+<div class="space-y-1">
+    <label for="<?= $escaper->escapeHtmlAttr($fieldName) ?>" class="block text-sm font-medium text-secondary">
+        <?= $escaper->escapeHtml($option->getTitle()) ?>
+        <?php if ($option->getIsRequire()): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+        <span class="font-normal text-muted"><?= $escaper->escapeHtml($vm->formatNotice($price)) ?></span>
+    </label>
+
+    <?php if ($fileExists): ?>
+        <p class="text-sm text-secondary"><?= $escaper->escapeHtml($fileInfo->getTitle()) ?></p>
+        <select name="<?= $escaper->escapeHtmlAttr($fieldName) ?>_action"
+                aria-label="<?= $escaper->escapeHtmlAttr(__('Uploaded file')) ?>"
+                class="px-3 py-2 text-sm border border-subtle rounded-lg bg-surface text-secondary">
+            <option value="save_old"><?= $escaper->escapeHtml(__('Keep this file')) ?></option>
+            <option value="save_new"><?= $escaper->escapeHtml(__('Replace with a new file')) ?></option>
+            <?php if (!$option->getIsRequire()): ?>
+                <option value=""><?= $escaper->escapeHtml(__('Remove the file')) ?></option>
+            <?php endif; ?>
+        </select>
+    <?php else: ?>
+        <input type="hidden" name="<?= $escaper->escapeHtmlAttr($fieldName) ?>_action" value="save_new">
+    <?php endif; ?>
+
+    <input type="file"
+           id="<?= $escaper->escapeHtmlAttr($fieldName) ?>"
+           name="<?= $escaper->escapeHtmlAttr($fieldName) ?>"
+           data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+           <?php if ($accept !== ''): ?>accept="<?= $escaper->escapeHtmlAttr($accept) ?>"<?php endif; ?>
+           <?php if ($option->getIsRequire() && !$fileExists): ?>required<?php endif; ?>
+           class="block w-full text-sm text-secondary
+                  file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border file:border-subtle
+                  file:bg-surface-raised file:text-sm file:font-medium file:text-secondary">
+
+    <ul class="text-xs text-muted">
+        <?php if ($extensions): ?>
+            <li><?= $escaper->escapeHtml(__('Compatible file extensions to upload')) ?>:
+                <?= $escaper->escapeHtml(implode(', ', $extensions)) ?></li>
+        <?php endif; ?>
+        <?php if ((int) $option->getImageSizeX() > 0): ?>
+            <li><?= $escaper->escapeHtml(__('Maximum image width')) ?>:
+                <?= (int) $option->getImageSizeX() ?> <?= $escaper->escapeHtml(__('px.')) ?></li>
+        <?php endif; ?>
+        <?php if ((int) $option->getImageSizeY() > 0): ?>
+            <li><?= $escaper->escapeHtml(__('Maximum image height')) ?>:
+                <?= (int) $option->getImageSizeY() ?> <?= $escaper->escapeHtml(__('px.')) ?></li>
+        <?php endif; ?>
+    </ul>
+</div>

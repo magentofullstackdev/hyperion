@@ -1,0 +1,183 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">hyperion_megamenu_group_form.hyperion_megamenu_group_form_data_source</item>
+        </item>
+        <item name="label" xsi:type="string" translate="true">Menu Group</item>
+        <item name="template" xsi:type="string">templates/form/collapsible</item>
+    </argument>
+    <settings>
+        <buttons>
+            <button name="back" class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Group\BackButton"/>
+            <button name="delete" class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Group\DeleteButton"/>
+            <button name="items" class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Group\ItemsButton"/>
+            <button name="save_and_continue" class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Group\SaveAndContinueButton"/>
+            <button name="save" class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Group\SaveButton"/>
+        </buttons>
+        <namespace>hyperion_megamenu_group_form</namespace>
+        <dataScope>data</dataScope>
+        <deps>
+            <dep>hyperion_megamenu_group_form.hyperion_megamenu_group_form_data_source</dep>
+        </deps>
+    </settings>
+    <dataSource name="hyperion_megamenu_group_form_data_source">
+        <argument name="data" xsi:type="array">
+            <item name="js_config" xsi:type="array">
+                <item name="component" xsi:type="string">Magento_Ui/js/form/provider</item>
+            </item>
+        </argument>
+        <settings>
+            <submitUrl path="hyperion_megamenu/group/save"/>
+        </settings>
+        <dataProvider class="Magentofullstackdev\HyperionMegaMenu\Ui\DataProvider\Group\FormDataProvider" name="hyperion_megamenu_group_form_data_source">
+            <settings>
+                <requestFieldName>group_id</requestFieldName>
+                <primaryFieldName>group_id</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+    <fieldset name="general">
+        <settings>
+            <label translate="true">General</label>
+        </settings>
+        <field name="group_id" formElement="input">
+            <settings>
+                <dataType>text</dataType>
+                <visible>false</visible>
+            </settings>
+        </field>
+        <field name="is_active" formElement="checkbox">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="default" xsi:type="number">1</item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>boolean</dataType>
+                <label translate="true">Enabled</label>
+            </settings>
+            <formElements>
+                <checkbox>
+                    <settings>
+                        <valueMap>
+                            <map name="false" xsi:type="number">0</map>
+                            <map name="true" xsi:type="number">1</map>
+                        </valueMap>
+                        <prefer>toggle</prefer>
+                    </settings>
+                </checkbox>
+            </formElements>
+        </field>
+        <field name="title" formElement="input">
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Title</label>
+                <validation>
+                    <rule name="required-entry" xsi:type="boolean">true</rule>
+                </validation>
+            </settings>
+        </field>
+        <field name="identifier" formElement="input">
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Identifier</label>
+                <notice translate="true">Letters, digits, underscores. `main_navigation` is the header menu; any other identifier can be placed with the Hyperion Mega Menu widget or the block.</notice>
+                <validation>
+                    <rule name="required-entry" xsi:type="boolean">true</rule>
+                </validation>
+            </settings>
+        </field>
+        <field name="menu_type" formElement="select">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="default" xsi:type="string">mega-horizontal</item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Menu Type</label>
+            </settings>
+            <formElements>
+                <select>
+                    <settings>
+                        <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\MenuType"/>
+                    </settings>
+                </select>
+            </formElements>
+        </field>
+        <field name="website_ids" formElement="multiselect">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="default" xsi:type="array">
+                        <item name="0" xsi:type="number">0</item>
+                    </item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Websites</label>
+                <notice translate="true">"All Websites" or the websites whose header shows this group.</notice>
+            </settings>
+            <formElements>
+                <multiselect>
+                    <settings>
+                        <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\Websites"/>
+                    </settings>
+                </multiselect>
+            </formElements>
+        </field>
+        <field name="devices" formElement="select">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="default" xsi:type="string">both</item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Devices</label>
+            </settings>
+            <formElements>
+                <select>
+                    <settings>
+                        <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\Devices"/>
+                    </settings>
+                </select>
+            </formElements>
+        </field>
+        <field name="priority" formElement="input">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="default" xsi:type="number">0</item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Priority</label>
+                <notice translate="true">When several active groups match a website and a device, the highest priority wins.</notice>
+                <validation>
+                    <rule name="validate-number" xsi:type="boolean">true</rule>
+                </validation>
+            </settings>
+        </field>
+        <field name="root_category_id" formElement="select">
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Root Category for the import</label>
+                <notice translate="true">"Import from Categories" in the builder creates the items from this category's subtree (the default store's root when empty).</notice>
+            </settings>
+            <formElements>
+                <select>
+                    <settings>
+                        <options class="Magentofullstackdev\HyperionMegaMenu\Model\Source\Categories"/>
+                    </settings>
+                </select>
+            </formElements>
+        </field>
+    </fieldset>
+</form>

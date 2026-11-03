@@ -1,0 +1,85 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion cart line item renderer.
+ *
+ * @var \Magento\Checkout\Block\Cart\Item\Renderer $block
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$_item = $block->getItem();
+$product = $_item->getProduct();
+$options = $block->getOptionList();
+$formKey = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\FormKey::class)->getFormKey();
+?>
+<tbody class="divide-y divide-divider">
+    <tr class="align-top">
+        <td class="px-6 py-6">
+            <div class="flex gap-4">
+                <a href="<?= $escaper->escapeUrl($block->getProductUrl()) ?>"
+                   class="flex-shrink-0 w-20 h-20 bg-surface-raised rounded-lg overflow-hidden">
+                    <?= /* @noEscape */ $block->getImage($block->getProductForThumbnail(), 'cart_page_product_thumbnail')->toHtml() ?>
+                </a>
+                <div class="min-w-0 flex-1 space-y-1">
+                    <a href="<?= $escaper->escapeUrl($block->getProductUrl()) ?>"
+                       class="block text-sm font-medium text-secondary hover:text-primary transition-colors">
+                        <?= $escaper->escapeHtml($block->getProductName()) ?>
+                    </a>
+                    <?php if ($options): ?>
+                        <dl class="text-xs text-muted space-y-0.5">
+                            <?php foreach ($options as $option): ?>
+                                <?php $formatted = $block->getFormatedOptionValue($option); ?>
+                                <div class="flex gap-1">
+                                    <dt class="font-medium"><?= $escaper->escapeHtml($option['label']) ?>:</dt>
+                                    <dd><?= $escaper->escapeHtml($formatted['value'] ?? '', ['span', 'a']) ?></dd>
+                                </div>
+                            <?php endforeach; ?>
+                        </dl>
+                    <?php endif; ?>
+                    <?php foreach ($block->getMessages() as $message): ?>
+                        <p class="text-xs text-error"><?= $escaper->escapeHtml($message['text']) ?></p>
+                    <?php endforeach; ?>
+
+                    <div class="flex items-center gap-3 pt-2 text-xs">
+                        <?php if ($block->getProductUrl() && $product->isVisibleInSiteVisibility()): ?>
+                            <a href="<?= $escaper->escapeUrl($block->getProductUrl() . '#' . $_item->getId()) ?>"
+                               class="text-primary hover:text-primary-hover hover:underline">
+                                <?= $escaper->escapeHtml(__('Edit')) ?>
+                            </a>
+                        <?php endif; ?>
+                        <form method="post"
+                              action="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/delete', ['id' => $_item->getId()])) ?>"
+                              class="inline">
+                            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>"/>
+                            <button type="submit" class="text-error hover:text-error-active hover:underline">
+                                <?= $escaper->escapeHtml(__('Remove')) ?>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </td>
+
+        <td class="px-6 py-6 text-right">
+            <span class="text-sm font-medium text-secondary">
+                <?= /* @noEscape */ $block->getUnitPriceHtml($_item) ?>
+            </span>
+        </td>
+
+        <td class="px-6 py-6 text-center">
+            <input type="number"
+                   name="cart[<?= $escaper->escapeHtmlAttr($_item->getId()) ?>][qty]"
+                   value="<?= $escaper->escapeHtmlAttr($block->getQty()) ?>"
+                   min="0"
+                   class="w-20 px-3 py-2 text-center border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                   aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $block->getProductName())) ?>"/>
+        </td>
+
+        <td class="px-6 py-6 text-right">
+            <span class="text-sm font-bold text-secondary">
+                <?= /* @noEscape */ $block->getRowTotalHtml($_item) ?>
+            </span>
+        </td>
+    </tr>
+</tbody>

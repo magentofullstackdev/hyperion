@@ -1,0 +1,24 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion account shell -- opens the `#hyperion-account-content`
+ * region that <hyperion-account-nav> targets via `hx-select`.
+ *
+ * Every account-page block attached to the native `content` container
+ * lands inside this section because it's declared with
+ * `after="customer_account_navigation"` while the closing template
+ * is pinned to `after="-"` (last in the render loop).
+ *
+ * The id is the HTMX swap anchor -- on nav click the component does
+ * an `hx-get` for the new route, extracts `#hyperion-account-content`
+ * from the full-page response, and swaps it in place of this element
+ * with `outerHTML`. No per-route fragment controllers needed.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ */
+?>
+    <section id="hyperion-account-content"
+             class="min-w-0 space-y-6"
+             data-hyperion-account-content
+             aria-labelledby="hyperion-account-heading">

@@ -1,0 +1,82 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion Mega Menu builder ("Manage Items").
+ *
+ * Standard admin classes only (buttons, fields, messages), so the page
+ * follows the active admin theme (Magento, Mage-OS); the tree and the two
+ * column layout are styled by web/css/builder.css with neutral custom
+ * properties. web/js/builder.js (an ES module, no RequireJS) renders the
+ * tree from the JSON endpoint, handles drag and drop, loads the inspector
+ * form as an HTML fragment and posts every change with fetch().
+ *
+ * @var \Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\Builder $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$group = $block->getGroup();
+?>
+<?php if ($group): ?>
+<div class="hyperion-megamenu-builder" id="hyperion-megamenu-builder" data-hyperion-megamenu-builder>
+    <div class="page-main-actions">
+        <div class="page-actions">
+            <div class="page-actions-inner">
+                <div class="page-actions-buttons">
+                    <button type="button" class="action-default back" onclick="location.href='<?= $escaper->escapeJs($escaper->escapeUrl($block->getGroupsUrl())) ?>'">
+                        <span><?= $escaper->escapeHtml(__('Back')) ?></span>
+                    </button>
+                    <button type="button" class="action-default" onclick="location.href='<?= $escaper->escapeJs($escaper->escapeUrl($block->getGroupEditUrl())) ?>'">
+                        <span><?= $escaper->escapeHtml(__('Edit Group')) ?></span>
+                    </button>
+                    <button type="button" class="action-secondary" data-hmm-action="import">
+                        <span><?= $escaper->escapeHtml(__('Import from Categories')) ?></span>
+                    </button>
+                    <button type="button" class="action-secondary" data-hmm-action="add-sub">
+                        <span><?= $escaper->escapeHtml(__('Add Sub-Item')) ?></span>
+                    </button>
+                    <button type="button" class="action-primary" data-hmm-action="add-root">
+                        <span><?= $escaper->escapeHtml(__('Add Root Item')) ?></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="hmm-scope">
+        <?= /* @noEscape */ $block->getStoreSwitcherHtml() ?>
+        <p class="hmm-scope-note">
+            <?php if ($block->getStoreId() > 0): ?>
+                <?= $escaper->escapeHtml(__('Store view scope: titles, badges, targets, status and order can differ here. Structure changes and new shared items are made in Default Config; an item added here belongs to this store view only.')) ?>
+            <?php else: ?>
+                <?= $escaper->escapeHtml(__('Default Config: the structure and the default values of every store view. Switch the scope to translate titles or reorder items for one store view.')) ?>
+            <?php endif; ?>
+        </p>
+    </div>
+
+    <div class="hmm-messages" data-hmm-messages aria-live="polite"></div>
+
+    <div class="hmm-layout">
+        <section class="hmm-tree-column" aria-label="<?= $escaper->escapeHtmlAttr(__('Menu structure')) ?>">
+            <header class="hmm-column-header">
+                <h2 class="hmm-column-title"><?= $escaper->escapeHtml(__('Menu structure')) ?></h2>
+                <div class="hmm-tree-actions">
+                    <button type="button" class="action-tertiary" data-hmm-action="expand"><?= $escaper->escapeHtml(__('Expand all')) ?></button>
+                    <button type="button" class="action-tertiary" data-hmm-action="collapse"><?= $escaper->escapeHtml(__('Collapse all')) ?></button>
+                </div>
+            </header>
+            <div class="hmm-tree" data-hmm-tree role="tree" aria-label="<?= $escaper->escapeHtmlAttr(__('Menu items')) ?>"></div>
+        </section>
+        <section class="hmm-form-column" aria-label="<?= $escaper->escapeHtmlAttr(__('Item')) ?>">
+            <header class="hmm-column-header">
+                <h2 class="hmm-column-title" data-hmm-form-title><?= $escaper->escapeHtml(__('Item')) ?></h2>
+            </header>
+            <div class="hmm-inspector" data-hmm-inspector>
+                <p class="hmm-placeholder"><?= $escaper->escapeHtml(__('Select an item in the tree, or add one.')) ?></p>
+            </div>
+        </section>
+    </div>
+
+    <script type="application/json" id="hyperion-megamenu-config"><?= /* @noEscape */ $block->getConfigJson() ?></script>
+    <script type="module" src="<?= $escaper->escapeUrl($block->getViewFileUrl('Magentofullstackdev_HyperionMegaMenu::js/builder.js')) ?>"></script>
+</div>
+<?php endif; ?>

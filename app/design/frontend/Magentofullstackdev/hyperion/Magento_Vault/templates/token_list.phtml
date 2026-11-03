@@ -1,0 +1,36 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Stored Payment Methods: account tokens (PayPal, Venmo, ACH vaults of
+ * gateway modules), rendered by the modules' own renderer children.
+ *
+ * @var \Magento\Vault\Block\Customer\AccountTokens $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$tokens = $block->getPaymentTokens();
+if (count($tokens) === 0) {
+    return;
+}
+?>
+<section class="space-y-4 mt-6" aria-labelledby="hyperion-vault-tokens-heading">
+    <h2 id="hyperion-vault-tokens-heading" class="text-base font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Stored Accounts')) ?>
+    </h2>
+    <div class="bg-surface border border-subtle rounded-xl p-5 overflow-x-auto">
+        <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Stored Accounts')) ?>">
+            <thead>
+                <tr>
+                    <th scope="col" class="col"><?= $escaper->escapeHtml(__('Account')) ?></th>
+                    <th scope="col" class="col actions"><span class="sr-only"><?= $escaper->escapeHtml(__('Actions')) ?></span></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($tokens as $token): ?>
+                    <?= /* @noEscape */ $block->renderTokenHtml($token) ?>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</section>

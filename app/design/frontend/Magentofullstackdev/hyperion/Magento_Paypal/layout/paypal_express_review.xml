@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal review page (paypal/express/review): where a shopper lands
+    after approving the payment in the PayPal window when the order still
+    needs a shipping method.
+
+    The core blocks stay (they are session bound and not cacheable, and
+    the controller hands them the quote by name); the templates are the
+    theme's. The coupon block is dropped: its theme template belongs to
+    the Hyperion cart block, and a discount is applied in the cart, which
+    the page links to. The agreements get a template of their own because
+    the core one is a Knockout component.
+
+    The page is rendered by a legacy controller, so its messages never
+    reach the mage-messages cookie: paypal.validation.messages takes them
+    from the session, and prints them with the theme's message template.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+        <referenceBlock name="paypal_express_review_checkout_head_components" remove="true"/>
+        <referenceBlock name="paypal_express_review_head_components" remove="true"/>
+        <referenceBlock name="paypal.additional.actions" remove="true"/>
+        <referenceBlock name="paypal.validation.messages" template="Magento_Theme::messages.phtml"/>
+        <referenceBlock name="paypal.express.review.details.agreements"
+                        template="Magento_Paypal::express/review/agreements.phtml"/>
+    </body>
+</page>

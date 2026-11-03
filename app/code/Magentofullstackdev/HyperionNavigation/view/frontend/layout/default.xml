@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Magentofullstackdev_HyperionNavigation module-scoped default layout handle.
+
+    Purpose: provides a clean, module-owned extension point for any future
+    layout tweaks that belong to Magentofullstackdev_HyperionNavigation itself (e.g. adding
+    navigation-specific assets, declaring additional block arguments, or
+    hooking into page regions that are navigation-specific).
+
+    Convention: block declaration for the Header, Footer, and Topmenu
+    instances is the theme's responsibility and lives in
+    app/design/frontend/Magentofullstackdev/hyperion/Magento_Theme/layout/default.xml.
+    Do NOT re-declare those blocks here to avoid merge conflicts between the
+    theme override and this module file.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+    </body>
+</page>

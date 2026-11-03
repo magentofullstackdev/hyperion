@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- advanced/result.phtml renders its own heading -->
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <!-- Same view model set the category and quick search handles give to
+             the Hyperion product/list.phtml -->
+        <referenceBlock name="search_result_list">
+            <arguments>
+                <argument name="product_list_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductList</argument>
+                <argument name="pricing_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\Pricing</argument>
+                <argument name="image_config_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionImage\ViewModel\ImageConfig</argument>
+                <argument name="formKeyViewModel" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\FormKey</argument>
+                <argument name="swatchesViewModel" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\Product\Swatches</argument>
+            </arguments>
+        </referenceBlock>
+        <referenceBlock name="product_list_toolbar_pager" template="Magento_Theme::html/pager.phtml"/>
+    </body>
+</page>

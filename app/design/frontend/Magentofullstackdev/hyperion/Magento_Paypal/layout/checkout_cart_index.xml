@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal on the cart page.
+
+    Core attaches its shortcut buttons and the "near the button" Pay Later
+    message to checkout.cart.methods, which the Hyperion cart does not
+    render. The Hyperion block is a child of the totals card and is
+    printed under Proceed to Checkout. Keep it in sync with
+    hyperion_checkout_cart_fragment.xml (the same card after an HTMX cart
+    mutation).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="checkout.cart.braintree.credit" remove="true"/>
+        <referenceBlock name="paylater.right.logo" remove="true"/>
+
+        <referenceBlock name="hyperion.cart.totals">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.paypal.cart.buttons"
+                   as="paypal_buttons"
+                   template="Magento_Paypal::hyperion/buttons.phtml">
+                <arguments>
+                    <argument name="context" xsi:type="string">cart</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

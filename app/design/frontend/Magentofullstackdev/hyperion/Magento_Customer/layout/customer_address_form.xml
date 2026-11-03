@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="customer_address_edit">
+            <arguments>
+                <argument name="hyperion_address_form" xsi:type="object">
+                    Magentofullstackdev\HyperionCustomer\ViewModel\AddressForm
+                </argument>
+            </arguments>
+
+            <!--
+                Company widget: renders the company name input when the "Show Company" attribute
+                is enabled in Stores > Configuration > Customers > Customer Configuration > Name and Address Options.
+            -->
+            <block class="Magento\Customer\Block\Widget\Company"
+                   name="customer_widget_company"
+                   as="company"
+                   template="Magento_Customer::widget/company.phtml">
+            </block>
+
+            <!--
+                Telephone widget: renders the phone number input when the "Show Telephone"
+                attribute is enabled under the same configuration path.
+            -->
+            <block class="Magento\Customer\Block\Widget\Telephone"
+                   name="customer_widget_telephone"
+                   as="telephone"
+                   template="Magento_Customer::widget/telephone.phtml">
+            </block>
+
+            <!--
+                Fax widget: renders when the "Show Fax" attribute is enabled under the same
+                configuration path. The template hands the three widgets the address values.
+            -->
+            <block class="Magento\Customer\Block\Widget\Fax"
+                   name="customer_widget_fax"
+                   as="fax"
+                   template="Magento_Customer::widget/fax.phtml">
+            </block>
+        </referenceBlock>
+    </body>
+</page>

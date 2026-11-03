@@ -1,0 +1,68 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Hyperion cart totals -- rendered as its own block so cart mutations
+ * (coupon apply/cancel, qty update, item delete) can OOB-swap the
+ * whole card via hx-swap-oob="outerHTML" targeting #hyperion-cart-totals.
+ *
+ * All colors use semantic tokens (bg-surface / border-subtle / text-
+ * secondary / bg-primary / text-success) -- no absolute Tailwind palette
+ * classes.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Cart\Totals $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$targetId = $block->getTargetId();
+$rowClasses = [
+    'regular' => 'flex items-center justify-between',
+    'detail' => 'flex items-center justify-between text-xs',
+    'discount' => 'flex items-center justify-between text-success',
+    'grand' => 'flex items-center justify-between pt-3 border-t border-subtle',
+];
+$labelClasses = ['grand' => 'text-base font-bold text-secondary', 'discount' => ''];
+$valueClasses = ['grand' => 'text-xl font-bold text-secondary', 'discount' => 'font-medium'];
+?>
+<aside id="<?= $escaper->escapeHtmlAttr($targetId) ?>"
+       data-hyperion-cart-totals
+       <?php if ($block->getData('oob')): ?>hx-swap-oob="outerHTML"<?php endif; ?>
+       class="bg-surface rounded-xl border border-subtle shadow-sm p-6 sticky top-24"
+       aria-labelledby="hyperion-summary-title">
+
+    <h2 id="hyperion-summary-title"
+        class="text-base font-bold text-secondary uppercase tracking-wider mb-4">
+        <?= $escaper->escapeHtml(__('Summary')) ?>
+    </h2>
+
+    <?php /* Estimate Shipping and Tax (theme Magento_Checkout::cart/estimate.phtml) */ ?>
+    <?= $block->getChildHtml('estimate') ?>
+
+    <dl class="space-y-3 text-sm">
+        <?php foreach ($block->getRows() as $row): ?>
+            <div class="<?= $escaper->escapeHtmlAttr($rowClasses[$row['kind']] ?? $rowClasses['regular']) ?>"
+                 data-total="<?= $escaper->escapeHtmlAttr($row['code']) ?>">
+                <dt class="<?= $escaper->escapeHtmlAttr($labelClasses[$row['kind']] ?? 'text-muted') ?>">
+                    <?= $escaper->escapeHtml($row['label']) ?>
+                    <?php if ($row['note'] !== ''): ?>
+                        <span class="text-xs text-muted">(<?= $escaper->escapeHtml($row['note']) ?>)</span>
+                    <?php endif; ?>
+                </dt>
+                <dd class="<?= $escaper->escapeHtmlAttr($valueClasses[$row['kind']] ?? 'font-medium text-secondary') ?>">
+                    <?= $escaper->escapeHtml($row['value']) ?>
+                </dd>
+            </div>
+        <?php endforeach; ?>
+    </dl>
+
+    <a href="<?= $escaper->escapeUrl($block->getCheckoutUrl()) ?>"
+       class="block mt-6 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
+              bg-primary text-on-primary shadow-sm hover:bg-primary-hover hover:shadow-md
+              transition-all focus:outline-none focus:ring-2 focus:ring-primary">
+        <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+    </a>
+
+    <?php /* PayPal smart buttons (theme Magento_Paypal/layout/checkout_cart_index.xml) */ ?>
+    <?= $block->getChildHtml('paypal_buttons') ?>
+</aside>

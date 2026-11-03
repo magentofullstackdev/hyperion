@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Configurable product page handle: intentionally empty.
+
+    Hyperion renders the configurable options itself: `product/view.phtml`
+    prints the `product.info.swatches` child (`view/swatches.phtml`,
+    <hyperion-swatches>) declared in Magento_Catalog/layout/catalog_product_view.xml.
+    Core's options block (`product.info.options.configurable`, the RequireJS
+    configurable widget) is not needed; an earlier version of this file
+    referenced a block no layout declares, which logged a "Broken reference"
+    notice on every configurable product request.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body/>
+</page>

@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!-- Fragment handle of Controller\Adminhtml\Item\Form: the inspector form alone, no page chrome. -->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionMegaMenu\Block\Adminhtml\ItemForm"
+               name="hyperion.megamenu.item.form"
+               template="Magentofullstackdev_HyperionMegaMenu::item/form.phtml"/>
+    </body>
+</page>

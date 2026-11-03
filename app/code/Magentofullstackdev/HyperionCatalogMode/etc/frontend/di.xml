@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!--
+        The storefront never references this module: templates ask the Core
+        purchase pool, and this rule is one of its members.
+    -->
+    <type name="Magentofullstackdev\HyperionCore\Model\Purchase\Availability">
+        <arguments>
+            <argument name="restrictions" xsi:type="array">
+                <item name="hyperion_catalog_mode" xsi:type="object">Magentofullstackdev\HyperionCatalogMode\Model\Restriction</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <type name="Magentofullstackdev\HyperionCatalogMode\Model\Restriction">
+        <arguments>
+            <argument name="customerSession" xsi:type="object">Magento\Customer\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+
+    <!--
+        Route guard. Runs on ActionInterface::execute so it covers core
+        controllers (AbstractAction::dispatch calls execute) and the Hyperion
+        HTMX endpoints alike. Prefixes are matched against the full action
+        name (route_controller_action).
+    -->
+    <type name="Magentofullstackdev\HyperionCatalogMode\Plugin\Framework\App\Action\CheckoutGuardPlugin">
+        <arguments>
+            <argument name="customerSession" xsi:type="object">Magento\Customer\Model\Session\Proxy</argument>
+            <argument name="guardedRoutes" xsi:type="array">
+                <item name="checkout" xsi:type="string">checkout</item>
+                <item name="multishipping" xsi:type="string">multishipping</item>
+                <item name="paypal_express" xsi:type="string">paypal_express</item>
+                <item name="hyperion_minicart" xsi:type="string">hyperion_minicart</item>
+                <item name="hyperion_cart" xsi:type="string">hyperion_cart</item>
+                <!-- Native routes that add items to the quote without passing through checkout_cart_add. -->
+                <item name="wishlist_index_cart" xsi:type="string">wishlist_index_cart</item>
+                <item name="wishlist_index_allcart" xsi:type="string">wishlist_index_allcart</item>
+                <item name="sales_order_reorder" xsi:type="string">sales_order_reorder</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magento\Framework\App\ActionInterface">
+        <plugin name="hyperion_catalog_mode_checkout_guard"
+                type="Magentofullstackdev\HyperionCatalogMode\Plugin\Framework\App\Action\CheckoutGuardPlugin"
+                sortOrder="20"/>
+    </type>
+</config>

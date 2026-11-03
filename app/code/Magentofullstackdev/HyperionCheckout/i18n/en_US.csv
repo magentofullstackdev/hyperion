@@ -1,0 +1,153 @@
+"%1 (Excl. Tax)","%1 (Excl. Tax)"
+"%1 (Incl. Tax)","%1 (Incl. Tax)"
+"Accept the terms and conditions before paying.","Accept the terms and conditions before paying."
+"Add New Address","Add New Address"
+"Add gift options","Add gift options"
+Apply,Apply
+"Authorise the payment with PayPal, then place your order.","Authorise the payment with PayPal, then place your order."
+"Authorise the payment with the PayPal button before placing your order.","Authorise the payment with the PayPal button before placing your order."
+"Billing Address","Billing Address"
+"Calculating shipping…","Calculating shipping…"
+Cancel,Cancel
+"Card number","Card number"
+Checking…,Checking…
+Checkout,Checkout
+City,City
+Close,Close
+Company,Company
+"Complete the billing address before paying.","Complete the billing address before paying."
+"Complete the shipping address before paying.","Complete the shipping address before paying."
+Contact,Contact
+"Continue as guest","Continue as guest"
+Country,Country
+"Coupon Code","Coupon Code"
+"Coupon code applied","Coupon code applied"
+Dismiss,Dismiss
+"Each address line must be shorter than 50 characters for card verification. Please update the address and try again.","Each address line must be shorter than 50 characters for card verification. Please update the address and try again."
+"Email Address","Email Address"
+"Enable Lit Checkout","Enable Lit Checkout"
+"Enter a shipping address to see rates.","Enter a shipping address to see rates."
+"Enter a valid card number.","Enter a valid card number."
+"Enter a valid email address before paying.","Enter a valid email address before paying."
+"Enter a valid expiry date.","Enter a valid expiry date."
+"Enter a valid security code.","Enter a valid security code."
+"Enter your card details to continue.","Enter your card details to continue."
+"Expiry date","Expiry date"
+Fax,Fax
+"First Name","First Name"
+From,From
+General,General
+"Gift message for the whole order","Gift message for the whole order"
+"Gift message for {name}","Gift message for {name}"
+"Have a promo code?","Have a promo code?"
+"Hide gift options","Hide gift options"
+Hyperion,Hyperion
+"Hyperion Checkout","Hyperion Checkout"
+"Hyperion Theme","Hyperion Theme"
+"Hyperion_Checkout Vite manifest not found. Looked at: (a) pub/static/%1 (b) app/%2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`.","Hyperion_Checkout Vite manifest not found. Looked at: (a) pub/static/%1 (b) app/%2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`."
+"Hyperion_Checkout manifest is missing a CSS asset for entry ""%1"".","Hyperion_Checkout manifest is missing a CSS asset for entry ""%1""."
+"Hyperion_Checkout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend.","Hyperion_Checkout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend."
+"Last Name","Last Name"
+"Loading PayPal...","Loading PayPal..."
+"Loading the secure card form...","Loading the secure card form..."
+Loading…,Loading…
+MM/YY,MM/YY
+"Magentofullstackdev_HyperionCheckout Vite manifest not found. Looked at: (a) pub/static/%1 (b) %2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`.","Magentofullstackdev_HyperionCheckout Vite manifest not found. Looked at: (a) pub/static/%1 (b) %2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`."
+"Magentofullstackdev_HyperionCheckout manifest is missing a CSS asset for entry ""%1"".","Magentofullstackdev_HyperionCheckout manifest is missing a CSS asset for entry ""%1""."
+"Magentofullstackdev_HyperionCheckout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend.","Magentofullstackdev_HyperionCheckout manifest is missing the ""%1"" entry. Run `npm run build:checkout` inside /frontend."
+Message,Message
+"Middle Name/Initial","Middle Name/Initial"
+"Minimum order amount is not met.","Minimum order amount is not met."
+"My billing and shipping address are the same","My billing and shipping address are the same"
+"Name Prefix","Name Prefix"
+"Name Suffix","Name Suffix"
+"Not supported by this checkout yet","Not supported by this checkout yet"
+"Order Summary","Order Summary"
+Password,Password
+"Pay with the PayPal button to complete your order.","Pay with the PayPal button to complete your order."
+PayPal,PayPal
+"PayPal account {email}","PayPal account {email}"
+"PayPal could not be loaded. Try again or choose another payment method.","PayPal could not be loaded. Try again or choose another payment method."
+"PayPal payment authorised by {email}. Place your order to complete it.","PayPal payment authorised by {email}. Place your order to complete it."
+"PayPal payment authorised. Place your order to complete it.","PayPal payment authorised. Place your order to complete it."
+Payment,Payment
+"Payment Method","Payment Method"
+"Payment methods","Payment methods"
+"Phone Number","Phone Number"
+"Place Order","Place Order"
+"Please enter a valid email address.","Please enter a valid email address."
+"Please select","Please select"
+"Please select a country.","Please select a country."
+"Please sign in or create an account to continue.","Please sign in or create an account to continue."
+"Processing your order…","Processing your order…"
+"Provided Zip/Postal Code seems to be invalid. Example: {example}.","Provided Zip/Postal Code seems to be invalid. Example: {example}."
+"Purchase Order Number","Purchase Order Number"
+Qty,Qty
+Remove,Remove
+"Save gift message","Save gift message"
+"Save in address book","Save in address book"
+"Save this PayPal account for future purchases","Save this PayPal account for future purchases"
+"Save this card for future purchases","Save this card for future purchases"
+"Security code (CVV)","Security code (CVV)"
+"See our shipping policy","See our shipping policy"
+"Select a payment method before paying.","Select a payment method before paying."
+"Select a region","Select a region"
+"Select a shipping method before paying.","Select a shipping method before paying."
+"Select a shipping method to continue.","Select a shipping method to continue."
+"Select one of your stored payment methods.","Select one of your stored payment methods."
+Shipping,Shipping
+"Shipping Address","Shipping Address"
+"Shipping Method","Shipping Method"
+"Shipping methods","Shipping methods"
+"Shipping policy","Shipping policy"
+"Sign In","Sign In"
+"Sign in to existing account","Sign in to existing account"
+"Sign-in failed. Check your email and password.","Sign-in failed. Check your email and password."
+"Signed in","Signed in"
+"Some card details are not valid. Check the highlighted fields.","Some card details are not valid. Check the highlighted fields."
+"Something went wrong with your PayPal payment. Please try again later.","Something went wrong with your PayPal payment. Please try again later."
+"Something went wrong. Please try again.","Something went wrong. Please try again."
+State/Province,State/Province
+"Street Address","Street Address"
+"Street address line {n}","Street address line {n}"
+"Terms and Conditions","Terms and Conditions"
+"The PayPal payment could not be authorised. Please try again.","The PayPal payment could not be authorised. Please try again."
+"The PayPal payment was cancelled. You can try again or choose another payment method.","The PayPal payment was cancelled. You can try again or choose another payment method."
+"The gift message couldn't be saved. Please try again.","The gift message couldn't be saved. Please try again."
+"The gift message has been removed.","The gift message has been removed."
+"The gift message has been saved.","The gift message has been saved."
+"The payment form is still loading. Please wait a moment and try again.","The payment form is still loading. Please wait a moment and try again."
+"The payment service could not be reached. Check your connection and try again.","The payment service could not be reached. Check your connection and try again."
+"The secure payment form could not be loaded. Try again or choose another payment method.","The secure payment form could not be loaded. Try again or choose another payment method."
+"The security code could not be verified. Check it and try again.","The security code could not be verified. Check it and try again."
+"The selected shipping method is not available for this address.","The selected shipping method is not available for this address."
+"This card is already stored in your account. Pick it from your stored cards or use another one.","This card is already stored in your account. Pick it from your stored cards or use another one."
+"This is a required field.","This is a required field."
+"This payment method ({code}) is not yet supported in the new checkout. Please contact support.","This payment method ({code}) is not yet supported in the new checkout. Please contact support."
+"This promo code is not valid.","This promo code is not valid."
+To,To
+"Try again","Try again"
+"Updating rates…","Updating rates…"
+"Use another PayPal account","Use another PayPal account"
+"VAT Number","VAT Number"
+"We can't estimate the shipping right now. Please try again.","We can't estimate the shipping right now. Please try again."
+"We couldn't initialise the checkout. Please refresh the page.","We couldn't initialise the checkout. Please refresh the page."
+"What is PayPal?","What is PayPal?"
+"When enabled, the /checkout page renders the Hyperion Lit one-step
+                        checkout. When disabled, stock Magento Knockout checkout is served.
+                        Flush cache after changing this setting.","When enabled, the /checkout page renders the Hyperion Lit one-step
+                        checkout. When disabled, stock Magento Knockout checkout is served.
+                        Flush cache after changing this setting."
+"When enabled, the /checkout page renders the Hyperion Lit one-step checkout. When disabled, stock Magento Knockout checkout is served. Flush cache after changing this setting.","When enabled, the /checkout page renders the Hyperion Lit one-step checkout. When disabled, stock Magento Knockout checkout is served. Flush cache after changing this setting."
+"You have an existing account. Sign in or continue as a guest.","You have an existing account. Sign in or continue as a guest."
+"You will be redirected to PayPal to complete your payment.","You will be redirected to PayPal to complete your payment."
+"Your card could not be processed. Check the details or use another card.","Your card could not be processed. Check the details or use another card."
+"Your card could not be verified. Please try again with another form of payment.","Your card could not be verified. Please try again with another form of payment."
+"Your order total changed. Please authorise the payment with PayPal again.","Your order total changed. Please authorise the payment with PayPal again."
+"Your order total is still being calculated. Please wait a moment and try again.","Your order total is still being calculated. Please wait a moment and try again."
+"Your stored payment method could not be used. Please choose another payment method.","Your stored payment method could not be used. Please choose another payment method."
+"Zip/Postal Code","Zip/Postal Code"
+"{title} (Excl. Tax)","{title} (Excl. Tax)"
+"{title} (Incl. Tax)","{title} (Incl. Tax)"
+"{type} cards are not accepted. Please use another card.","{type} cards are not accepted. Please use another card."
+"{type} ending in {last4} (expires {expiry})","{type} ending in {last4} (expires {expiry})"

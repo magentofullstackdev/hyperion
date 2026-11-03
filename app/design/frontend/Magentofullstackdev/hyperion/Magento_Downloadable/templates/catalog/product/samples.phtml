@@ -1,0 +1,51 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion "Trailers" list -- downloadable-product preview files.
+ *
+ * Rendered by Magentofullstackdev\Catalog's PDP template via
+ *   $block->getChildHtml('samples')
+ * on downloadable products (alias wired in Hyperion's
+ * Magento_Downloadable/layout/catalog_product_view_type_downloadable.xml).
+ *
+ * Tailwind semantic tokens only -- no absolute color utilities. Each
+ * sample is a simple download link; the admin opens them in a new tab
+ * when the "Open in new window" downloadable config flag is set.
+ *
+ * @var \Magento\Downloadable\Block\Catalog\Product\Samples $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?php if ($block->hasSamples()): ?>
+    <section class="space-y-2" aria-labelledby="hyperion-downloadable-samples-title">
+
+        <h2 id="hyperion-downloadable-samples-title"
+            class="text-sm font-bold uppercase tracking-wider text-secondary">
+            <?= $escaper->escapeHtml($block->getSamplesTitle()) ?>
+        </h2>
+
+        <ul role="list"
+            class="divide-y divide-subtle border border-subtle rounded-lg overflow-hidden bg-surface">
+            <?php foreach ($block->getSamples() as $sample): ?>
+                <li class="flex">
+                    <a href="<?= $escaper->escapeUrl($block->getSampleUrl($sample)) ?>"
+                       <?= $block->getIsOpenInNewWindow() ? 'target="_blank" rel="noopener"' : '' ?>
+                       class="group flex flex-1 items-center gap-3 px-4 py-3 text-sm text-secondary
+                              hover:bg-primary/5 hover:text-primary transition-colors
+                              focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset">
+                        <svg class="w-4 h-4 shrink-0 text-muted group-hover:text-primary"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                        <span class="flex-1 truncate">
+                            <?= $escaper->escapeHtml($sample->getTitle()) ?>
+                        </span>
+                    </a>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    </section>
+<?php endif; ?>

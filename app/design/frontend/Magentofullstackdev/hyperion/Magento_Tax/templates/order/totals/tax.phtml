@@ -1,0 +1,36 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion tax rows for the order / invoice / credit memo totals list
+ * rendered by Magento_Sales::order/totals.phtml (a <dl>). Kept apart
+ * from Magento_Tax::order/tax.phtml, which the order emails still use
+ * inside their totals table.
+ *
+ * @var \Magento\Tax\Block\Sales\Order\Tax $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magentofullstackdev\HyperionCustomer\ViewModel\Sales\TaxSummary;
+
+$order = $block->getOrder();
+$source = $block->getSource();
+$rates = $block->displayFullSummary()
+    ? $viewModels->require(TaxSummary::class)->getCalculatedTaxes($source)
+    : [];
+?>
+<?php foreach ($rates as $rate): ?>
+    <div class="flex justify-between text-muted">
+        <dt>
+            <?= $escaper->escapeHtml($rate['title']) ?>
+            <?php if ($rate['percent'] !== null): ?>
+                (<?= (float) $rate['percent'] ?>%)
+            <?php endif; ?>
+        </dt>
+        <dd><?= /* @noEscape */ $order->formatPrice($rate['tax_amount']) ?></dd>
+    </div>
+<?php endforeach; ?>
+<div class="flex justify-between text-secondary">
+    <dt><?= $escaper->escapeHtml(__('Tax')) ?></dt>
+    <dd><?= /* @noEscape */ $order->formatPrice($source->getTaxAmount()) ?></dd>
+</div>

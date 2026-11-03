@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        Replace the core "Recently Ordered" sidebar block with a Hyperion
+        subclass that skips the HTTP-context auth gate. Our override
+        template handles the guest-vs-customer branching via the
+        SidebarWidgets view-model, so the block no longer needs to
+        short-circuit in `_toHtml()`.
+    -->
+    <preference for="Magento\Sales\Block\Reorder\Sidebar"
+                type="Magentofullstackdev\HyperionCustomer\Block\Sidebar\Reorder"/>
+</config>

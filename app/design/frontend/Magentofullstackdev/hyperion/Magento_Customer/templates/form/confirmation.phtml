@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Resend the account confirmation email (`customer/account/confirmation`).
+ * The controller posts back to the same URL; `email` and `login_url` are
+ * set on the block by Magento\Customer\Controller\Account\Confirmation.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$loginUrl = (string)($block->getData('login_url') ?: $block->getUrl('customer/account/login'));
+?>
+<div class="max-w-md mx-auto py-8">
+    <div class="bg-surface rounded-2xl border border-subtle shadow-sm p-8">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-secondary tracking-tight">
+                <?= $escaper->escapeHtml(__('Send confirmation link')) ?>
+            </h1>
+            <p class="mt-1 text-sm text-muted">
+                <?= $escaper->escapeHtml(__('Please enter your email below and we will send you the confirmation link.')) ?>
+            </p>
+        </div>
+
+        <form class="space-y-5"
+              action="<?= $escaper->escapeUrl($block->getUrl('customer/account/confirmation')) ?>"
+              method="post"
+              id="form-validate">
+            <?= $block->getBlockHtml('formkey') ?>
+
+            <div>
+                <label for="email_address" class="block text-sm font-medium text-secondary mb-1">
+                    <?= $escaper->escapeHtml(__('Email')) ?>
+                </label>
+                <input type="email"
+                       name="email"
+                       id="email_address"
+                       required
+                       autocomplete="email"
+                       value="<?= $escaper->escapeHtmlAttr((string)$block->getData('email')) ?>"
+                       class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"/>
+            </div>
+
+            <button type="submit"
+                    class="w-full py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Send confirmation link')) ?>
+            </button>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-subtle text-center text-sm text-muted">
+            <a href="<?= $escaper->escapeUrl($loginUrl) ?>"
+               class="font-semibold text-primary hover:text-primary-hover hover:underline">
+                <?= $escaper->escapeHtml(__('Back to Sign In')) ?>
+            </a>
+        </div>
+    </div>
+</div>

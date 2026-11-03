@@ -1,0 +1,128 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<view xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:Config/etc/view.xsd">
+    <media>
+        <images module="Magento_Catalog">
+            <!-- Category page -->
+            <image id="category_page_grid" type="small_image">
+                <width>400</width>
+                <height>400</height>
+            </image>
+            <image id="category_page_list" type="small_image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+
+            <!-- Product detail page -->
+            <image id="product_page_image_large" type="image">
+                <width>1200</width>
+                <height>1800</height>
+            </image>
+            <image id="product_page_image_medium" type="image">
+                <width>800</width>
+                <height>1280</height>
+            </image>
+            <image id="product_page_image_small" type="thumbnail">
+                <width>300</width>
+                <height>300</height>
+            </image>
+            <image id="product_page_main_image" type="image">
+                <width>700</width>
+                <height>700</height>
+            </image>
+            <image id="product_page_main_image_default" type="image">
+                <width>700</width>
+                <height>700</height>
+            </image>
+            <image id="product_page_more_views" type="thumbnail">
+                <width>90</width>
+                <height>90</height>
+            </image>
+
+            <!-- Cart and checkout -->
+            <image id="cart_page_product_thumbnail" type="small_image">
+                <width>110</width>
+                <height>160</height>
+            </image>
+            <image id="cart_cross_sell_products" type="small_image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+            <image id="mini_cart_product_thumbnail" type="thumbnail">
+                <width>156</width>
+                <height>156</height>
+            </image>
+
+            <!-- Product base and generic -->
+            <image id="product_base_image" type="image">
+                <width>265</width>
+                <height>265</height>
+            </image>
+            <image id="product_small_image" type="small_image">
+                <width>135</width>
+                <height>135</height>
+            </image>
+            <image id="product_thumbnail_image" type="thumbnail">
+                <width>75</width>
+                <height>75</height>
+            </image>
+
+            <!-- Swatches -->
+            <image id="product_swatch_image_large" type="image"/>
+            <image id="product_swatch_image_medium" type="image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+            <image id="product_swatch_image_small" type="thumbnail">
+                <width>88</width>
+                <height>110</height>
+            </image>
+
+            <!-- Widgets and sidebar -->
+            <image id="new_products_content_widget_grid" type="small_image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+            <image id="related_products_list" type="small_image">
+                <width>140</width>
+                <height>140</height>
+            </image>
+            <image id="upsell_products_list" type="small_image">
+                <width>140</width>
+                <height>140</height>
+            </image>
+            <image id="wishlist_thumbnail" type="small_image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+            <image id="wishlist_sidebar_block" type="thumbnail">
+                <width>75</width>
+                <height>90</height>
+            </image>
+            <!--
+                Comparison list tile - Magento core used to ship this role
+                by default but newer versions leave it to the theme. Without
+                it `$block->getImage($product, 'product_comparison_list')`
+                returns null and the compare page crashes with an empty
+                image slot.
+            -->
+            <image id="product_comparison_list" type="small_image">
+                <width>200</width>
+                <height>250</height>
+            </image>
+            <!--
+                Search suggestion images: 240x300 serves the desktop cards of
+                the dropdown (four per row, about 190px wide) sharp and the
+                56px thumbnails of the mobile list from the same cached file.
+            -->
+            <image id="search_suggest_thumbnail" type="small_image">
+                <width>240</width>
+                <height>300</height>
+            </image>
+        </images>
+    </media>
+</view>

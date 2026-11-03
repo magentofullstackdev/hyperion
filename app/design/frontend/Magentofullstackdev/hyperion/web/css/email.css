@@ -1,0 +1,48 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion transactional email styles that cannot be inlined (media
+ * queries, link states). Magento puts this file in a <style> tag of the
+ * email head ({{css file="css/email.css"}}); clients that strip <style>
+ * still get the inlined rules from email-inline.css. Copied, unhashed, to
+ * web/css/email.css by the theme build.
+ */
+
+a:hover {
+    color: #1d4ed8;
+}
+
+.button .inner-wrapper a:hover {
+    background-color: #1d4ed8;
+}
+
+@media only screen and (max-width: 680px) {
+    .wrapper-inner {
+        padding: 0 !important;
+    }
+
+    .main {
+        width: 100% !important;
+        border-radius: 0 !important;
+        border-left: 0 !important;
+        border-right: 0 !important;
+    }
+
+    .header,
+    .main-content,
+    .footer {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+
+    .order-details td {
+        display: block !important;
+        width: 100% !important;
+        padding-right: 0 !important;
+    }
+
+    .email-items .item-info {
+        width: 60% !important;
+    }
+}

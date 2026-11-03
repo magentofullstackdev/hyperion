@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Satis build output (see satis.json and .github/workflows/satis.yml)
+.satis/
+
+# Build artifacts (keep web/assets/: those are committed for distribution)
+*.log
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Local environment (never commit registry tokens or assistant settings)
+.env
+.env.local
+.npmrc
+.claude/
+
+# OS
+Thumbs.db
+frontend/packages/*/vite.config.ts.timestamp-*.mjs

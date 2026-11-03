@@ -1,0 +1,90 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Track your order" page (`shipping/tracking/popup`, empty page layout).
+ * One card per tracking number with the carrier details and, when the
+ * carrier reports it, the progress history. The order links open this
+ * page in a new tab (no script-opened window), so Close closes the window
+ * when the browser allows it and otherwise goes back or to the store.
+ *
+ * @var \Magento\Shipping\Block\Tracking\Popup $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+use Magento\Framework\View\Element\Template;
+
+$results = $block->getTrackingInfo();
+$homeUrl = $block->getUrl('');
+?>
+<div class="container mx-auto px-4 py-8 max-w-3xl space-y-6" data-hyperion-tracking>
+    <h1 class="text-2xl font-bold text-secondary tracking-tight"><?= $escaper->escapeHtml(__('Track your order')) ?></h1>
+
+    <?php if (!empty($results)): ?>
+        <?php foreach ($results as $shipId => $result): ?>
+            <section class="space-y-4" <?= $shipId ? 'aria-labelledby="hyperion-tracking-' . $escaper->escapeHtmlAttr((string) $shipId) . '"' : '' ?>>
+                <?php if ($shipId): ?>
+                    <h2 id="hyperion-tracking-<?= $escaper->escapeHtmlAttr((string) $shipId) ?>" class="text-base font-semibold text-secondary">
+                        <?= $escaper->escapeHtml(__('Shipment #')) ?><?= $escaper->escapeHtml((string) $shipId) ?>
+                    </h2>
+                <?php endif; ?>
+                <?php if (!empty($result)): ?>
+                    <?php foreach ($result as $counter => $track): ?>
+                        <?php
+                        $id = $shipId . '.' . $counter;
+                        $block->addChild('shipping.tracking.details.' . $id, Template::class, [
+                            'track' => $track,
+                            'template' => 'Magento_Shipping::tracking/details.phtml',
+                            'storeSupportEmail' => $block->getStoreSupportEmail(),
+                        ]);
+                        ?>
+                        <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+                            <?= /* @noEscape */ $block->getChildHtml('shipping.tracking.details.' . $id) ?>
+                            <?php if (is_object($track) && !empty($track->getProgressdetail())): ?>
+                                <?php $block->addChild('shipping.tracking.progress.' . $id, Template::class, [
+                                    'track' => $track,
+                                    'template' => 'Magento_Shipping::tracking/progress.phtml',
+                                ]); ?>
+                                <?= /* @noEscape */ $block->getChildHtml('shipping.tracking.progress.' . $id) ?>
+                            <?php endif; ?>
+                        </article>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <p class="bg-surface border border-subtle rounded-xl p-5 text-sm text-muted">
+                        <?= $escaper->escapeHtml(__('There is no tracking available for this shipment.')) ?>
+                    </p>
+                <?php endif; ?>
+            </section>
+        <?php endforeach; ?>
+    <?php else: ?>
+        <p class="bg-surface border border-subtle rounded-xl p-5 text-sm text-muted" data-hyperion-tracking-empty>
+            <?= $escaper->escapeHtml(__('There is no tracking available.')) ?>
+        </p>
+    <?php endif; ?>
+
+    <div class="flex justify-end">
+        <button type="button"
+                id="hyperion-tracking-close"
+                data-home-url="<?= $escaper->escapeUrl($homeUrl) ?>"
+                class="px-6 py-2.5 rounded-lg border border-subtle bg-surface text-sm font-medium text-secondary hover:bg-surface-raised focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Close Window')) ?>
+        </button>
+    </div>
+</div>
+<?php
+$script = <<<'JS'
+(function () {
+    var button = document.getElementById('hyperion-tracking-close');
+    if (!button) { return; }
+    button.addEventListener('click', function () {
+        window.close();
+        setTimeout(function () {
+            if (window.history.length > 1) { window.history.back(); }
+            else { window.location.href = button.getAttribute('data-home-url'); }
+        }, 150);
+    });
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

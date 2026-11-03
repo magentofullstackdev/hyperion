@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MIT
+#
+# Publishes the Composer repository (Satis) to GitHub Pages on every release
+# tag. One-time setup in the repository settings: Pages > Source = "GitHub
+# Actions". The repository is then served at
+# https://magentofullstackdev.github.io/hyperion/ (see docs/install.md).
+name: Composer repository
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build with Satis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Build the repository from every release tag
+        run: .github/scripts/build-satis.sh
+      - name: Sanity check
+        run: |
+          test -f .satis/output/packages.json
+          ls -la .satis/output/dist | head -40
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .satis/output
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

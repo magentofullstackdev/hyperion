@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal in the mini-cart drawer, under its checkout button. The
+    fragment is fetched when the drawer opens, so the buttons (and the
+    PayPal SDK) only load for shoppers who open it.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="hyperion.minicart.fragment">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.paypal.minicart.buttons"
+                   as="paypal_buttons"
+                   template="Magento_Paypal::hyperion/buttons.phtml">
+                <arguments>
+                    <argument name="context" xsi:type="string">minicart</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

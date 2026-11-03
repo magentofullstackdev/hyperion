@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<widgets xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Widget:etc/widget.xsd">
+    <widget id="hyperion_megamenu" class="Magentofullstackdev\HyperionMegaMenu\Block\Menu" placeholder_image="Magento_Widget::images/widget.png">
+        <label translate="true">Hyperion Mega Menu</label>
+        <description translate="true">A menu group (vertical list, horizontal list or mega menu) on a page or in a block.</description>
+        <parameters>
+            <parameter name="group_identifier" xsi:type="select" required="true" visible="true"
+                       source_model="Magentofullstackdev\HyperionMegaMenu\Model\Source\Groups">
+                <label translate="true">Menu group</label>
+            </parameter>
+            <parameter name="device" xsi:type="select" visible="true">
+                <label translate="true">Rendering</label>
+                <options>
+                    <option name="desktop" value="desktop" selected="true"><label translate="true">Menu bar with dropdowns</label></option>
+                    <option name="mobile" value="mobile"><label translate="true">Accordion list</label></option>
+                </options>
+            </parameter>
+        </parameters>
+    </widget>
+</widgets>

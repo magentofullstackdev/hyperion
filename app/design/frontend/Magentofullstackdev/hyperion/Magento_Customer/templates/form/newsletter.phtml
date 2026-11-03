@@ -1,0 +1,66 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "Newsletter Subscription" preference card.
+ *
+ * The vendor form renders without Tailwind styling on this theme.
+ * This template wraps the preference in the
+ * standard account-content card and replaces the raw checkbox with
+ * the reusable `hyperion-switch` toggle so the UX matches the rest
+ * of the account area.
+ *
+ * @var \Magento\Customer\Block\Newsletter $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$isSubscribed = (bool) $block->getIsSubscribed();
+$backUrl = $block->getBackUrl();
+?>
+<article class="bg-surface border border-subtle rounded-xl p-6 space-y-6">
+
+    <h2 class="text-lg font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Subscription option')) ?>
+    </h2>
+
+    <?= $block->getChildHtml('form_before') ?>
+
+    <form action="<?= $escaper->escapeUrl($block->getAction()) ?>"
+          method="post"
+          id="form-validate"
+          class="space-y-6">
+        <?= $block->getBlockHtml('formkey') ?>
+
+        <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer select-none">
+            <input type="checkbox"
+                   name="is_subscribed"
+                   id="subscription"
+                   value="1"
+                   class="peer sr-only"
+                   <?= $isSubscribed ? 'checked' : '' ?>>
+            <span class="hyperion-switch" aria-hidden="true">
+                <span class="hyperion-switch__knob"></span>
+            </span>
+            <?= $escaper->escapeHtml(__('General Subscription')) ?>
+        </label>
+
+        <?= $block->getChildHtml('customer.form.newsletter.extra') ?>
+
+        <div class="flex items-center justify-end gap-4 pt-4 border-t border-subtle">
+            <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('Back')) ?>
+            </a>
+            <button type="submit"
+                    class="inline-flex items-center justify-center px-6 py-2.5
+                           rounded-lg font-semibold text-sm
+                           bg-primary text-on-primary shadow-sm
+                           hover:bg-primary-hover hover:shadow-md
+                           focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= $escaper->escapeHtml(__('Save')) ?>
+            </button>
+        </div>
+    </form>
+
+    <?= $block->getChildHtml('customer.form.newsletter.extra2') ?>
+</article>

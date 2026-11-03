@@ -1,0 +1,116 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion contact form. Plain HTML POST, no KO/RequireJS.
+ *
+ * @var \Magento\Contact\Block\ContactForm $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+use Magento\Contact\Block\ContactForm;
+use Magento\Contact\Helper\Data as ContactHelper;
+use Magento\Framework\Escaper;
+
+/** @var ContactForm $block */
+/** @var Escaper $escaper */
+
+// phpcs:disable Magento2.Templates.ThisInTemplate.FoundHelper
+/** @var ContactHelper $contactHelper */
+$contactHelper = $this->helper(ContactHelper::class);
+
+$formKeyViewModel = $block->getData('formKeyViewModel');
+?>
+<div class="max-w-2xl mx-auto py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-secondary tracking-tight">
+            <?= $escaper->escapeHtml(__('Contact Us')) ?>
+        </h1>
+        <p class="mt-2 text-muted">
+            <?= $escaper->escapeHtml(__('Jot us a note and we\'ll get back to you as quickly as possible.')) ?>
+        </p>
+    </div>
+
+    <form class="bg-surface rounded-2xl border border-subtle shadow-sm p-6 space-y-5"
+          action="<?= $escaper->escapeUrl($block->getFormAction()) ?>"
+          method="post"
+          id="contact-form">
+
+        <?php if ($formKeyViewModel): ?>
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKeyViewModel->getFormKey()) ?>"/>
+        <?php else: ?>
+            <?= $block->getBlockHtml('formkey') ?>
+        <?php endif; ?>
+
+        <?php // Honeypot: bots fill this; server ignores submissions where it is non-empty ?>
+        <div class="hidden" aria-hidden="true">
+            <label for="hideit"><?= $escaper->escapeHtml(__('Leave this field empty')) ?></label>
+            <input type="text" name="hideit" id="hideit" value="" tabindex="-1" autocomplete="off"/>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+                <label for="name" class="block text-sm font-medium text-secondary mb-1">
+                    <?= $escaper->escapeHtml(__('Name')) ?>
+                    <span aria-hidden="true" class="text-error">*</span>
+                </label>
+                <input type="text"
+                       name="name"
+                       id="name"
+                       required
+                       autocomplete="name"
+                       value="<?= $escaper->escapeHtmlAttr($contactHelper->getPostValue('name') ?: $contactHelper->getUserName()) ?>"
+                       class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"/>
+            </div>
+
+            <div>
+                <label for="email" class="block text-sm font-medium text-secondary mb-1">
+                    <?= $escaper->escapeHtml(__('Email')) ?>
+                    <span aria-hidden="true" class="text-error">*</span>
+                </label>
+                <input type="email"
+                       name="email"
+                       id="email"
+                       required
+                       autocomplete="email"
+                       value="<?= $escaper->escapeHtmlAttr($contactHelper->getPostValue('email') ?: $contactHelper->getUserEmail()) ?>"
+                       class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"/>
+            </div>
+        </div>
+
+        <div>
+            <label for="telephone" class="block text-sm font-medium text-secondary mb-1">
+                <?= $escaper->escapeHtml(__('Phone Number')) ?>
+            </label>
+            <input type="tel"
+                   name="telephone"
+                   id="telephone"
+                   autocomplete="tel"
+                   value="<?= $escaper->escapeHtmlAttr((string) $contactHelper->getPostValue('telephone')) ?>"
+                   class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"/>
+        </div>
+
+        <div>
+            <label for="comment" class="block text-sm font-medium text-secondary mb-1">
+                <?= $escaper->escapeHtml(__('Comment')) ?>
+                <span aria-hidden="true" class="text-error">*</span>
+            </label>
+            <textarea name="comment"
+                      id="comment"
+                      required
+                      rows="6"
+                      autocomplete="off"
+                      class="w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm resize-y"><?= $escaper->escapeHtml((string) $contactHelper->getPostValue('comment')) ?></textarea>
+        </div>
+
+        <?= $block->getChildHtml('form.additional.info') ?>
+
+        <div class="flex justify-end">
+            <button type="submit"
+                    class="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md text-sm uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Submit')) ?>
+            </button>
+        </div>
+    </form>
+</div>

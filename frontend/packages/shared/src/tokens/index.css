@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * @magentofullstackdev/hyperion-shared -- design-token barrel.
+ *
+ * Imported by both @magentofullstackdev/hyperion-theme (via web/css/source/_theme.css)
+ * and @magentofullstackdev/hyperion-checkout (via src/styles/vars.css). All Hyperion
+ * Composer packages render against the same semantic palette.
+ */
+@import "./colors.css";
+@import "./typography.css";
+@import "./spacing.css";

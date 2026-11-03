@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion customer dashboard info panel.
+ *
+ * Rendered inside `#hyperion-account-content` by the customer_account_index
+ * handle. Shows the two sub-sections (Contact Information + Newsletter)
+ * that Magento's core block composes via named children:
+ *   * `info`    -> Magento\Customer\Block\Account\Dashboard\Info
+ *   * `address` -> Magento\Customer\Block\Account\Dashboard\Address
+ *
+ * The Address Book card is rendered BELOW in a sibling block
+ * (customer_account_dashboard_address), not here, so this template
+ * keeps to account info + newsletter per the reference design.
+ *
+ * @var \Magento\Customer\Block\Account\Dashboard $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<section class="space-y-4" aria-labelledby="hyperion-dashboard-info-heading">
+
+    <h2 id="hyperion-dashboard-info-heading"
+        class="text-xl font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Account Information')) ?>
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <?= $block->getChildHtml('info') ?>
+    </div>
+</section>

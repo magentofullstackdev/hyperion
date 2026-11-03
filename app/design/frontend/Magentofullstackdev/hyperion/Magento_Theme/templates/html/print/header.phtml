@@ -1,0 +1,67 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Document header of the print pages (order, invoice, shipment, refund;
+ * customer and guest): store logo, heading, order number and date. The
+ * heading carries the id the order shell references (`hyperion-account-heading`),
+ * which the account shell does not render on print pages. The order page
+ * heading is "Order # N"; a document page (invoice, shipment, refund) names
+ * the document type and prints "Order # N" as the heading's second line,
+ * because the document numbers are the sections' own headings and N is the
+ * ORDER number ("Invoice # N" read as an invoice number). This
+ * header owns the order date on print pages (`order/view.phtml` skips it
+ * there, `show_order_date` false in the print layouts).
+ *
+ * @var \Magento\Theme\Block\Html\Header\Logo $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$order = null;
+foreach (['sales.order.print', 'sales.order.print.invoice', 'sales.order.print.shipment', 'sales.order.print.creditmemo'] as $name) {
+    $printBlock = $block->getLayout()->getBlock($name);
+    if ($printBlock && method_exists($printBlock, 'getOrder')) {
+        $order = $printBlock->getOrder();
+        break;
+    }
+}
+$document = $block->getLayout()->getBlock('sales.order.print.invoice') ? __('Invoice')
+    : ($block->getLayout()->getBlock('sales.order.print.shipment') ? __('Shipment')
+    : ($block->getLayout()->getBlock('sales.order.print.creditmemo') ? __('Refund') : null));
+$incrementId = $order ? (string) $order->getIncrementId() : '';
+?>
+<header class="container mx-auto px-4 pt-8 pb-6 flex flex-wrap items-center justify-between gap-4" data-hyperion-print-header>
+    <div class="flex items-center gap-4">
+        <?php if ($block->getLogoSrc()): ?>
+            <img src="<?= $escaper->escapeUrl($block->getLogoSrc()) ?>"
+                 alt="<?= $escaper->escapeHtmlAttr($block->getLogoAlt()) ?>"
+                 class="h-10 w-auto"
+                 <?php if ($block->getLogoWidth()): ?>width="<?= (int) $block->getLogoWidth() ?>"<?php endif; ?>
+                 <?php if ($block->getLogoHeight()): ?>height="<?= (int) $block->getLogoHeight() ?>"<?php endif; ?>>
+        <?php else: ?>
+            <span class="text-lg font-bold text-secondary"><?= $escaper->escapeHtml($block->getLogoAlt()) ?></span>
+        <?php endif; ?>
+    </div>
+    <div class="text-right">
+        <h1 id="hyperion-account-heading" class="text-2xl font-bold text-secondary tracking-tight">
+            <?php if ($document !== null): ?>
+                <?= $escaper->escapeHtml($document) ?>
+                <?php if ($incrementId !== ''): ?>
+                    <span class="block text-sm font-normal font-mono text-secondary" data-hyperion-print-order-number>
+                        <?= $escaper->escapeHtml(__('Order # %1', $incrementId)) ?>
+                    </span>
+                <?php endif; ?>
+            <?php else: ?>
+                <?= $escaper->escapeHtml(__('Order')) ?>
+                <?php if ($incrementId !== ''): ?>
+                    <span class="font-mono"># <?= $escaper->escapeHtml($incrementId) ?></span>
+                <?php endif; ?>
+            <?php endif; ?>
+        </h1>
+        <?php if ($order && $order->getCreatedAt()): ?>
+            <p class="text-sm text-muted">
+                <?= $escaper->escapeHtml(__('Order Date: %1', $block->formatDate($order->getCreatedAt(), \IntlDateFormatter::MEDIUM))) ?>
+            </p>
+        <?php endif; ?>
+    </div>
+</header>

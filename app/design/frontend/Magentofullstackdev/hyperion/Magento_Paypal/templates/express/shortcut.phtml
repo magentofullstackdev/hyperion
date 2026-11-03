@@ -1,0 +1,38 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion PayPal shortcut button -- redirect-based Express Checkout.
+ * Mounted on PDP, mini-cart, and cart page.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Paypal\ButtonState|null $paypalButton */
+$paypalButton = $block->getData('paypalButtonViewModel');
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\FormKey|null $formKeyVm */
+$formKeyVm = $block->getData('formKeyViewModel');
+
+if (!$paypalButton || !$paypalButton->isEnabled()) {
+    return;
+}
+
+$context = (string) ($block->getData('paypal_context') ?: 'cart');
+$startUrl = $paypalButton->getStartUrl($context);
+$formKey = $formKeyVm?->getFormKey() ?? $block->getFormKey();
+$wrapperId = 'hyperion-paypal-' . $context;
+?>
+<form method="post"
+      action="<?= $escaper->escapeUrl($startUrl) ?>"
+      id="<?= $escaper->escapeHtmlAttr($wrapperId) ?>"
+      class="hyperion-paypal-shortcut w-full">
+    <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>"/>
+    <button type="submit"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#ffc439] hover:bg-[#f5b820] transition-colors text-[#253b80] font-bold text-sm shadow-sm border border-[#e0a800]"
+            aria-label="<?= $escaper->escapeHtmlAttr(__('Check out with PayPal')) ?>">
+        <span class="inline-flex items-center gap-1">
+            <span class="text-[#253b80] font-extrabold italic">Pay</span><span class="text-[#179bd7] font-extrabold italic">Pal</span>
+        </span>
+        <span class="text-xs font-medium text-[#253b80]/80"><?= $escaper->escapeHtml(__('Checkout')) ?></span>
+    </button>
+</form>

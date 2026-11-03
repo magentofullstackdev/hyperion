@@ -1,0 +1,105 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * @magentofullstackdev/hyperion-shared -- semantic color tokens.
+ *
+ * Single source of truth for the Hyperion suite's palette. Both
+ * @magentofullstackdev/hyperion-theme and @magentofullstackdev/hyperion-checkout import this
+ * file (via `@magentofullstackdev/hyperion-shared/tokens/colors.css`) so a single rebrand
+ * propagates everywhere.
+ *
+ * Values MUST be raw RGB channel triplets as space-separated integers
+ * (e.g. `37 99 235`) -- never hex, never `rgb()` wrappers. This is the
+ * only format that lets Tailwind's `rgb(var(--color-*) / <alpha-value>)`
+ * mapping produce valid CSS for opacity-modifier classes such as
+ * `bg-primary/50`.
+ *
+ * Child themes override these declarations in their own `_theme.css`
+ * (loaded after this file in the cascade) -- see THEMING_GUIDE.md.
+ */
+:root {
+    /* --- Primary brand color -- buttons, links, active states, focus rings --- */
+    --color-primary: 37 99 235; /* #2563eb */
+    --color-primary-hover: 29 78 216; /* #1d4ed8 */
+
+    /* --- Secondary / supporting color --- */
+    --color-secondary: 100 116 139; /* #64748b */
+
+    /* --- Accent / highlight color --- */
+    --color-accent: 245 158 11; /* #f59e0b */
+
+    /* --- Surface backgrounds --- */
+    --color-surface: 255 255 255; /* #ffffff */
+    --color-surface-raised: 249 250 251; /* #f9fafb */
+
+    /* --- Text on colored backgrounds --- */
+    --color-on-primary: 255 255 255; /* #ffffff */
+    --color-on-secondary: 255 255 255; /* #ffffff */
+
+    /* --- Body text variants --- */
+    --color-muted: 107 114 128; /* #6b7280 */
+    --color-subtle: 229 231 235; /* #e5e7eb -- borders and dividers */
+
+    /* --- Semantic state colors --- */
+    --color-error: 220 38 38; /* #dc2626 */
+    --color-on-error: 255 255 255; /* #ffffff */
+    --color-error-strong: 185 28 28; /* #b91c1c, red-700 -- error TEXT on the bg-error/10 tint: 6.47:1 on white, 5.54:1 on the tint (the error red itself measured 4.13:1 there) */
+    --color-success: 21 128 61; /* #15803d, green-700: 5.02:1 on white, 4.57:1 on the success-subtle toast (axe flagged green-600 at 3.3:1) */
+    --color-on-success: 255 255 255; /* #ffffff */
+    --color-success-strong: 22 101 52; /* #166534, green-800 -- success TEXT on the bg-success/10 tint: 7.13:1 on white, 6.23:1 on the tint (green-700 measured 4.38:1 there) */
+    --color-warning: 217 119 6; /* #d97706 -- amber for validation / soft-fail: borders, icons, badges */
+    --color-warning-strong: 180 83 9; /* #b45309, amber-700 -- warning TEXT: 5.02:1 on white, 4.50:1 on the bg-warning/10 tint (amber-600 measured 2.86:1 on the "Only N left" pill, axe serious) */
+    --color-on-warning: 255 255 255; /* #ffffff */
+    --color-info: 37 99 235; /* #2563eb -- same as primary by default */
+    --color-on-info: 255 255 255; /* #ffffff */
+
+    /* --- Pricing tokens --- */
+    /* Color of the active "special" / final price on discounted items.
+       Defaults to the error red so the discount reads immediately; a
+       store can remap to `--color-primary` or a bespoke sale-hot-pink
+       without touching any .phtml. */
+    --color-price-sale: var(--color-error);
+
+    /* --- Extended tokens: secondary surface + text scale + helpers.
+       Each replaces an absolute palette class (banned in the theme) so every
+       color decision still resolves through a custom property. */
+    --color-surface-sunken: 248 250 252; /* #f8fafc -- slate-50, sub-page background blocks */
+    --color-surface-overlay: 241 245 249; /* #f1f5f9 -- modal/scrim backdrop */
+    --color-text-default: 17 24 39; /* #111827 -- primary body copy */
+    --color-text-secondary: 55 65 81; /* #374151 -- supporting copy */
+    --color-text-tertiary: 107 114 128; /* #6b7280 -- captions, muted helpers */
+    --color-border-default: 229 231 235; /* #e5e7eb */
+    --color-divider: 243 244 246; /* #f3f4f6 -- table row separators */
+    --color-error-hover: 220 38 38; /* #dc2626 -- destructive hover */
+    --color-error-active: 185 28 28; /* #b91c1c -- destructive pressed */
+    --color-success-subtle: 220 252 231; /* #dcfce7 -- success toast bg */
+    --color-warning-light: 253 224 71; /* #fde047 -- group-hover star icon */
+    --color-focus-ring: 99 102 241; /* #6366f1 -- focus ring */
+
+    /* --- Inverted surface (dark footer, cookie banner) --- */
+    /* An inverted surface is a dark band (typically the footer) with
+       light text and muted-light secondary text. A child theme can
+       redefine the pair without touching markup. */
+    --color-surface-inverted: 17 24 39; /* #111827 */
+    --color-on-inverted: 229 231 235; /* #e5e7eb */
+    --color-on-inverted-muted: 156 163 175; /* #9ca3af */
+    --color-subtle-inverted: 55 65 81; /* #374151 -- dividers inside dark surfaces */
+
+    /* --- Checkout aliases --- */
+    /* The checkout package reads --checkout-color-* tokens (its
+       Tailwind config in frontend/packages/module-checkout). Alias them
+       to the semantic tokens above so the checkout bundle inherits the store
+       look without a rebuild. Override in a child theme to give the
+       checkout a distinct visual identity from the rest of the store. */
+    --checkout-color-brand: var(--color-secondary);
+    --checkout-color-accent: var(--color-primary);
+    --checkout-color-danger: var(--color-error);
+    --checkout-color-muted: var(--color-muted);
+    --checkout-color-surface: var(--color-surface);
+    --checkout-color-surface-raised: var(--color-surface-raised);
+    --checkout-color-on-brand: var(--color-on-primary);
+    --checkout-color-on-accent: var(--color-on-primary);
+    --checkout-color-on-danger: var(--color-on-error);
+    --checkout-color-subtle: var(--color-subtle);
+}

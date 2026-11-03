@@ -1,0 +1,39 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion product attributes table.
+ *
+ * Values go through Catalog\Helper\Output (ProductView::renderAttributeValue()):
+ * escaped unless the attribute allows HTML on the storefront.
+ *
+ * @var \Magento\Catalog\Block\Product\View\Attributes $block
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$product = $block->getProduct();
+$attributes = $block->getAdditionalData();
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\ProductView $productView */
+$productView = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductView::class);
+?>
+
+<?php if (!empty($attributes)): ?>
+    <table class="w-full text-sm">
+        <tbody class="divide-y divide-divider">
+            <?php foreach ($attributes as $attribute): ?>
+                <tr>
+                    <th class="py-3 pr-6 text-left text-muted font-medium w-1/3">
+                        <?= $escaper->escapeHtml($attribute['label']) ?>
+                    </th>
+                    <td class="py-3 text-secondary">
+                        <?= /* @noEscape */ $productView->renderAttributeValue(
+                            $product,
+                            (string) $attribute['value'],
+                            (string) $attribute['code']
+                        ) ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+<?php endif; ?>

@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Catalog\Model\Product\Option\Type\Date">
+        <plugin name="hyperion_catalog_date_option_iso_input"
+                type="Magentofullstackdev\HyperionCatalog\Plugin\Catalog\Model\Product\Option\Type\DateIsoInputPlugin"/>
+    </type>
+    <!-- Open Graph tags of product pages, appended to the rendered head (see Model\OpenGraph) -->
+    <type name="Magento\Framework\View\Page\Config\Renderer">
+        <plugin name="hyperion_catalog_opengraph_head"
+                type="Magentofullstackdev\HyperionCatalog\Plugin\Framework\View\Page\Config\RendererPlugin"/>
+    </type>
+    <!-- The list block's sort defaults reach the toolbar before any block hands it the collection
+         (the layered navigation renders before the list on Hyperion's listings, see the plugin). -->
+    <type name="Magento\Catalog\Block\Product\ProductList\Toolbar">
+        <plugin name="hyperion_catalog_toolbar_defaults"
+                type="Magentofullstackdev\HyperionCatalog\Plugin\Catalog\Block\Product\ProductList\ToolbarDefaultsPlugin"/>
+    </type>
+    <!-- Anti-Abuse Shield: parameter allowlist, max active filters, robots directive (Model\FilterGuard) -->
+    <type name="Magento\Framework\App\ActionInterface">
+        <plugin name="hyperion_catalog_filter_guard"
+                type="Magentofullstackdev\HyperionCatalog\Plugin\Framework\App\Action\FilterGuardPlugin"
+                sortOrder="8"/>
+    </type>
+    <type name="Magentofullstackdev\HyperionCatalog\Plugin\Framework\App\Action\FilterGuardPlugin">
+        <arguments>
+            <argument name="routes" xsi:type="array">
+                <item name="category_view" xsi:type="string">catalog_category_view</item>
+                <item name="category_filter" xsi:type="string">hyperion_category_filter</item>
+                <item name="search_result" xsi:type="string">catalogsearch_result_index</item>
+                <item name="search_fragment" xsi:type="string">hyperion_catalog_search</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- The layered navigation fragment is rate limited by route (HyperionCore RateLimitPlugin). -->
+    <type name="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\RateLimitPlugin">
+        <arguments>
+            <argument name="routes" xsi:type="array">
+                <item name="hyperion_category_filter" xsi:type="string">category_filter</item>
+                <item name="hyperion_catalog_search" xsi:type="string">search_result</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Model\Htmx\HeaderStatePool">
+        <arguments>
+            <argument name="fragments" xsi:type="array">
+                <item name="compare" xsi:type="array">
+                    <item name="handle" xsi:type="string">hyperion_catalog_compare</item>
+                    <item name="block" xsi:type="string">hyperion.catalog.compare.fragment</item>
+                    <item name="sort_order" xsi:type="number">30</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+</config>

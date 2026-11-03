@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The checkout bundle, its lazy chunks, its CSS and its REST calls are all
+    same origin, which Magento CSP already allows ('self' is on by default
+    for every storefront policy in Magento_Csp etc/config.xml). Add a host
+    here only when a payment renderer talks to a third party.
+-->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xsd">
+    <policies/>
+</csp_whitelist>

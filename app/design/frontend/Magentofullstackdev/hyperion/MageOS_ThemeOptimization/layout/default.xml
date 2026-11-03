@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+
+  Mage-OS 3.x ships MageOS_ThemeOptimization, which adds three blocks to every
+  page for Luma. Hyperion keeps the speculation rules (same-origin prefetch of
+  links, independent of the theme) and drops the other two:
+
+    * view-transitions: the "@view-transition { navigation: auto }" opt-in turns
+      every navigation into a cross-document view transition; Hyperion's pages
+      are composed with HTMX swaps and the transition fails with a page error
+      ("Transition was aborted because of invalid state") on redirected
+      navigations such as the login.
+    * bfcache handler: it rehydrates Luma's customer-data sections and closes
+      Luma's mini-cart (#btn-minicart-close) after a back/forward restore;
+      Hyperion has neither, its header state is one HTMX request.
+
+  This file is only read when the module is installed (Mage-OS); on Magento
+  Open Source it is ignored.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="theme-optimization.view-transitions" remove="true"/>
+        <referenceBlock name="theme-optimization.bfcache.main" remove="true"/>
+    </body>
+</page>

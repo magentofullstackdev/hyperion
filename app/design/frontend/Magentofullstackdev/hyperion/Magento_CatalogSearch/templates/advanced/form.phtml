@@ -1,0 +1,95 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion advanced search form: plain GET form with native browser
+ * validation (number, min, date, maxlength).
+ *
+ * @var \Magento\CatalogSearch\Block\Advanced\Form $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magento\CatalogSearch\Helper\Data $catalogSearchHelper */
+$catalogSearchHelper = $block->getData('catalogSearchHelper');
+$maxQueryLength = (int) $catalogSearchHelper->getMaxQueryLength();
+$inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg focus:ring-2 focus:ring-primary'
+    . ' focus:border-primary outline-none text-sm';
+$selectWrapperClass = '[&_select]:w-full [&_select]:px-4 [&_select]:py-2.5 [&_select]:border'
+    . ' [&_select]:border-subtle [&_select]:rounded-lg [&_select]:text-sm [&_select]:bg-surface';
+?>
+<div class="max-w-2xl mx-auto py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-secondary tracking-tight">
+            <?= $escaper->escapeHtml(__('Advanced Search')) ?>
+        </h1>
+    </div>
+
+    <form action="<?= $escaper->escapeUrl($block->getSearchPostUrl()) ?>" method="get" class="space-y-5">
+        <?php foreach ($block->getSearchableAttributes() as $attribute): ?>
+            <?php
+            $code = $attribute->getAttributeCode();
+            $label = $block->getAttributeLabel($attribute);
+            $type = $block->getAttributeInputType($attribute);
+            ?>
+            <div>
+                <label for="<?= $escaper->escapeHtmlAttr($code) ?>"
+                       class="block text-sm font-medium text-secondary mb-1">
+                    <?= $escaper->escapeHtml(__($label)) ?>
+                </label>
+
+                <?php if ($type === 'number' || $type === 'price' || $type === 'date'): ?>
+                    <?php $isDate = $type === 'date'; ?>
+                    <div class="flex items-center gap-3">
+                        <input type="<?= $isDate ? 'date' : 'number' ?>"
+                               <?php if (!$isDate): ?>step="any"<?php endif; ?>
+                               <?php if ($type === 'price'): ?>min="0"<?php endif; ?>
+                               name="<?= $escaper->escapeHtmlAttr($code) ?>[from]"
+                               id="<?= $escaper->escapeHtmlAttr($code) ?>"
+                               value="<?= $escaper->escapeHtmlAttr($block->getAttributeValue($attribute, 'from')) ?>"
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('%1 from', $label)) ?>"
+                               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"/>
+                        <span class="text-muted" aria-hidden="true">-</span>
+                        <input type="<?= $isDate ? 'date' : 'number' ?>"
+                               <?php if (!$isDate): ?>step="any"<?php endif; ?>
+                               <?php if ($type === 'price'): ?>min="0"<?php endif; ?>
+                               name="<?= $escaper->escapeHtmlAttr($code) ?>[to]"
+                               id="<?= $escaper->escapeHtmlAttr($code) ?>_to"
+                               value="<?= $escaper->escapeHtmlAttr($block->getAttributeValue($attribute, 'to')) ?>"
+                               aria-label="<?= $escaper->escapeHtmlAttr(__('%1 to', $label)) ?>"
+                               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"/>
+                        <?php if ($type === 'price'): ?>
+                            <span class="text-sm text-muted">
+                                <?= $escaper->escapeHtml($block->getCurrency($attribute)) ?>
+                            </span>
+                            <input type="hidden"
+                                   name="<?= $escaper->escapeHtmlAttr($code) ?>[currency]"
+                                   value="<?= $escaper->escapeHtmlAttr($block->getCurrency($attribute)) ?>"/>
+                        <?php endif; ?>
+                    </div>
+                <?php elseif ($type === 'select'): ?>
+                    <div class="<?= $escaper->escapeHtmlAttr($selectWrapperClass) ?>">
+                        <?= /* @noEscape */ $block->getAttributeSelectElement($attribute) ?>
+                    </div>
+                <?php elseif ($type === 'yesno'): ?>
+                    <div class="<?= $escaper->escapeHtmlAttr($selectWrapperClass) ?>">
+                        <?= /* @noEscape */ $block->getAttributeYesNoElement($attribute) ?>
+                    </div>
+                <?php else: ?>
+                    <input type="text"
+                           name="<?= $escaper->escapeHtmlAttr($code) ?>"
+                           id="<?= $escaper->escapeHtmlAttr($code) ?>"
+                           value="<?= $escaper->escapeHtmlAttr($block->getAttributeValue($attribute)) ?>"
+                           maxlength="<?= $escaper->escapeHtmlAttr($maxQueryLength) ?>"
+                           class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"/>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+
+        <div class="pt-2">
+            <button type="submit"
+                    class="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover
+                           transition-colors shadow-md text-sm uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Search')) ?>
+            </button>
+        </div>
+    </form>
+</div>

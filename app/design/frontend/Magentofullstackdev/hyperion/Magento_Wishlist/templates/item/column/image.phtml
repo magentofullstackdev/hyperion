@@ -1,0 +1,28 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card image (full-bleed top of the card).
+ *
+ * Reads URL and label from the `wishlist_thumbnail` image block instead of
+ * printing it: the core image templates rely on Luma CSS.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Image $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = $block->getItem();
+$productName = (string) $item->getProduct()->getName();
+$image = $block->getImage($block->getProductForThumbnail($item), 'wishlist_thumbnail');
+?>
+<a href="<?= $escaper->escapeUrl($block->getProductUrl($item)) ?>"
+   class="block aspect-square overflow-hidden bg-surface-raised"
+   tabindex="-1">
+    <img src="<?= $escaper->escapeUrl($image->getImageUrl()) ?>"
+         alt="<?= $escaper->escapeHtmlAttr($image->getLabel() ?: $productName) ?>"
+         width="<?= (int) $image->getWidth() ?>"
+         height="<?= (int) $image->getHeight() ?>"
+         class="w-full h-full object-cover"
+         loading="lazy"
+         decoding="async">
+</a>

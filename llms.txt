@@ -1,0 +1,39 @@
+# Hyperion
+
+> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.1 (beta). Supports Magento 2.4.7 to 2.4.9 and Mage-OS, PHP 8.3 to 8.5.
+
+Website: https://hyperionfront.dev
+Live demo: https://demo.hyperionfront.dev
+Repository: https://github.com/magentofullstackdev/hyperion
+Composer repository: https://magentofullstackdev.github.io/hyperion/
+npm packages: @magentofullstackdev/hyperion-shared, @magentofullstackdev/hyperion-theme, @magentofullstackdev/hyperion-checkout
+
+## Start here
+
+- [README](README.md): what you get, requirements, quick install, status, limitations in short
+- [Install](docs/install.md): Composer repository, minimum-stability beta, the modules and the theme, image cache commands, the checkout flag
+- [Configuration](docs/configuration.md): every Hyperion setting in the admin, languages, images, search, mega menu
+- [Known limitations](docs/known-limitations.md): what the beta does not cover
+- [Compatibility](docs/compatibility.md): tested platforms, PHP versions, test counts
+- [CHANGELOG](CHANGELOG.md): releases
+
+## Build on it
+
+- [Child themes](docs/child-themes.md): the `hyperion create Vendor/Theme` CLI, tokens, Tailwind preset, components
+- [Checkout and payment renderers](docs/checkout.md): the Lit checkout, its REST client, renderers, translations
+- [PageBuilder](docs/pagebuilder.md): how PageBuilder content renders without RequireJS
+- [Varnish and caching](docs/varnish.md): the VCL, ESI, what is cached, invalidation
+- [Architecture](ARCHITECTURE.md): the request path, the header state request, HTMX actions, listings, assets, extension points
+
+## Contribute
+
+- [Contributing](CONTRIBUTING.md): ground rules, development setup, reporting bugs
+- [Development](docs/development.md): the pnpm workspace, quality gates, the end to end suite, CI, release procedure
+- [CLAUDE.md](CLAUDE.md) and [AGENTS.md](AGENTS.md): guidance for AI coding assistants
+- [Security policy](SECURITY.md)
+
+## Packages
+
+- frontend/packages/shared/README.md: tokens, Tailwind preset, HyperionLightElement, sanitizer
+- frontend/packages/theme-default/README.md: theme components, entry, the child theme CLI
+- frontend/packages/module-checkout/README.md: the checkout application sources

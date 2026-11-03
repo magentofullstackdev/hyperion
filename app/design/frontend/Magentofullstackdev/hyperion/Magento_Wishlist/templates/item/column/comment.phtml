@@ -1,0 +1,25 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: comment, saved by "Update Wish List".
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Comment $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = $block->getItem();
+$itemId = (int) $item->getWishlistItemId();
+?>
+<label class="block text-xs font-medium text-muted" for="product-item-comment-<?= (int) $itemId ?>">
+    <span class="block mb-1"><?= $escaper->escapeHtml(__('Comment')) ?></span>
+    <textarea name="description[<?= (int) $itemId ?>]"
+              id="product-item-comment-<?= (int) $itemId ?>"
+              rows="2"
+              maxlength="255"
+              class="w-full px-3 py-2 text-sm rounded-md border border-subtle
+                     bg-surface text-secondary placeholder:text-muted
+                     focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+              placeholder="<?= $escaper->escapeHtmlAttr(__('Comment')) ?>"
+        ><?= $escaper->escapeHtml((string) $item->getDescription()) ?></textarea>
+</label>

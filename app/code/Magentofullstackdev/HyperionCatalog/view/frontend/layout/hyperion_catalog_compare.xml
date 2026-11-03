@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the compare counter header fragment.
+
+    Rendered by /hyperion/header/state (HeaderStatePool, registered in
+    etc/frontend/di.xml) and re-rendered out of band by the compare
+    HTMX action plugins; block "hyperion.catalog.compare.fragment".
+
+    cacheable="false" is mandatory - compare list membership is session-specific
+    and must not be served from the full-page cache.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCatalog\Block\Compare\Fragment"
+               name="hyperion.catalog.compare.fragment"
+               template="Magentofullstackdev_HyperionCatalog::compare/fragment.phtml"
+               cacheable="false">
+            <arguments>
+                <argument name="compare_data_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\CompareData</argument>
+            </arguments>
+        </block>
+    </body>
+</page>

@@ -1,0 +1,18 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion account shell -- closing chrome.
+ *
+ * Pairs with shell-open.phtml. Every block that lands in the `content`
+ * container renders inside the grid's second column (the
+ * `#hyperion-account-content` region opened by the content wrapper
+ * below). This template closes that region + the grid + the shell
+ * section once every account page block has flushed.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ */
+?>
+        </section><?php /* end #hyperion-account-content */ ?>
+    </div><?php /* end .grid */ ?>
+</section><?php /* end .container data-hyperion-account-shell */ ?>

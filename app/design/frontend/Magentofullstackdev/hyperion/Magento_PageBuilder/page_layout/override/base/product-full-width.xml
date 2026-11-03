@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PageBuilder "Product - Full Width" page layout, Hyperion version.
+
+    This REPLACES the core file (override/base) instead of extending it: core
+    rebuilds the Luma product page here (it moves `product.info.details`,
+    `product.info.description` and `reviews.tab` into new wrappers under
+    `page.wrapper`). Hyperion renders the product page from one block,
+    `hyperion.product.view`, so those moves only produced a second, unstyled
+    copy of the description and of the reviews below the page.
+
+    What the layout means is kept: the description, and every product
+    attribute edited with PageBuilder, span the full page width so their rows
+    size themselves. Magento_Catalog::product/view.phtml reads the page layout
+    and renders those sections outside the site container; the attribute
+    blocks come from Magento_PageBuilder/layout/catalog_product_view.xml.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="1column"/>
+    <referenceContainer name="main.content" htmlTag="main" htmlClass="page-main-full-width"/>
+    <referenceContainer name="columns" htmlClass="columns flex flex-col w-full flex-grow"/>
+</layout>

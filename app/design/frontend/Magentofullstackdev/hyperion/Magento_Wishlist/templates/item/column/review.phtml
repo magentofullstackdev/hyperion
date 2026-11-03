@@ -1,0 +1,12 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: short rating summary.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?= /* @noEscape */ $block->getReviewsSummaryHtml($block->getItem()->getProduct(), 'short') ?>

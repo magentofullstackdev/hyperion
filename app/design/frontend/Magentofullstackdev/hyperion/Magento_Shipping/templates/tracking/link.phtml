@@ -1,0 +1,14 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion tracking link: opens the tracking page in a new tab.
+ *
+ * @var \Magento\Shipping\Block\Tracking\Link $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<a href="<?= $escaper->escapeUrl($block->getWindowUrl($block->getOrder())) ?>" target="_blank" rel="noopener"
+   class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+    <?= $escaper->escapeHtml($block->getLabel()) ?>
+</a>

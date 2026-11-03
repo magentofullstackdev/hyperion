@@ -1,0 +1,8 @@
+/* Hyperion: replaces the Luma sample data stylesheet (Magento_ThemeSampleData / Magento_CmsSampleData fixtures/styles.css).
+ * The sample data links {{MEDIA_URL}}styles.css from the design configuration (design/head/includes) and the file carries
+ * Luma's layout for the sample CMS content: floats on the privacy policy page and the contact page, promo block
+ * geometry, table and heading styles. The Hyperion theme styles the same content from its own build (_widgets.css:
+ * promo blocks, the collapsible navigation, the privacy policy columns, content headings, the categories menu), so
+ * every Luma rule here was either a duplicate or a conflict. Magentofullstackdev_HyperionSampleData writes this file
+ * over pub/media/styles.css at setup:upgrade (Setup/RecurringData, Model/LumaStylesheetReplacer) while the Luma file
+ * is in place; stores without the sample data are not touched. */

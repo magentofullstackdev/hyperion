@@ -1,0 +1,118 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion review detail page of the customer account: product card with
+ * the average rating, then the customer's own rating votes, title, text
+ * and submission date.
+ *
+ * @var \Magento\Review\Block\Customer\View $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+use Magento\Catalog\Block\Product\ReviewRendererInterface;
+
+$product = $block->getProductData();
+if (!$product->getId()) {
+    return;
+}
+
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer $imageViewModel */
+$imageViewModel = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer::class);
+
+$review = $block->getReviewData();
+$ratings = $block->getRating();
+$hasRatings = $ratings && $ratings->getSize();
+$productUrl = $product->getProductUrl();
+$imageUrl = $imageViewModel->getUrl($product, 'product_small_image');
+$steps = 5;
+
+$starFilled = '<svg class="w-4 h-4 text-accent" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>';
+$starEmpty = '<svg class="w-4 h-4 text-muted" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>';
+?>
+<section class="space-y-4" aria-labelledby="hyperion-review-heading">
+
+    <h2 id="hyperion-review-heading" class="text-xl font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Review Details')) ?>
+    </h2>
+
+    <article class="bg-surface border border-subtle rounded-xl p-5 flex items-start gap-4">
+        <a href="<?= $escaper->escapeUrl($productUrl) ?>"
+           class="block w-24 h-24 shrink-0 overflow-hidden rounded-lg bg-surface-raised"
+           tabindex="-1"
+           aria-hidden="true">
+            <img src="<?= $escaper->escapeUrl($imageUrl) ?>"
+                 alt=""
+                 loading="lazy"
+                 width="135"
+                 height="135"
+                 class="w-full h-full object-cover"/>
+        </a>
+        <div class="min-w-0 space-y-2">
+            <h3 class="text-sm font-semibold text-secondary">
+                <a href="<?= $escaper->escapeUrl($productUrl) ?>"
+                   class="hover:text-primary transition-colors">
+                    <?= $escaper->escapeHtml($product->getName()) ?>
+                </a>
+            </h3>
+            <?php if ($hasRatings): ?>
+                <p class="text-xs uppercase tracking-wider text-muted font-semibold">
+                    <?= $escaper->escapeHtml(__('Average Customer Rating:')) ?>
+                </p>
+                <?= $block->getReviewsSummaryHtml($product, ReviewRendererInterface::SHORT_VIEW) ?>
+            <?php endif; ?>
+        </div>
+    </article>
+
+    <article class="bg-surface border border-subtle rounded-xl p-5 space-y-3">
+        <?php if ($hasRatings): ?>
+            <h3 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Your Review')) ?>
+            </h3>
+            <div class="space-y-1">
+                <?php foreach ($ratings as $rating): ?>
+                    <?php if ($rating->getPercent()): ?>
+                        <?php
+                            $filled = (int) floor((float) $rating->getPercent() / 100 * $steps);
+                            $empty = $steps - $filled;
+                        ?>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-muted w-16">
+                                <?= $escaper->escapeHtml($rating->getRatingCode()) ?>
+                            </span>
+                            <div class="flex items-center gap-0.5"
+                                 role="img"
+                                 aria-label="<?= $escaper->escapeHtmlAttr(__('%1 out of %2 stars', $filled, $steps)) ?>">
+                                <?php for ($i = 0; $i < $filled; $i++): ?>
+                                    <?= /* @noEscape */ $starFilled ?>
+                                <?php endfor; ?>
+                                <?php for ($i = 0; $i < $empty; $i++): ?>
+                                    <?= /* @noEscape */ $starEmpty ?>
+                                <?php endfor; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <p class="font-semibold text-secondary">
+            <?= $escaper->escapeHtml($review->getTitle()) ?>
+        </p>
+        <div class="text-sm text-secondary leading-relaxed">
+            <?= /* @noEscape */ nl2br($escaper->escapeHtml((string) $review->getDetail())) ?>
+        </div>
+        <p class="text-sm text-muted">
+            <?= $escaper->escapeHtml(__('Submitted on %1', $block->dateFormat($review->getCreatedAt()))) ?>
+        </p>
+    </article>
+
+    <div class="flex items-center justify-end pt-4 border-t border-subtle">
+        <a href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>"
+           class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+            <?= $escaper->escapeHtml(__('Back to My Reviews')) ?>
+        </a>
+    </div>
+</section>

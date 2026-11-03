@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        Post-process PageBuilder's filtered HTML and swap the content types the
+        pool knows (slider, accordion, map) for Hyperion elements. Frontend area
+        only: adminhtml previews, cron and web API never render the theme.
+        sortOrder 1000 keeps it after Magento_PageBuilder's own plugins.
+        The plugin also checks the active theme at runtime (see enabledThemes):
+        a storefront on Luma or any other theme keeps PageBuilder's markup.
+    -->
+    <type name="Magento\Framework\Filter\Template">
+        <plugin name="hyperion_pagebuilder_renderer_pool"
+                type="Magentofullstackdev\HyperionCms\PageBuilder\Filter\TemplateFilterPlugin"
+                sortOrder="1000"/>
+    </type>
+
+    <!-- Themes whose rendering the plugin may rewrite; child themes of a listed theme qualify too. -->
+    <type name="Magentofullstackdev\HyperionCms\PageBuilder\Filter\TemplateFilterPlugin">
+        <arguments>
+            <argument name="enabledThemes" xsi:type="array">
+                <item name="hyperion" xsi:type="string">Magentofullstackdev/hyperion</item>
+            </argument>
+        </arguments>
+    </type>
+
+</config>

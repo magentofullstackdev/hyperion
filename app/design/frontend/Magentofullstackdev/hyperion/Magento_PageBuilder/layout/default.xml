@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+/**
+ * Hyperion PageBuilder layout override.
+ *
+ * Removes the PageBuilder widget initializer block that bootstraps Slick JS
+ * and other jQuery-dependent widgets. The Hyperion theme replaces the Slick
+ * slider with <hyperion-slider> (Phase 8). Other PageBuilder content types
+ * continue to render their server-produced HTML without the widget JS.
+ *
+ * Only the widget initializer is removed - GoogleMapsApi is retained because
+ * it injects the Maps API key needed for Map content types.
+ */
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="pagebuilder.widget.initializer" remove="true"/>
+    </body>
+</page>

@@ -1,0 +1,55 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Update Wish List" banner of the wish list item configure page.
+ *
+ * The button belongs to the product form through the `form` attribute, so
+ * the chosen options and quantity are posted to
+ * `wishlist/index/updateItemOptions/id/<item>`. With HTMX the button sends
+ * that POST itself (`hx-include` of the product form), follows the native
+ * redirect to the wish list and swaps the whole page wrapper (header,
+ * breadcrumbs, content) like a boosted navigation; without JavaScript
+ * `formaction` submits the form natively.
+ *
+ * @var \Magento\Wishlist\Block\Item\Configure $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$itemId = (int) $block->getRequest()->getParam('id');
+if (!$itemId) {
+    return;
+}
+$updateUrl = $block->getUrl('wishlist/index/updateItemOptions', ['id' => $itemId]);
+$wishlistUrl = $block->getUrl('wishlist');
+?>
+<div class="container mx-auto px-4 pt-4" data-hyperion-wishlist-configure>
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3
+                bg-surface-raised border border-subtle rounded-xl">
+        <p class="text-sm text-secondary">
+            <?= $escaper->escapeHtml(__('You are editing an item of your wish list.')) ?>
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="<?= $escaper->escapeUrl($wishlistUrl) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('Back')) ?>
+            </a>
+            <button type="submit"
+                    form="product_addtocart_form"
+                    formaction="<?= $escaper->escapeUrl($updateUrl) ?>"
+                    formmethod="post"
+                    hx-post="<?= $escaper->escapeUrl($updateUrl) ?>"
+                    hx-include="#product_addtocart_form"
+                    hx-encoding="multipart/form-data"
+                    hx-target=".page-wrapper"
+                    hx-select=".page-wrapper"
+                    hx-swap="outerHTML show:window:top"
+                    hx-push-url="<?= $escaper->escapeUrl($wishlistUrl) ?>"
+                    class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold
+                           bg-primary text-on-primary hover:bg-primary-hover hover:shadow-md transition-all
+                           focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= $escaper->escapeHtml(__('Update Wish List')) ?>
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,218 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion "Account Information" edit form.
+ *
+ * Renders:
+ *   * Name (prefix / middle name / suffix per store configuration), date of
+ *     birth, tax / VAT number and gender through the core widget blocks
+ *   * "Change Email" switch: reveals Email + Current Password
+ *   * "Change Password" switch: reveals Current + New + Confirm
+ *   * fieldset_edit_info_additional (remote shopping assistance opt-in)
+ *   * form_additional_info (reCAPTCHA and anything else modules add)
+ *   * Save + Go back action row
+ *
+ * Submits via standard form POST to `customer/account/editPost`; the result
+ * comes back as a session message. There is a single `current_password`
+ * field shared by both switches, as in core. Without JavaScript both
+ * sections stay hidden and the rest of the form still saves.
+ *
+ * @var \Magento\Customer\Block\Form\Edit $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+
+use Magento\Customer\Block\Widget\Dob;
+use Magento\Customer\Block\Widget\Gender;
+use Magento\Customer\Block\Widget\Name;
+use Magento\Customer\Block\Widget\Taxvat;
+use Magento\Framework\View\Element\Template;
+
+$customer = $block->getCustomer();
+$changePasswordChecked = (bool) $block->getChangePassword();
+$layout = $block->getLayout();
+$dob = $layout->createBlock(Dob::class);
+$taxvat = $layout->createBlock(Taxvat::class);
+$gender = $layout->createBlock(Gender::class);
+
+$inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg bg-surface text-sm '
+            . 'text-secondary placeholder:text-muted '
+            . 'focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+
+$labelClass = 'block text-sm font-medium text-secondary mb-1';
+
+$required = '<span class="text-error" aria-hidden="true">*</span>';
+?>
+<article class="bg-surface border border-subtle rounded-xl p-6 space-y-6">
+
+    <h2 class="text-lg font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Account Information')) ?>
+    </h2>
+
+    <form action="<?= $escaper->escapeUrl($block->getUrl('customer/account/editPost')) ?>"
+          method="post"
+          enctype="multipart/form-data"
+          autocomplete="off"
+          id="form-validate"
+          class="space-y-6"
+          data-hyperion-account-edit>
+
+        <?= $block->getBlockHtml('formkey') ?>
+
+        <?= $layout->createBlock(Name::class)->setObject($customer)->toHtml() ?>
+
+        <?php if ($dob->isEnabled() || $taxvat->isEnabled() || $gender->isEnabled()): ?>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <?php if ($dob->isEnabled()): ?>
+                    <?= $dob->setDate($customer->getDob())->toHtml() ?>
+                <?php endif; ?>
+                <?php if ($taxvat->isEnabled()): ?>
+                    <?= $taxvat->setTaxvat($customer->getTaxvat())->toHtml() ?>
+                <?php endif; ?>
+                <?php if ($gender->isEnabled()): ?>
+                    <?= $gender->setGender($customer->getGender())->toHtml() ?>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="flex flex-col gap-3">
+            <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer select-none">
+                <input type="checkbox"
+                       name="change_email"
+                       value="1"
+                       class="peer sr-only"
+                       data-hyperion-toggle="change-email">
+                <span class="hyperion-switch" aria-hidden="true">
+                    <span class="hyperion-switch__knob"></span>
+                </span>
+                <?= $escaper->escapeHtml(__('Change Email')) ?>
+            </label>
+
+            <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer select-none">
+                <input type="checkbox"
+                       name="change_password"
+                       value="1"
+                       <?= $changePasswordChecked ? 'checked' : '' ?>
+                       class="peer sr-only"
+                       data-hyperion-toggle="change-password">
+                <span class="hyperion-switch" aria-hidden="true">
+                    <span class="hyperion-switch__knob"></span>
+                </span>
+                <?= $escaper->escapeHtml(__('Change Password')) ?>
+            </label>
+
+            <?= $block->getChildHtml('fieldset_edit_info_additional') ?>
+        </div>
+
+        <div data-hyperion-toggle-section="change-email" hidden>
+            <label for="email" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                <?= $escaper->escapeHtml(__('Email')) ?> <?= /* @noEscape */ $required ?>
+            </label>
+            <input type="email"
+                   id="email"
+                   name="email"
+                   value="<?= $escaper->escapeHtmlAttr((string) $customer->getEmail()) ?>"
+                   autocomplete="email"
+                   class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+        </div>
+
+        <div data-hyperion-toggle-section="change-email change-password"
+             <?= $changePasswordChecked ? '' : 'hidden' ?>>
+            <label for="current-password" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                <?= $escaper->escapeHtml(__('Current Password')) ?> <?= /* @noEscape */ $required ?>
+            </label>
+            <?= $layout->createBlock(Template::class)
+                ->setTemplate('Magento_Customer::widget/password.phtml')
+                ->setData([
+                    'field_id' => 'current-password',
+                    'field_name' => 'current_password',
+                    'autocomplete' => 'current-password',
+                ])
+                ->toHtml() ?>
+        </div>
+
+        <div data-hyperion-toggle-section="change-password"
+             <?= $changePasswordChecked ? '' : 'hidden' ?>
+             class="space-y-6">
+            <div>
+                <label for="password" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml(__('New Password')) ?> <?= /* @noEscape */ $required ?>
+                </label>
+                <?= $layout->createBlock(Template::class)
+                    ->setTemplate('Magento_Customer::widget/password.phtml')
+                    ->setData([
+                        'field_id' => 'password',
+                        'field_name' => 'password',
+                        'autocomplete' => 'new-password',
+                        'minlength' => (int) $block->getMinimumPasswordLength(),
+                    ])
+                    ->toHtml() ?>
+            </div>
+            <div>
+                <label for="password-confirmation" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml(__('Confirm New Password')) ?> <?= /* @noEscape */ $required ?>
+                </label>
+                <?= $layout->createBlock(Template::class)
+                    ->setTemplate('Magento_Customer::widget/password.phtml')
+                    ->setData([
+                        'field_id' => 'password-confirmation',
+                        'field_name' => 'password_confirmation',
+                        'autocomplete' => 'new-password',
+                    ])
+                    ->toHtml() ?>
+            </div>
+        </div>
+
+        <?= $block->getChildHtml('form_additional_info') ?>
+
+        <div class="flex items-center justify-end gap-4 pt-4 border-t border-subtle">
+            <a href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('Go back')) ?>
+            </a>
+            <button type="submit"
+                    class="inline-flex items-center justify-center px-6 py-2.5
+                           rounded-lg font-semibold text-sm
+                           bg-primary text-on-primary shadow-sm
+                           hover:bg-primary-hover hover:shadow-md
+                           focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= $escaper->escapeHtml(__('Save')) ?>
+            </button>
+        </div>
+    </form>
+</article>
+<?php
+$script = <<<'JS'
+(function () {
+    var form = document.querySelector('[data-hyperion-account-edit]');
+    if (!form) { return; }
+    var toggles = form.querySelectorAll('[data-hyperion-toggle]');
+
+    function sync() {
+        var active = [];
+        toggles.forEach(function (toggle) {
+            if (toggle.checked) { active.push(toggle.getAttribute('data-hyperion-toggle')); }
+        });
+        form.querySelectorAll('[data-hyperion-toggle-section]').forEach(function (section) {
+            var open = section.getAttribute('data-hyperion-toggle-section').split(' ').some(function (key) {
+                return active.indexOf(key) !== -1;
+            });
+            section.hidden = !open;
+            section.querySelectorAll('input').forEach(function (input) {
+                input.required = open;
+                if (!open && input.type !== 'email') { input.value = ''; }
+            });
+        });
+    }
+
+    toggles.forEach(function (toggle) { toggle.addEventListener('change', sync); });
+    sync();
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>
+<?= $layout->createBlock(Template::class)
+    ->setTemplate('Magento_Customer::widget/password-toggle-js.phtml')
+    ->toHtml() ?>

@@ -1,0 +1,59 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Recently Viewed / Recently Compared Products widgets.
+ *
+ * Core's templates render a Knockout UI component fed by its RequireJS
+ * localStorage trackers; Hyperion keeps the history in localStorage too
+ * (`hyperion_recently_viewed` / `hyperion_recently_compared`, written by
+ * lib/product-history.js from the `data-hyperion-product-meta` records of
+ * product pages and tiles) and `<hyperion-recently-viewed>` renders the
+ * cards from it, so the widget output is the same for every visitor and
+ * cache-safe. The six core template paths delegate here with
+ * `hyperion_history_kind` (viewed | compared) and `hyperion_history_mode`
+ * (grid | list | sidebar) set on the block; the widget parameters
+ * `page_size`, `show_attributes` and `show_buttons` are honoured.
+ *
+ * @var \Magento\Catalog\Block\Widget\RecentlyViewed|\Magento\Catalog\Block\Widget\RecentlyCompared $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$kind = $block->getData('hyperion_history_kind') === 'compared' ? 'compared' : 'viewed';
+$mode = in_array($block->getData('hyperion_history_mode'), ['list', 'sidebar'], true)
+    ? $block->getData('hyperion_history_mode')
+    : 'grid';
+$toList = static function ($value): string {
+    if (is_array($value)) {
+        return implode(',', array_map('strval', $value));
+    }
+    return trim((string) $value);
+};
+$limit = max(1, (int) $block->getData('page_size') ?: 5);
+$attributes = $toList($block->getData('show_attributes')) ?: 'name,image,price';
+$buttons = $toList($block->getData('show_buttons'));
+$summaryVm = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary::class);
+$listVm = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductList::class);
+$heading = $kind === 'compared' ? __('Recently Compared Products') : __('Recently Viewed Products');
+?>
+<hyperion-recently-viewed class="block"
+                          kind="<?= $escaper->escapeHtmlAttr($kind) ?>"
+                          mode="<?= $escaper->escapeHtmlAttr($mode) ?>"
+                          limit="<?= (int) $limit ?>"
+                          scope="<?= $escaper->escapeHtmlAttr($summaryVm->getScope()) ?>"
+                          heading="<?= $escaper->escapeHtmlAttr($heading) ?>"
+                          show-attributes="<?= $escaper->escapeHtmlAttr($attributes) ?>"
+                          show-buttons="<?= $escaper->escapeHtmlAttr($buttons) ?>"
+                          cart-url="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/add')) ?>"
+                          wishlist-url="<?= $escaper->escapeUrl($listVm->getAddToWishlistUrl()) ?>"
+                          compare-url="<?= $escaper->escapeUrl($listVm->getAddToCompareUrl()) ?>"
+                          <?= $listVm->canAddToCartFromListing() ? 'can-cart' : '' ?>
+                          <?= $listVm->isWishlistEnabled() ? 'wishlist-enabled' : '' ?>
+                          <?= $listVm->isCompareEnabled() ? 'compare-enabled' : '' ?>
+                          cart-label="<?= $escaper->escapeHtmlAttr(__('Add to Cart')) ?>"
+                          options-label="<?= $escaper->escapeHtmlAttr(__('Select Options')) ?>"
+                          wishlist-label="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>"
+                          compare-label="<?= $escaper->escapeHtmlAttr(__('Add to Compare')) ?>"
+                          more-label="<?= $escaper->escapeHtmlAttr(__('Learn More')) ?>"
+                          hidden></hyperion-recently-viewed>

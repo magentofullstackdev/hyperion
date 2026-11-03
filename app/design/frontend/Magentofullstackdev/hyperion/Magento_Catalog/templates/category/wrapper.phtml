@@ -1,0 +1,65 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion category wrapper -- adapts grid layout to the category page_layout.
+ * 1column: horizontal layered-nav + full-width products.
+ * 2columns-left / 2columns-right / 3columns: vertical sidebar accordions.
+ *
+ * @var \Magentofullstackdev\HyperionCore\Block\Category\LayoutWrapper $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$isMultiCol = $block->isMultiColumn();
+$hasLeft = $block->hasLeftSidebar();
+$hasRight = $block->hasRightSidebar();
+$gridClass = match ($block->getPageLayout()) {
+    '2columns-left' => 'md:grid md:grid-cols-[240px_minmax(0,1fr)] md:gap-6',
+    '2columns-right' => 'md:grid md:grid-cols-[minmax(0,1fr)_240px] md:gap-6',
+    '3columns' => 'md:grid md:grid-cols-[240px_minmax(0,1fr)_200px] md:gap-6',
+    default => '',
+};
+$layeredNav = $block->getChildBlock('layered_nav');
+
+if ($layeredNav) {
+    $layeredNav->setTemplate(
+        $isMultiCol
+            ? 'Magento_LayeredNavigation::layer/view-sidebar.phtml'
+            : 'Magento_LayeredNavigation::layer/view.phtml'
+    );
+}
+
+$headerHtml = $block->getChildHtml('header');
+$productsHtml = $block->getChildHtml('products');
+$layeredNavHtml = $layeredNav ? $layeredNav->toHtml() : '';
+?>
+<?= /* @noEscape */ $headerHtml ?>
+
+<?php if (!$isMultiCol): ?>
+    <?= /* @noEscape */ $layeredNavHtml ?>
+    <?= /* @noEscape */ $productsHtml ?>
+<?php else: ?>
+    <div class="<?= /* @noEscape */ $gridClass ?>">
+        <?php if ($hasLeft): ?>
+            <aside class="hyperion-sidebar mb-6 md:mb-0">
+                <?= /* @noEscape */ $layeredNavHtml ?>
+            </aside>
+        <?php endif; ?>
+
+        <div class="min-w-0">
+            <?= /* @noEscape */ $productsHtml ?>
+        </div>
+
+        <?php if ($hasRight && !$hasLeft): ?>
+            <aside class="hyperion-sidebar mt-6 md:mt-0">
+                <?= /* @noEscape */ $layeredNavHtml ?>
+            </aside>
+        <?php elseif ($hasRight): ?>
+            <aside class="hyperion-sidebar mt-6 md:mt-0">
+                <?= $escaper->escapeHtml(__('Compare Products')) ?>
+                <p class="text-sm text-muted mt-2"><?= $escaper->escapeHtml(__('You have no items to compare.')) ?></p>
+                <h3 class="mt-4 text-base font-medium text-secondary"><?= $escaper->escapeHtml(__('My Wish List')) ?></h3>
+                <p class="text-sm text-muted mt-2"><?= $escaper->escapeHtml(__('You have no items in your wish list.')) ?></p>
+            </aside>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>

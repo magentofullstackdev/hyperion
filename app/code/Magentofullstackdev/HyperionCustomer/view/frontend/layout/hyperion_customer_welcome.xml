@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the account menu header fragment.
+
+    Rendered by /hyperion/header/state (HeaderStatePool, registered in
+    etc/frontend/di.xml, target #hyperion-account-menu); block
+    "hyperion.customer.welcome.fragment".
+
+    cacheable="false" is mandatory - this fragment carries session-specific
+    data (customer name, login state) and must never enter the full-page cache.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCustomer\Block\Welcome\Fragment"
+               name="hyperion.customer.welcome.fragment"
+               template="Magentofullstackdev_HyperionCustomer::welcome/fragment.phtml"
+               cacheable="false">
+            <arguments>
+                <argument name="customer_data_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCustomer\ViewModel\CustomerData</argument>
+            </arguments>
+        </block>
+    </body>
+</page>

@@ -1,0 +1,35 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Compare products sidebar (block `hyperion.compare.sidebar` in
+ * `sidebar.additional`).
+ *
+ * FPC-safe: URLs and labels only. The items come from the header-state
+ * compare fragment (`data-hyperion-compare-items` on `#hyperion-compare-count`,
+ * see lib/list-state.js). Remove posts to `catalog/product_compare/remove`
+ * over HTMX (toast + refreshed fragment); Clear All is a plain POST to
+ * `catalog/product_compare/clear`.
+ *
+ * Renders nothing when the compare feature is off (the same check as the
+ * Compare button of the tiles).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+if (!$viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductList::class)->isCompareEnabled()) {
+    return;
+}
+?>
+<hyperion-compare-sidebar class="block"
+                          compare-url="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare')) ?>"
+                          remove-url="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/remove')) ?>"
+                          clear-url="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/clear')) ?>"
+                          heading="<?= $escaper->escapeHtmlAttr(__('Compare Products')) ?>"
+                          compare-label="<?= $escaper->escapeHtmlAttr(__('Compare')) ?>"
+                          clear-label="<?= $escaper->escapeHtmlAttr(__('Clear All')) ?>"
+                          remove-label="<?= $escaper->escapeHtmlAttr(__('Remove This Item')) ?>"
+                          confirm-label="<?= $escaper->escapeHtmlAttr(__('Are you sure you want to remove all items from your Compare Products list?')) ?>"
+                          hidden></hyperion-compare-sidebar>

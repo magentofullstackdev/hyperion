@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Text custom option: single line (`field`) or multi line (`area`).
+ *
+ * @var \Magento\Catalog\Block\Product\View\Options\Type\Text $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+use Magento\Catalog\Api\Data\ProductCustomOptionInterface;
+use Magentofullstackdev\HyperionCatalog\ViewModel\CustomOptions;
+
+$option = $block->getOption();
+$optionId = (int) $option->getId();
+$vm = $viewModels->require(CustomOptions::class);
+$price = $vm->getPrice($block->getParentBlock(), $optionId);
+$fieldId = 'options_' . $optionId . '_text';
+$maxLength = (int) $option->getMaxCharacters();
+$inputClass = 'w-full px-4 py-2.5 text-sm border border-subtle rounded-lg bg-surface text-secondary'
+    . ' focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
+?>
+<div class="space-y-1">
+    <label for="<?= $escaper->escapeHtmlAttr($fieldId) ?>" class="block text-sm font-medium text-secondary">
+        <?= $escaper->escapeHtml($option->getTitle()) ?>
+        <?php if ($option->getIsRequire()): ?>
+            <span class="text-error" aria-hidden="true">*</span>
+        <?php endif; ?>
+        <span class="font-normal text-muted"><?= $escaper->escapeHtml($vm->formatNotice($price)) ?></span>
+    </label>
+    <?php if ($option->getType() === ProductCustomOptionInterface::OPTION_TYPE_AREA): ?>
+        <textarea id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+                  name="options[<?= (int) $optionId ?>]"
+                  rows="4"
+                  data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+                  <?php if ($maxLength): ?>maxlength="<?= (int) $maxLength ?>"<?php endif; ?>
+                  <?php if ($option->getIsRequire()): ?>required<?php endif; ?>
+                  class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+        ><?= $escaper->escapeHtml($block->getDefaultValue()) ?></textarea>
+    <?php else: ?>
+        <input type="text"
+               id="<?= $escaper->escapeHtmlAttr($fieldId) ?>"
+               name="options[<?= (int) $optionId ?>]"
+               value="<?= $escaper->escapeHtmlAttr($block->getDefaultValue()) ?>"
+               data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
+               <?php if ($maxLength): ?>maxlength="<?= (int) $maxLength ?>"<?php endif; ?>
+               <?php if ($option->getIsRequire()): ?>required<?php endif; ?>
+               class="<?= $escaper->escapeHtmlAttr($inputClass) ?>">
+    <?php endif; ?>
+    <?php if ($maxLength): ?>
+        <p class="text-xs text-muted">
+            <?= $escaper->escapeHtml(__('Maximum %1 characters', $maxLength)) ?>
+        </p>
+    <?php endif; ?>
+</div>

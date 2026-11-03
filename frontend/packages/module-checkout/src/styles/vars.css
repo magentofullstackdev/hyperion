@@ -1,0 +1,33 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Checkout design-token entry.
+ *
+ * Imports the suite-level tokens from @magentofullstackdev/hyperion-shared
+ * and provides dev-harness fallbacks for any `--checkout-*` aliases the
+ * dev page may need before the theme stylesheet has a chance to declare
+ * them.
+ *
+ * In production, the Hyperion theme stylesheet sets the
+ * `--checkout-color-*` aliases (via
+ * @magentofullstackdev/hyperion-shared/tokens/colors.css) higher in the
+ * cascade, so this file's fallbacks never apply on a real storefront.
+ * They only matter for the standalone dev harness.
+ */
+@import "@magentofullstackdev/hyperion-shared/tokens/index.css";
+
+:root {
+    /* Dev-harness fallbacks -- the theme overrides these once loaded. */
+    --checkout-color-brand: 31 41 55;
+    --checkout-color-accent: 37 99 235;
+    --checkout-color-danger: 220 38 38;
+    --checkout-color-muted: 107 114 128;
+    --checkout-color-surface: 255 255 255;
+    --checkout-color-surface-raised: 249 250 251;
+    --checkout-color-on-brand: 255 255 255;
+    --checkout-color-on-accent: 255 255 255;
+    --checkout-color-on-danger: 255 255 255;
+    --checkout-color-subtle: 229 231 235;
+    --checkout-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}

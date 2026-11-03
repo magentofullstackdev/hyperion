@@ -1,0 +1,33 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Selected options of a wishlist item (configurable attributes, custom
+ * options, bundle selections, downloadable links) as a visible definition
+ * list. Core hides them in a JS tooltip.
+ *
+ * Option values arrive escaped from Options::getConfiguredOptions() (or
+ * flagged `has_html` by the product type helper), hence @noEscape.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Options $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$options = $block->getOptionList();
+if (!$options) {
+    return;
+}
+?>
+<dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-xs"
+    data-hyperion-wishlist-options>
+    <?php foreach ($options as $option): ?>
+        <dt class="text-muted"><?= $escaper->escapeHtml($option['label']) ?>:</dt>
+        <dd class="text-secondary break-words">
+            <?php if (is_array($option['value'])): ?>
+                <?= /* @noEscape */ implode('<br>', $option['value']) ?>
+            <?php else: ?>
+                <?= /* @noEscape */ $option['value'] ?>
+            <?php endif; ?>
+        </dd>
+    <?php endforeach; ?>
+</dl>

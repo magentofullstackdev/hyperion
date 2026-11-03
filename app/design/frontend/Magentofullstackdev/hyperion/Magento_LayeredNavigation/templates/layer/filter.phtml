@@ -1,0 +1,116 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion per-filter renderer -- called by FilterRenderer for individual filter types
+ * (e.g. price range, custom attribute filters rendered outside view.phtml).
+ *
+ * Emits the same HTMX-driven anchor markup used in layer/view.phtml so the grid
+ * swap behavior is consistent regardless of which rendering path is active.
+ * Swatch attributes render as a chip grid (colour / image chips, text pills)
+ * with the same HTMX contract on every chip, see the view.phtml counterpart.
+ *
+ * $filter is set on the block by FilterRenderer before toHtml() is called.
+ *
+ * @var \Magento\LayeredNavigation\Block\Navigation\FilterRenderer $block
+ * @var \Magento\Catalog\Model\Layer\Filter\AbstractFilter $filter
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+$filter = $block->getFilter();
+
+// The list block (category listing or search results) and its grid fragment
+// endpoint come from the Listing view model, so search results swap like a category.
+// Core builds an item URL with `_current` (every active filter plus the item's
+// own): inside a fragment request that is the fragment route, so the view model
+// rewrites it to the public page URL (href, pushed URL) and to the fragment URL
+// with the same filters, page dropped (hx-get).
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$listBlock = $listing->getListBlock($block->getLayout());
+$fragmentUrl = $listing->getFragmentUrl($listBlock);
+$gridId = $listing->getGridTargetId();
+$swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\LayerFilterSwatches::class);
+?>
+<?php if ($swatchFilters->isSwatchFilter($filter)): ?>
+    <?php
+    $isVisual = $swatchFilters->isVisualSwatchFilter($filter);
+    $swatches = $swatchFilters->getSwatches($filter);
+    ?>
+    <ul role="list"
+        class="p-2 flex flex-wrap gap-2"
+        data-hyperion-swatch-filter="<?= $escaper->escapeHtmlAttr($swatchFilters->getAttributeCode($filter)) ?>"
+        data-hyperion-swatch-kind="<?= $isVisual ? 'visual' : 'text' ?>">
+        <?php foreach ($filter->getItems() as $item): ?>
+            <?php
+            $swatch = $swatches[(int) $item->getValue()] ?? null;
+            if ($swatch === null) {
+                continue;
+            }
+            $chipName = $swatch['label'] . ' (' . $swatch['count'] . ')';
+            $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl());
+            ?>
+            <li>
+                <a href="<?= $escaper->escapeUrl($itemUrl) ?>"
+                   <?php if ($fragmentUrl !== ''): ?>
+                   hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, (string) $item->getUrl())) ?>"
+                   hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                   hx-swap="outerHTML"
+                   hx-push-url="<?= $escaper->escapeUrl($itemUrl) ?>"
+                   <?php endif; ?>
+                   aria-label="<?= $escaper->escapeHtmlAttr($chipName) ?>"
+                   title="<?= $escaper->escapeHtmlAttr($chipName) ?>"
+                   data-hyperion-swatch-option="<?= $escaper->escapeHtmlAttr((string) $item->getValue()) ?>"
+                   data-hyperion-swatch-type="<?= $escaper->escapeHtmlAttr($swatch['type']) ?>"
+                   <?php if ($swatch['type'] === 'text'): ?>
+                   class="min-w-[2.5rem] h-9 px-2.5 inline-flex items-center justify-center rounded-lg
+                          border border-subtle text-xs font-semibold text-secondary
+                          hover:border-primary hover:text-primary transition-colors
+                          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                    <?= $escaper->escapeHtml($swatch['value']) ?>
+                   <?php else: ?>
+                   class="inline-flex rounded-full transition-transform hover:scale-110
+                          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                    <?php if ($swatch['type'] === 'color'): ?>
+                    <span class="block w-8 h-8 rounded-full border border-subtle shadow-sm <?= $swatch['light'] ? 'ring-1 ring-inset ring-muted/40' : '' ?>"
+                          style="background-color: <?= $escaper->escapeHtmlAttr($swatch['value']) ?>"
+                          aria-hidden="true"></span>
+                    <?php else: ?>
+                    <span class="block w-8 h-8 rounded-full border border-subtle shadow-sm bg-cover bg-center"
+                          style="background-image: url('<?= $escaper->escapeUrl($swatch['value']) ?>')"
+                          aria-hidden="true"></span>
+                    <?php endif; ?>
+                   <?php endif; ?>
+                </a>
+            </li>
+        <?php endforeach; ?>
+    </ul>
+<?php else: ?>
+<ol role="list" class="space-y-1 text-sm">
+    <?php foreach ($filter->getItems() as $item): ?>
+        <?php $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl()); ?>
+        <li>
+            <a href="<?= $escaper->escapeUrl($itemUrl) ?>"
+               <?php if ($fragmentUrl !== ''): ?>
+               hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, (string) $item->getUrl())) ?>"
+               hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+               hx-swap="outerHTML"
+               hx-push-url="<?= $escaper->escapeUrl($itemUrl) ?>"
+               <?php endif; ?>
+               class="flex items-center justify-between py-1 px-2 rounded text-secondary
+                      hover:bg-surface-raised hover:text-primary
+                      focus:outline-none focus:ring-2 focus:ring-primary">
+                <?php /*
+                    Magento's filter->getLabel() returns a trusted, already-escaped
+                    fragment -- for category/attribute filters it's plain text, for
+                    price filters it's formatted markup like
+                    <span class="price">€30.00</span>. escapeHtml() here double-
+                    encoded that markup into literal "&lt;span...&gt;". The filter
+                    classes all own their output escaping; render it raw.
+                */ ?>
+                <span><?= /* @noEscape */ $item->getLabel() ?></span>
+                <span class="text-muted text-xs">(<?= (int) $item->getCount() ?>)</span>
+            </a>
+        </li>
+    <?php endforeach; ?>
+</ol>
+<?php endif; ?>

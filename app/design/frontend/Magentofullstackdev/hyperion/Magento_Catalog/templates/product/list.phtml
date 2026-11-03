@@ -1,0 +1,433 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion product grid -- mobile-first, HTMX-swappable fragment.
+ *
+ * Serves dual purpose:
+ *   1. Embedded inside category/view.phtml as the product column on
+ *      initial page load.
+ *   2. Returned as a bare HTML fragment by /hyperion/category/filter in
+ *      response to HTMX sort/filter/paginate requests -- in that mode the
+ *      outer shell is NOT present, so this template stands alone with
+ *      no surrounding chrome.
+ *
+ * Each tile carries four server-rendered interactive elements, all
+ * wired to HTMX and degrading to native POST when JS is unavailable:
+ *   * Add to Cart       -> Magentofullstackdev\HyperionCore\Plugin\Checkout\Cart\AddPlugin
+ *   * Add to Wishlist   -> Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index\AddPlugin
+ *   * Add to Compare    -> Magentofullstackdev\HyperionCore\Plugin\Catalog\Product\Compare\AddPlugin
+ *   * Swatches          -> <hyperion-swatches> (configurable products only)
+ *
+ * Price rendering is delegated to
+ * Magentofullstackdev\HyperionCatalog\ViewModel\Pricing::getTileHtml() which wraps Magento's
+ * native \Magento\Framework\Pricing\Render -- no PHP price math. The
+ * emitted .price-box / .special-price / .old-price / .price structure is
+ * styled by web/css/source/_pricing.css.
+ *
+ * @var \Magentofullstackdev\HyperionCatalog\Block\Product\ListProduct $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\ProductList $vm */
+$vm = $block->getData('product_list_view_model');
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\Pricing|null $pricing */
+$pricing = $block->getData('pricing_view_model');
+/** @var \Magentofullstackdev\HyperionImage\ViewModel\ImageConfig|null $imageCfg */
+$imageCfg = $block->getData('image_config_view_model');
+// On the search results page $block is the core ListProduct virtual type
+// (Magento\CatalogSearch\Block\SearchResult\ListProduct), not the Hyperion
+// subclass. Only the subclass has getProductCollection() / getGridTargetId();
+// on the core block those calls hit the DataObject magic getter and return
+// null, which renders "No products match your selection." for every query.
+$isHyperionList = $block instanceof \Magentofullstackdev\HyperionCatalog\Block\Product\ListProduct;
+$products = $isHyperionList ? $block->getProductCollection() : $block->getLoadedProductCollection();
+$gridId = $isHyperionList ? $block->getGridTargetId() : 'hyperion-product-grid';
+$formKey = $block->getBlockHtml('formkey');
+$showWish = $vm->isWishlistEnabled();
+$showComp = $vm->isCompareEnabled();
+$wishUrl = $escaper->escapeUrl($vm->getAddToWishlistUrl());
+$compUrl = $escaper->escapeUrl($vm->getAddToCompareUrl());
+// Remove endpoints for the <hyperion-list-toggle> wrappers around the
+// per-tile wishlist / compare forms (see the action cluster below).
+$wishRemoveUrl = $escaper->escapeUrl($block->getUrl('wishlist/index/remove'));
+$compRemoveUrl = $escaper->escapeUrl($block->getUrl('catalog/product_compare/remove'));
+// Config "Add to Cart from Listing Page" and the purchase restrictions (catalog mode) together.
+$showCart = $vm->canAddToCartFromListing();
+// Infinite loading: the resolved mode of this listing and whether
+// the request appends a page to a grid already on the page (tiles only, the
+// `load_more` child out of band).
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$append = $listing->isAppend();
+$infinite = $listing->isInfinite($block);
+// Tile records for the recently compared history (read by the compare toggle
+// on success) and the GA4 `view_item_list` record of this listing.
+$summaryVm = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary::class);
+$gtag = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\GoogleGtag::class);
+$viewListJson = '';
+if ($gtag->isEnabled() && $products) {
+    $category = $isHyperionList ? $block->getLayer()->getCurrentCategory() : null;
+    $listId = $category && $category->getId() ? 'category_' . (int) $category->getId() : 'search_results';
+    $listName = $category && $category->getId() ? (string) $category->getName() : (string) __('Search results');
+    $viewListJson = $gtag->toJson($gtag->viewItemList($products, $listId, $listName));
+}
+// The appended page's record travels inside the out of band `load_more` block.
+$block->setData('hyperion_view_list_json', $viewListJson);
+?>
+<?php if (!$append): ?>
+<div id="<?= $escaper->escapeHtmlAttr($gridId) ?>"
+     data-hyperion-product-grid
+     aria-live="polite">
+    <?php if ($viewListJson !== ''): ?>
+        <span data-hyperion-gtag-event="view_item_list" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($viewListJson) ?>" hidden></span>
+    <?php endif; ?>
+<?php endif; ?>
+
+    <?php
+    // getSize() is the total of the listing, count() the items of this page: a page
+    // past the last one (p=50 of 3 pages) has a total and no items.
+    $pastTheEnd = $products !== null && $products->getSize() > 0 && $products->count() === 0;
+    ?>
+    <?php if ($products === null || $products->getSize() === 0 || $pastTheEnd): ?>
+
+        <?php if ($append): ?>
+            <?= $block->getChildHtml('load_more') ?>
+        <?php elseif ($pastTheEnd): ?>
+        <?php /* Nothing to show and nothing to sort: the message and the way back replace the toolbar and the grid.
+                 getToolbarBlock() is public on core's ListProduct too (the search results block), so the
+                 search page gets the link as well. */ ?>
+        <?php $toolbarBlock = $block instanceof \Magento\Catalog\Block\Product\ListProduct ? $block->getToolbarBlock() : null; ?>
+        <div class="py-16 text-center space-y-3" data-hyperion-page-past-end>
+            <p class="text-muted text-lg">
+                <?= $escaper->escapeHtml(__('This page does not exist.')) ?>
+            </p>
+            <?php if ($toolbarBlock instanceof \Magento\Catalog\Block\Product\ProductList\Toolbar): ?>
+                <a href="<?= $escaper->escapeUrl($toolbarBlock->getPagerUrl(['p' => null])) ?>"
+                   class="inline-flex items-center justify-center rounded-md border border-primary px-6 py-2.5 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary focus:outline-none focus:ring-2 focus:ring-primary transition-colors">
+                    <?= $escaper->escapeHtml(__('Back to the first page')) ?>
+                </a>
+            <?php endif; ?>
+        </div>
+        <?php else: ?>
+        <div class="py-16 text-center space-y-3">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+            </svg>
+            <p class="text-muted text-lg">
+                <?= $escaper->escapeHtml(__('No products match your selection.')) ?>
+            </p>
+        </div>
+        <?php endif; ?>
+
+    <?php else: ?>
+
+        <?php if (!$append): ?>
+        <?= $block->getToolbarHtml() ?>
+        <?php endif; ?>
+
+        <?php
+        // Grid / list mode (toolbar switch, `product_list_mode`, in the block cache key).
+        $isListMode = $block->getMode() === 'list';
+        /** @var \Magentofullstackdev\HyperionCatalog\ViewModel\ProductView $productViewVm */
+        $productViewVm = $isListMode ? $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ProductView::class) : null;
+        ?>
+        <?php if (!$append): ?>
+        <ul role="list"
+            data-hyperion-list-mode="<?= $isListMode ? 'list' : 'grid' ?>"
+            data-hyperion-tiles
+            class="<?= $isListMode ? 'flex flex-col gap-4 my-6' : 'grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4 my-6' ?>">
+        <?php endif; ?>
+
+            <?php $tileIndex = 0; ?>
+            <?php foreach ($products as $_product):
+                $productId = (int) $_product->getId();
+                $productUrl = $escaper->escapeUrl($_product->getProductUrl());
+                $productNameAttr = $escaper->escapeHtmlAttr($_product->getName());
+                $cartUrl = $escaper->escapeUrl($vm->getAddToCartUrl($_product));
+                $imageUrl = $escaper->escapeUrl($vm->getProductImageUrl($_product, $isListMode ? 'category_page_list' : 'category_page_grid'));
+                // List layout: the short description, or an excerpt of the description when there is none.
+                $shortDescription = $isListMode ? trim((string) $productViewVm->getShortDescription($_product)) : '';
+                if ($isListMode && $shortDescription === '' && (string) $_product->getData('description') !== '') {
+                    $excerpt = trim(preg_replace('/\s+/u', ' ', strip_tags((string) $_product->getData('description'))) ?? '');
+                    $shortDescription = $escaper->escapeHtml(mb_strlen($excerpt) > 200 ? mb_substr($excerpt, 0, 200) . '...' : $excerpt);
+                }
+                $isConfigurable = $vm->isConfigurableWithSwatches($_product);
+                $superAttrIds = $isConfigurable ? $vm->getSuperAttributeIds($_product) : [];
+                $swatchCfg = $isConfigurable ? $vm->getSwatchConfigAttribute($_product) : '';
+                $formId = 'hyperion-atc-' . $productId;
+                $swatchesId = 'hyperion-swatches-' . $productId;
+                $saleable = $vm->isSaleable($_product);
+                $priceHtml = $pricing
+                    ? $pricing->getTileHtml($_product)
+                    : $vm->getPriceHtml($_product);
+                $reviewsHtml = $block->getReviewsSummaryHtml(
+                    $_product,
+                    \Magento\Catalog\Block\Product\ReviewRendererInterface::SHORT_VIEW,
+                    true
+                );
+            ?>
+                <li class="flex">
+                    <article class="group relative flex w-full <?= $isListMode ? 'flex-row items-stretch' : 'flex-col' ?> overflow-hidden rounded-xl
+                                    border border-subtle bg-surface transition-all duration-200
+                                    hover:shadow-lg hover:border-primary/30"
+                             data-hyperion-tile
+                             data-product-id="<?= (int) $productId ?>"
+                             data-hyperion-product-meta="<?= $escaper->escapeHtmlAttr($summaryVm->toJson($summaryVm->fromProduct($_product, 'product_small_image'))) ?>">
+
+                        <?php /* -- Image (links to PDP) ---------------- */ ?>
+                        <a href="<?= /* @noEscape -- escaped above */ $productUrl ?>"
+                           class="block <?= $isListMode ? 'w-32 sm:w-48 shrink-0 self-stretch' : 'aspect-square' ?> overflow-hidden bg-surface-raised
+                                  focus:outline-none focus:ring-2 focus:ring-primary"
+                           aria-label="<?= /* @noEscape -- escaped above */ $productNameAttr ?>">
+                            <picture>
+                                <?php /* Emit <source> ONLY when the companion file actually exists on disk:
+                                       browsers don't fall through <picture> to <img> on a 404, so a missing
+                                       companion URL would produce a broken image, not the JPG fallback. */ ?>
+                                <?php if ($imageCfg !== null && $imageCfg->hasAvifCompanion($imageUrl)): ?>
+                                    <source type="image/avif" srcset="<?= $escaper->escapeUrl($imageCfg->getAvifUrl($imageUrl)) ?>">
+                                <?php endif; ?>
+                                <?php if ($imageCfg !== null && $imageCfg->hasWebpCompanion($imageUrl)): ?>
+                                    <source type="image/webp" srcset="<?= $escaper->escapeUrl($imageCfg->getWebpUrl($imageUrl)) ?>">
+                                <?php endif; ?>
+                                <img src="<?= /* @noEscape -- escaped above */ $imageUrl ?>"
+                                     alt="<?= /* @noEscape -- escaped above */ $productNameAttr ?>"
+                                     <?php /* The first row is above the fold: its images are LCP candidates
+                                             and must not be lazy; the very first one gets fetch priority. */ ?>
+                                     loading="<?= $tileIndex < 4 ? 'eager' : 'lazy' ?>"
+                                     <?php if ($tileIndex === 0): ?>fetchpriority="high"<?php endif; ?>
+                                     decoding="async"
+                                     width="300"
+                                     height="300"
+                                     data-tile-image
+                                     data-default-src="<?= /* @noEscape -- escaped above */ $imageUrl ?>"
+                                     class="h-full w-full object-cover transition-transform
+                                            duration-300 group-hover:scale-105">
+                            </picture>
+                        </a>
+
+                        <?php /* -- Product info column ----------------- */ ?>
+                        <div class="flex flex-grow flex-col gap-2 p-4">
+
+                            <h2 class="line-clamp-2 text-sm md:text-base font-medium text-secondary">
+                                <a href="<?= /* @noEscape -- escaped above */ $productUrl ?>"
+                                   class="rounded hover:text-primary transition-colors
+                                          focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <?= $escaper->escapeHtml($_product->getName()) ?>
+                                </a>
+                            </h2>
+
+                            <?php if ($reviewsHtml): ?>
+                                <?= /* @noEscape */ $reviewsHtml ?>
+                            <?php endif; ?>
+
+                            <?php if ($isListMode && $shortDescription !== ''): ?>
+                                <div class="text-sm text-muted line-clamp-3" data-hyperion-tile-description>
+                                    <?= /* @noEscape -- rendered through the catalog output helper */ $shortDescription ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php /*
+                                Price -- Magento native price renderer wrapped
+                                in a per-tile id so the swatches component
+                                can swap the WHOLE price block (including any
+                                final+old sale pair) via innerHTML. Pointing
+                                at `.price` alone overwrote only the first
+                                price span and left the old-price sibling
+                                intact, producing `€52.80 €66.00 €66.00`.
+                            */ ?>
+                            <div data-hyperion-tile-price
+                                 id="hyperion-tile-price-<?= (int) $productId ?>">
+                                <?= /* @noEscape */ $priceHtml ?>
+                            </div>
+
+                            <?php if ($isConfigurable && $swatchCfg !== '' && $swatchCfg !== '{}'): ?>
+                                <?php /*
+                                    Inline swatch preview -- the Lit element
+                                    mirrors super_attribute[*] into the ATC
+                                    form below, and (via priceTarget) swaps
+                                    the tile's price block live. `compact`
+                                    hides the "Color: Black / Size: XS" group
+                                    labels that the PDP variant renders; on
+                                    PLP tiles only the bare chip row shows.
+                                */ ?>
+                                <hyperion-swatches id="<?= $escaper->escapeHtmlAttr($swatchesId) ?>"
+                                                   compact
+                                                   form-id="<?= $escaper->escapeHtmlAttr($formId) ?>"
+                                                   price-target="#hyperion-tile-price-<?= (int) $productId ?>"
+                                                   config="<?= /* @noEscape -- htmlspecialchars in SwatchConfig::getEncodedConfigAttribute() */ $swatchCfg ?>"
+                                                   class="block pt-1">
+                                    <?php /* Skeleton with the final height of the rows (no layout shift). */ ?>
+                                    <?= /* @noEscape -- a rendered template */ $block->setData('skeleton_rows', $vm->getSwatchSkeletonRows($_product))->setData('skeleton_compact', true)->fetchView($block->getTemplateFile('Magento_Catalog::product/swatches/skeleton.phtml')) ?>
+                                </hyperion-swatches>
+                            <?php endif; ?>
+
+                            <?php /* -- Action cluster ------------------- */ ?>
+                            <?php /* A size container (`_components.css`): the Add to Cart label, its icon and
+                                     the wish list / compare labels follow the WIDTH OF THE TILE, wherever
+                                     the tile is (beside a rail, in the search grid, in the home widget, on a
+                                     phone), so a translated label never wraps where the English one fits. */ ?>
+                            <div class="mt-auto pt-3 flex flex-col gap-2" data-hyperion-tile-actions>
+
+                                <?php if ($showCart && $saleable): ?>
+                                    <form id="<?= $escaper->escapeHtmlAttr($formId) ?>"
+                                          action="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                                          method="post"
+                                          hx-post="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                                          hx-target="#hyperion-notification"
+                                          hx-swap="outerHTML"
+                                          hx-select="#hyperion-notification"
+                                          class="flex">
+                                        <?= /* @noEscape */ $formKey ?>
+                                        <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                                        <?php foreach ($superAttrIds as $attrId): ?>
+                                            <input type="hidden"
+                                                   name="super_attribute[<?= (int) $attrId ?>]"
+                                                   value=""
+                                                   data-hyperion-super="<?= (int) $attrId ?>">
+                                        <?php endforeach; ?>
+                                        <?php /* In a narrow tile (under 248px of button, `_components.css` container
+                                                rules on the data attributes) the label drops to text-xs and the
+                                                cart icon goes, so "Add to Cart" and its translations ("AGGIUNGI AL
+                                                CARRELLO", "ADICIONAR AO CARRINHO") stay on one line from md up;
+                                                under 184px (a phone) a two line min-height keeps every button of
+                                                the grid the same height. */ ?>
+                                        <button type="submit"
+                                                data-hyperion-tile-cart
+                                                class="inline-flex w-full min-h-[2.75rem] items-center justify-center gap-2
+                                                       rounded-lg bg-primary px-3 py-2
+                                                       text-sm font-bold uppercase tracking-wider leading-tight
+                                                       text-on-primary shadow-sm
+                                                       hover:bg-primary-hover hover:shadow-md
+                                                       focus:outline-none focus:ring-2 focus:ring-primary
+                                                       disabled:opacity-50 transition-all">
+                                            <svg class="h-4 w-4 shrink-0" data-hyperion-tile-cart-icon fill="none" stroke="currentColor"
+                                                 viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                            </svg>
+                                            <span><?= $escaper->escapeHtml(__('Add to Cart')) ?></span>
+                                        </button>
+                                    </form>
+                                <?php elseif ($showCart): ?>
+                                    <p class="rounded-lg border border-subtle py-2.5 text-center
+                                              text-sm font-medium text-muted">
+                                        <?= $escaper->escapeHtml(__('Out of stock')) ?>
+                                    </p>
+                                <?php endif; ?>
+
+                                <?php if ($showWish || $showComp): ?>
+                                    <div class="flex items-center gap-2">
+
+                                        <?php if ($showWish): ?>
+                                            <hyperion-list-toggle kind="wishlist"
+                                                                  product-id="<?= (int) $productId ?>"
+                                                                  remove-url="<?= /* @noEscape -- escaped above */ $wishRemoveUrl ?>"
+                                                                  remove-param="item"
+                                                                  add-label="<?= $escaper->escapeHtmlAttr(__('Wish List')) ?>"
+                                                                  remove-label="<?= $escaper->escapeHtmlAttr(__('In Wish List')) ?>">
+                                            <form action="<?= /* @noEscape -- escaped above */ $wishUrl ?>"
+                                                  method="post"
+                                                  hx-post="<?= /* @noEscape -- escaped above */ $wishUrl ?>"
+                                                  hx-target="#hyperion-notification"
+                                                  hx-swap="outerHTML"
+                                                  hx-select="#hyperion-notification"
+                                                  class="flex-1">
+                                                <?= /* @noEscape */ $formKey ?>
+                                                <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                                                <button type="submit"
+                                                        class="inline-flex w-full items-center justify-center
+                                                               gap-1 rounded-lg border border-subtle
+                                                               bg-surface px-2 py-2 text-xs font-medium
+                                                               text-muted hover:text-primary
+                                                               hover:border-primary/40
+                                                               focus:outline-none focus:ring-2 focus:ring-primary
+                                                               transition-colors"
+                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Wish List', $productNameAttr)) ?>"
+                                                        title="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor"
+                                                         viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                                    </svg>
+                                                    <span class="sr-only xl:not-sr-only xl:inline" data-hyperion-toggle-label>
+                                                        <?= $escaper->escapeHtml(__('Wish List')) ?>
+                                                    </span>
+                                                </button>
+                                            </form>
+                                            </hyperion-list-toggle>
+                                        <?php endif; ?>
+
+                                        <?php if ($showComp): ?>
+                                            <hyperion-list-toggle kind="compare"
+                                                                  product-id="<?= (int) $productId ?>"
+                                                                  remove-url="<?= /* @noEscape -- escaped above */ $compRemoveUrl ?>"
+                                                                  add-label="<?= $escaper->escapeHtmlAttr(__('Compare')) ?>"
+                                                                  remove-label="<?= $escaper->escapeHtmlAttr(__('In Compare')) ?>">
+                                            <form action="<?= /* @noEscape -- escaped above */ $compUrl ?>"
+                                                  method="post"
+                                                  hx-post="<?= /* @noEscape -- escaped above */ $compUrl ?>"
+                                                  hx-target="#hyperion-notification"
+                                                  hx-swap="outerHTML"
+                                                  hx-select="#hyperion-notification"
+                                                  class="flex-1">
+                                                <?= /* @noEscape */ $formKey ?>
+                                                <input type="hidden" name="product" value="<?= (int) $productId ?>">
+                                                <button type="submit"
+                                                        class="inline-flex w-full items-center justify-center
+                                                               gap-1 rounded-lg border border-subtle
+                                                               bg-surface px-2 py-2 text-xs font-medium
+                                                               text-muted hover:text-primary
+                                                               hover:border-primary/40
+                                                               focus:outline-none focus:ring-2 focus:ring-primary
+                                                               transition-colors"
+                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Compare', $productNameAttr)) ?>"
+                                                        title="<?= $escaper->escapeHtmlAttr(__('Add to Compare')) ?>">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor"
+                                                         viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                                    </svg>
+                                                    <span class="sr-only xl:not-sr-only xl:inline" data-hyperion-toggle-label>
+                                                        <?= $escaper->escapeHtml(__('Compare')) ?>
+                                                    </span>
+                                                </button>
+                                            </form>
+                                            </hyperion-list-toggle>
+                                        <?php endif; ?>
+
+                                    </div>
+                                <?php endif; ?>
+
+                            </div>
+                        </div>
+                    </article>
+                </li>
+            <?php $tileIndex++; ?>
+            <?php endforeach; ?>
+
+        <?php if (!$append): ?>
+        </ul>
+        <?php endif; ?>
+
+        <?php if ($infinite): ?>
+            <?php /* Infinite loading: the status and the Load more link replace the bottom pager (child `load_more`). */ ?>
+            <?= $block->getChildHtml('load_more') ?>
+        <?php elseif (!$append): ?>
+            <?php /*
+                Render the toolbar a second time at the bottom of the grid with
+                isBottom=true so the toolbar template emits ONLY the pager. This
+                mirrors Magento's standard double-toolbar pattern: top = sort +
+                count + page-size, bottom = page numbers.
+            */ ?>
+            <?php $bottomToolbar = $block->getLayout()->getBlock('product_list_toolbar'); ?>
+            <?php if ($bottomToolbar): ?>
+                <?= $bottomToolbar->setIsBottom(true)->toHtml() ?>
+            <?php endif; ?>
+        <?php endif; ?>
+
+    <?php endif; ?>
+
+<?php if (!$append): ?>
+</div>
+<?php endif; ?>

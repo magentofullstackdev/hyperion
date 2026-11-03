@@ -1,0 +1,42 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Stored Payment Methods: the customer's card tokens. Rows come from the
+ * renderer children of the block (`Magento_Vault::customer_account/credit_card.phtml`
+ * for cards; other modules register their own), styled from the table.
+ *
+ * @var \Magento\Vault\Block\Customer\CreditCards $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$tokens = $block->getPaymentTokens();
+?>
+<section class="space-y-4" aria-labelledby="hyperion-vault-cards-heading" data-hyperion-vault-cards>
+    <h2 id="hyperion-vault-cards-heading" class="text-base font-semibold text-secondary">
+        <?= $escaper->escapeHtml(__('Stored Payment Methods')) ?>
+    </h2>
+    <?php if (count($tokens) !== 0): ?>
+        <div class="bg-surface border border-subtle rounded-xl p-5 overflow-x-auto">
+            <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Stored Payment Methods')) ?>">
+                <thead>
+                    <tr>
+                        <th scope="col" class="col card-number"><?= $escaper->escapeHtml(__('Card Number')) ?></th>
+                        <th scope="col" class="col expire"><?= $escaper->escapeHtml(__('Expiration Date')) ?></th>
+                        <th scope="col" class="col card-type"><?= $escaper->escapeHtml(__('Type')) ?></th>
+                        <th scope="col" class="col actions"><span class="sr-only"><?= $escaper->escapeHtml(__('Actions')) ?></span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($tokens as $token): ?>
+                        <?= /* @noEscape */ $block->renderTokenHtml($token) ?>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php elseif (!$block->isExistsCustomerTokens()): ?>
+        <p class="bg-surface border border-subtle rounded-xl p-5 text-sm text-muted" data-hyperion-vault-empty>
+            <?= $escaper->escapeHtml(__('You have no stored payment methods.')) ?>
+        </p>
+    <?php endif; ?>
+</section>

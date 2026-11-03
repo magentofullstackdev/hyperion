@@ -1,0 +1,49 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Login as Customer" banner, swapped out-of-band over the
+ * `#hyperion-lac-notice` placeholder that the theme renders on every page
+ * (Magento_LoginAsCustomerFrontendUi::html/notices.phtml). The block
+ * renders nothing unless the session is an admin impersonation.
+ *
+ * @var \Magentofullstackdev\HyperionCustomer\Block\LoginAsCustomer\Notice $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<div id="hyperion-lac-notice"
+     <?= $block->getData('oob') ? 'hx-swap-oob="outerHTML"' : '' ?>
+     class="sticky top-0 z-40 bg-warning/15 border-b border-warning text-secondary"
+     role="status"
+     data-hyperion-lac-notice>
+    <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
+        <p class="flex items-center gap-2 min-w-0">
+            <svg class="w-5 h-5 shrink-0 text-warning" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+            <span class="truncate">
+                <?= $escaper->escapeHtml(__(
+                    'You are connected as %1 on %2',
+                    '<b>' . $escaper->escapeHtml($block->getCustomerName()) . '</b>',
+                    $escaper->escapeHtml($block->getWebsiteName())
+                ), ['b']) ?>
+            </span>
+        </p>
+        <form action="<?= $escaper->escapeUrl($block->getLogoutUrl()) ?>" method="post" class="shrink-0">
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+            <button type="submit"
+                    class="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-semibold
+                           border border-warning text-secondary hover:bg-warning/25 transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-warning">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                     viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                <?= $escaper->escapeHtml(__('Close Session')) ?>
+            </button>
+        </form>
+    </div>
+</div>

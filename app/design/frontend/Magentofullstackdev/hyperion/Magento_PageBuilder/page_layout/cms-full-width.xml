@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PageBuilder "CMS Full Width" page layout.
+
+    Core builds it from 1column and swaps the gutters of <main> for the
+    class `page-main-full-width`. In Hyperion the gutters do not live on
+    <main> but on `columns` (the Tailwind `container` set in
+    Magento_Theme/page_layout/1column.xml), so full-width and full-bleed
+    rows stayed trapped inside the 1280px container. Here `columns` loses
+    the container: every row appearance then sizes itself (contained and
+    full-width rows get the container width and gutters back from
+    _pagebuilder.css, full-bleed rows span the viewport).
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <referenceContainer name="columns" htmlClass="columns flex flex-col w-full flex-grow"/>
+</layout>

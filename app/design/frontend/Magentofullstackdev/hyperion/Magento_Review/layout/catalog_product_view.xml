@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!--
+            Reviews live in the "Reviews" tab of the Hyperion PDP:
+            view.phtml prints `$block->getChildHtml('reviews.tab')`, so the
+            list and the form are wrapped in that block, mounted on the
+            Hyperion product view. Magento_ReCaptchaReview mounts its block
+            in `form.additional.review.info`, rendered by form.phtml.
+        -->
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="reviews.tab"
+                   as="reviews.tab"
+                   template="Magento_Review::product/view/tab.phtml"
+                   ifconfig="catalog/review/active">
+                <block class="Magento\Review\Block\Product\View"
+                       name="review_list"
+                       as="review_list"
+                       template="Magento_Review::product/view/list.phtml">
+                    <block class="Magento\Theme\Block\Html\Pager"
+                           name="review_list.toolbar"
+                           template="Magento_Review::product/view/toolbar.phtml"/>
+                </block>
+                <block class="Magento\Review\Block\Form"
+                       name="product.review.form"
+                       as="review_form"
+                       template="Magento_Review::form.phtml">
+                    <arguments>
+                        <argument name="formKeyViewModel" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\FormKey</argument>
+                    </arguments>
+                    <container name="form.additional.review.info" as="form_additional_review_info"/>
+                    <container name="product.review.form.fields.before"
+                               as="form_fields_before"
+                               label="Review Form Fields Before"/>
+                </block>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

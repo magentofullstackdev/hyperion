@@ -1,0 +1,90 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion active filters -- pill-style tags with remove links.
+ *
+ * Child `state` of the layered navigation block (layer/view.phtml), on the
+ * category page and on the search results page, and re-rendered with it in
+ * the grid fragment response (HyperionCatalog\Model\Listing\FragmentResponse).
+ *
+ * Core's `getRemoveUrl()` / `getClearUrl()` build their URLs with
+ * `_current=true`: on the full page that is the listing URL, inside a
+ * fragment request it is the FRAGMENT route (`/hyperion/category/filter/?...`),
+ * unusable for plain navigation. The Listing view model rewrites every URL to
+ * the public page URL with the residual filters (the `href` and the URL
+ * pushed into the history) and to the fragment URL with the same residual
+ * filters (the `hx-get` that swaps the grid in place).
+ *
+ * @var \Magento\LayeredNavigation\Block\Navigation\State $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+$activeFilters = $block->getActiveFilters();
+
+$listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
+$listBlock = $listing->getListBlock($block->getLayout());
+$fragmentUrl = $listing->getFragmentUrl($listBlock);
+$gridId = $listing->getGridTargetId();
+?>
+
+<?php /*
+    The wrapping element is always emitted (even when no filters are
+    active) so the active filters area keeps a stable id inside the
+    layered navigation wrapper the fragment response swaps out of band.
+    `data-hyperion-filter` on a chip names the filter it removes, so
+    lib/listing-filters.js can give the focus back to the right chip
+    after the swap.
+*/ ?>
+<div id="hyperion-active-filters"
+     class="<?= empty($activeFilters) ? 'hidden' : 'flex flex-wrap items-center gap-2 mb-4' ?>">
+    <?php if (!empty($activeFilters)): ?>
+        <span class="text-sm text-muted font-medium">
+            <?= $escaper->escapeHtml(__('Active filters:')) ?>
+        </span>
+        <?php foreach ($activeFilters as $filter): ?>
+            <?php
+            $removeUrl = (string) $filter->getRemoveUrl();
+            $publicHref = $listing->toPublicUrl($listBlock, $removeUrl);
+            ?>
+            <a href="<?= $escaper->escapeUrl($publicHref) ?>"
+               <?php if ($fragmentUrl !== ''): ?>
+                   hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, $removeUrl)) ?>"
+                   hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                   hx-swap="outerHTML"
+                   hx-push-url="<?= $escaper->escapeUrl($publicHref) ?>"
+               <?php endif; ?>
+               data-hyperion-filter="<?= $escaper->escapeHtmlAttr((string) $filter->getFilter()->getRequestVar()) ?>"
+               class="inline-flex items-center gap-1 px-3 py-1 text-sm rounded-full
+                      bg-primary/10 text-primary hover:bg-primary/20 transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-primary"
+               title="<?= $escaper->escapeHtmlAttr(__('Remove %1', $filter->getName())) ?>">
+                <?= $escaper->escapeHtml($filter->getName()) ?>:
+                <?php /* Filter labels are server-formatted (price -> markup, others -> text);
+                        strip tags before escape to keep the chip compact. */ ?>
+                <?= $escaper->escapeHtml($block->stripTags((string) $filter->getLabel())) ?>
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </a>
+        <?php endforeach; ?>
+
+        <?php $clearUrl = (string) $block->getClearUrl(); ?>
+        <?php if ($clearUrl !== ''): ?>
+            <?php $publicClear = $listing->toPublicUrl($listBlock, $clearUrl); ?>
+            <a href="<?= $escaper->escapeUrl($publicClear) ?>"
+               <?php if ($fragmentUrl !== ''): ?>
+                   hx-get="<?= $escaper->escapeUrl($listing->toFragmentUrl($listBlock, $clearUrl)) ?>"
+                   hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
+                   hx-swap="outerHTML"
+                   hx-push-url="<?= $escaper->escapeUrl($publicClear) ?>"
+               <?php endif; ?>
+               data-hyperion-filter-clear
+               class="text-sm text-muted hover:text-primary underline transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                <?= $escaper->escapeHtml(__('Clear all')) ?>
+            </a>
+        <?php endif; ?>
+    <?php endif; ?>
+</div>

@@ -1,0 +1,31 @@
+{
+    "name": "magentofullstackdev/hyperion-composer-repository",
+    "description": "Composer repository of the Hyperion theme and modules, published on GitHub Pages",
+    "homepage": "https://magentofullstackdev.github.io/hyperion",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "app/code/Magentofullstackdev/*",
+            "options": {
+                "symlink": false
+            }
+        },
+        {
+            "type": "path",
+            "url": "app/design/frontend/Magentofullstackdev/*",
+            "options": {
+                "symlink": false
+            }
+        }
+    ],
+    "require-all": true,
+    "require-dependencies": false,
+    "require-dev-dependencies": false,
+    "archive": {
+        "directory": "dist",
+        "format": "zip",
+        "skip-dev": true
+    },
+    "output-html": true,
+    "pretty-print": true
+}

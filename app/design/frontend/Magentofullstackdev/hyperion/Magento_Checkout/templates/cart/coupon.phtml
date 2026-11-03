@@ -1,0 +1,72 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Hyperion coupon -- thin server shell that mounts <hyperion-coupon-form>.
+ *
+ * The Lit element owns all coupon UI state (expand/collapse, loading,
+ * Apply<->Cancel toggle) per the project's SRP rule -- see
+ * `memory/feedback_srp_components.md` and
+ * `web/js/components/hyperion-coupon-form.js`. That component is shared
+ * between cart and checkout pages. The translated copy travels as
+ * attributes; the component carries the English defaults.
+ *
+ * Children of this block (core's `Magento_ReCaptchaCheckoutSalesRule`
+ * mounts the `coupon_code` reCAPTCHA here, see the theme layouts under
+ * Magento_ReCaptchaCheckoutSalesRule/) are rendered inside an inert
+ * <template>: the component moves them into its own <form> after the
+ * first render, so <hyperion-recaptcha> gates the submit and the hidden
+ * `g-recaptcha-response` input is part of the HTMX request body. The HTMX
+ * answer (CouponPostPlugin) renders this very template again, children
+ * included.
+ *
+ * Before the Lit bundle upgrades the element, the noscript fallback
+ * below keeps the coupon form usable as a plain HTML form that posts
+ * through the standard browser navigation path. The `remove` flag is only
+ * sent in cancel mode: core's reCAPTCHA observer skips the check whenever
+ * the parameter is present.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Cart\Coupon $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$appliedCoupon = $block->getAppliedCoupon();
+$actionUrl = $block->getActionUrl();
+$formKey = $block->getFormKey();
+$childrenHtml = trim((string) $block->getChildHtml());
+?>
+<hyperion-coupon-form
+        id="hyperion-coupon-form"
+        class="block"
+        applied-coupon="<?= $escaper->escapeHtmlAttr($appliedCoupon) ?>"
+        action-url="<?= $escaper->escapeHtmlAttr($actionUrl) ?>"
+        form-key="<?= $escaper->escapeHtmlAttr($formKey) ?>"
+        heading-label="<?= $escaper->escapeHtmlAttr(__('Apply Discount Code')) ?>"
+        placeholder-label="<?= $escaper->escapeHtmlAttr(__('Enter discount code')) ?>"
+        apply-label="<?= $escaper->escapeHtmlAttr(__('Apply Discount')) ?>"
+        cancel-label="<?= $escaper->escapeHtmlAttr(__('Cancel Coupon')) ?>"
+        input-label="<?= $escaper->escapeHtmlAttr(__('Discount code')) ?>">
+    <?php if ($childrenHtml !== ''): ?>
+        <template data-hyperion-coupon-children><?= /* @noEscape */ $childrenHtml ?></template>
+    <?php endif; ?>
+    <noscript>
+        <section class="bg-surface rounded-xl border border-subtle p-4">
+            <form method="post" action="<?= $escaper->escapeUrl($actionUrl) ?>" class="flex items-stretch gap-2 min-w-0">
+                <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
+                <?php if ($appliedCoupon !== ''): ?>
+                    <input type="hidden" name="remove" value="1">
+                <?php endif; ?>
+                <input type="text" name="coupon_code"
+                       value="<?= $escaper->escapeHtmlAttr($appliedCoupon) ?>"
+                       placeholder="<?= $escaper->escapeHtmlAttr(__('Enter discount code')) ?>"
+                       aria-label="<?= $escaper->escapeHtmlAttr(__('Discount code')) ?>"
+                       class="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface border border-subtle text-secondary">
+                <button type="submit"
+                        class="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-on-primary border border-primary hover:bg-primary-hover">
+                    <?= $escaper->escapeHtml($appliedCoupon !== '' ? __('Cancel Coupon') : __('Apply Discount')) ?>
+                </button>
+            </form>
+        </section>
+    </noscript>
+</hyperion-coupon-form>

@@ -1,0 +1,82 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist view: card grid + bulk actions, no RequireJS.
+ *
+ * One outer form posts to `wishlist/index/update` (qty + comment of every
+ * card). The per-card and bulk actions live inside that same form as
+ * submit buttons with their own `formaction` (add to cart, add all to
+ * cart, remove), so nothing is nested and the typed quantities travel
+ * with every action. "Share Wish List" is the native `save_and_share`
+ * submit: the update controller saves first, then redirects to the
+ * share form.
+ *
+ * The `group` class on the section drives the empty state after the last
+ * card was removed over HTMX (see item/column/remove.phtml).
+ *
+ * The outer H1 is owned by the account shell.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$updateUrl = $block->getUrl('wishlist/index/update', ['wishlist_id' => $block->getWishlistInstance()->getId()]);
+$hasItems = $block->hasWishlistItems();
+?>
+<section class="group space-y-6" aria-labelledby="hyperion-account-heading">
+
+    <form id="wishlist-view-form"
+          action="<?= $escaper->escapeUrl($updateUrl) ?>"
+          method="post"
+          class="space-y-6">
+
+        <?= $block->getBlockHtml('formkey') ?>
+        <?php if ($hasItems): ?>
+            <?php // First submit of the form: Enter in a quantity field updates instead of hitting a card button. ?>
+            <button type="submit" name="do" value="1" class="sr-only" tabindex="-1" aria-hidden="true">
+                <?= $escaper->escapeHtml(__('Update Wish List')) ?>
+            </button>
+        <?php endif; ?>
+        <?= $block->getChildHtml('top') ?>
+
+        <?php if ($hasItems): ?>
+            <?php $block->getChildBlock('items')->setItems($block->getWishlistItems()); ?>
+            <?= $block->getChildHtml('items') ?>
+        <?php endif; ?>
+
+        <div class="<?= $hasItems ? 'hidden group-[&:not(:has(article))]:block' : 'block' ?>
+                    py-16 text-center space-y-3 bg-surface border border-subtle rounded-xl"
+             role="status">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+            <p class="text-muted">
+                <?= $escaper->escapeHtml(__('You have no items in your wish list.')) ?>
+            </p>
+        </div>
+
+        <?= $block->getChildHtml('bottom') ?>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-subtle">
+            <div class="flex flex-wrap items-center gap-4">
+                <a href="<?= $escaper->escapeUrl($block->getBackUrl()) ?>"
+                   class="text-sm font-medium text-primary hover:text-primary-hover
+                          underline-offset-2 hover:underline">
+                    <?= $escaper->escapeHtml(__('Back')) ?>
+                </a>
+                <?php if ($hasItems): ?>
+                    <?= $block->getChildHtml('wishlist.rss.link') ?>
+                <?php endif; ?>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 group-[&:not(:has(article))]:hidden">
+                <?= $block->getChildHtml('control_buttons') ?>
+            </div>
+        </div>
+    </form>
+
+    <?= $block->getChildHtml('wishlist_item_pager') ?>
+</section>

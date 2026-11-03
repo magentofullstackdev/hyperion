@@ -1,0 +1,535 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion -- attribute-keyed styles for <hyperion-*> custom elements.
+ *
+ * Rules live in the main theme CSS bundle (imported from entry.css) so
+ * they apply on first paint, before the per-component Lit chunk
+ * upgrades the element.
+ *
+ * For `<hyperion-notification>` specifically we rely on DATA attributes
+ * -- not utility classes -- for positioning and tone. HTMX 2.x's swap
+ * algorithm temporarily replaces the class attribute with its own
+ * transition markers (`htmx-swapping htmx-added htmx-settling`) during
+ * the settle phase (default 20ms). The server-set Tailwind classes
+ * come back only after settle, which on a first-click produced a
+ * visible in-flow flash above the product grid -- the user saw the
+ * message text at relative-positioned width 1224px before `position:
+ * fixed` reasserted itself. Keying the layout contract off
+ * `[data-hyperion-notification]` / `[data-tone]` keeps the toast
+ * positioned and styled throughout the swap because HTMX never
+ * touches data-* attributes.
+ */
+
+hyperion-notification {
+    display: block;
+}
+
+hyperion-notification[hidden] {
+    display: none;
+}
+
+/* Visible toast -- positioning + chrome. The `:not([hidden])` guard
+   stops this kicking in for the persistent placeholder that every
+   page ships. Padding reserves space for the close button that the
+   Lit component renders in its Shadow DOM. */
+hyperion-notification[data-hyperion-notification]:not([hidden]) {
+    position: fixed;
+    top: 6rem;
+    right: 1rem;
+    z-index: 60;
+    max-width: 24rem;
+    padding: 1rem 2.5rem 1rem 1rem;
+    border-radius: 0.5rem;
+    box-shadow:
+        0 10px 15px -3px rgb(0 0 0 / 0.1),
+        0 4px 6px -4px rgb(0 0 0 / 0.1);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+hyperion-notification[data-tone='success'] {
+    background-color: rgb(var(--color-success));
+    color: rgb(var(--color-on-success));
+}
+
+hyperion-notification[data-tone='error'] {
+    background-color: rgb(var(--color-error));
+    color: rgb(var(--color-on-error));
+}
+
+/* Warning tone -- amber / ochre well-contrasted against both light and
+   dark themes. Mirrors the success/error contract: filled background
+   with `text-on-success`-equivalent on-token. Falls back to the
+   existing `--color-accent` hue if a deployment hasn't set the
+   dedicated warning token yet. */
+hyperion-notification[data-tone='warning'] {
+    background-color: rgb(var(--color-warning, var(--color-accent)));
+    color: rgb(var(--color-on-warning, var(--color-secondary)));
+}
+
+hyperion-notification[data-tone='info'] {
+    background-color: rgb(var(--color-info, var(--color-primary)));
+    color: rgb(var(--color-on-info, var(--color-on-primary)));
+}
+
+/* --- Hyperion list toggle (wishlist / compare buttons) -------------
+ * The custom element wraps the server-rendered HTMX form, so it must
+ * not become a box of its own: `display: contents` keeps the form as
+ * the flex child of the action row. `active` is reflected by
+ * hyperion-list-toggle.js from the header-fragment state; the rules
+ * below paint the "already in the list" look (filled icon, primary
+ * tint) over the neutral utility classes the template ships. */
+hyperion-list-toggle {
+    display: contents;
+}
+
+hyperion-list-toggle[active] button {
+    color: rgb(var(--color-primary));
+    border-color: rgb(var(--color-primary) / 0.4);
+    background-color: rgb(var(--color-primary) / 0.1);
+}
+
+hyperion-list-toggle[active] button svg {
+    fill: currentColor;
+}
+
+/* --- Additional sidebar (2 / 3 column layouts) --------------------
+ * sidebar.additional holds the client-rendered wishlist / compare
+ * sidebars and the recently viewed widgets, which set `hidden` on
+ * themselves while they have nothing to show. The column wrapper
+ * (Magento_Theme/page_layout/*.xml, `empty:hidden` covers the no-child
+ * case) must collapse as well when every child is hidden, otherwise the
+ * main column loses its width for nothing. */
+.sidebar-additional:not(:has(> :not([hidden]))) {
+    display: none;
+}
+
+/* A hidden child must also leave the grid: the sidebar elements are
+ * `display: block` once defined, which outranks the UA rule for `hidden`,
+ * and on the 1column row (a grid of cards) a hidden wishlist card kept its
+ * cell and pushed the compare card into the second column. */
+.sidebar-additional > [hidden] {
+    display: none;
+}
+
+/* Page layouts (Magento_Theme/page_layout/*.xml) are grids that pin `main`
+ * to the content column, so a two or three column page whose rails are
+ * empty (`empty:hidden`) or all hidden (the rule above) would keep an
+ * empty rail beside the content: account pages (core declares them
+ * 2columns-left), a guest on a page whose only rail content is the
+ * wishlist / compare sidebars. A rail counts as visible when its wrapper
+ * has a child that is not hidden (`:has()` cannot nest, hence the child
+ * chain). With no visible rail the grid is one column; on 3columns with
+ * one visible rail the other column goes. */
+/* The main column is parsed before the rails: while the HTML streams in, a
+ * page that WILL have a rail would be laid out as one column for a frame and
+ * jump when the rail arrives (a layout shift). Pages whose rail is certain
+ * from the server (layered navigation: `page-with-filter`) keep their columns
+ * from the first frame and skip the collapse. (Account pages are NOT such a
+ * page: Hyperion renders the account menu inside `main`, the rails stay hidden.) */
+@media (min-width: 768px) {
+    body:not(.page-with-filter) .page-columns:not(:has(> .sidebar > :not([hidden]))) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body:not(.page-with-filter) .page-columns:not(:has(> .sidebar > :not([hidden]))) > .column.main {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .page-layout-3columns .page-columns:has(> .sidebar-main > :not([hidden])):not(:has(> .sidebar-additional > :not([hidden]))) {
+        grid-template-columns: 14rem minmax(0, 1fr);
+    }
+    .page-layout-3columns .page-columns:not(:has(> .sidebar-main > :not([hidden]))):has(> .sidebar-additional > :not([hidden])) {
+        grid-template-columns: minmax(0, 1fr) 14rem;
+    }
+    .page-layout-3columns .page-columns:not(:has(> .sidebar-main > :not([hidden]))) > .column.main {
+        grid-column: 1;
+    }
+    .page-layout-3columns .page-columns:not(:has(> .sidebar-main > :not([hidden]))) > .sidebar-additional {
+        grid-column: 2;
+    }
+}
+@media (min-width: 1024px) {
+    .page-layout-3columns .page-columns:has(> .sidebar-main > :not([hidden])):not(:has(> .sidebar-additional > :not([hidden]))) {
+        grid-template-columns: 16rem minmax(0, 1fr);
+    }
+    .page-layout-3columns .page-columns:not(:has(> .sidebar-main > :not([hidden]))):has(> .sidebar-additional > :not([hidden])) {
+        grid-template-columns: minmax(0, 1fr) 16rem;
+    }
+}
+
+/* Product grid beside a rail (2 / 3 column layouts with the layered
+ * navigation): between the md and xl breakpoints the content column is too
+ * narrow for the three and four tiles per row that list.phtml asks for
+ * (names wrapped per word, the Add to Cart label on two lines, the wish
+ * list / compare labels broken), so it holds two per row until xl. */
+@media (min-width: 768px) and (max-width: 1279.98px) {
+    body.page-with-filter:is(.page-layout-2columns-left, .page-layout-2columns-right, .page-layout-3columns) [data-hyperion-tiles][data-hyperion-list-mode="grid"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Tile action cluster (product/list.phtml and the CatalogWidget grid share
+ * the markup): a size container, so the Add to Cart button and the wish list
+ * / compare labels follow the WIDTH OF THE TILE, not the viewport. A 224px
+ * tile beside a rail at 1440 and a 160px tile on a phone are the same case,
+ * a 300px tile beside a rail at 1024 is not. The cluster is a stretched
+ * block in the tile's flex column, so inline-size containment costs no
+ * layout (its width never came from its content). Measured in the button
+ * font (bold uppercase, system-ui): the longest catalog phrase at 14px with
+ * the icon and px-3 needs 248px ("ADICIONAR AO CARRINHO" 200 + 24 + 24),
+ * "AGGIUNGI AL CARRELLO" 231; at 12px with px-2 they need 187 / 173, with
+ * normal tracking 174 / 161. */
+[data-hyperion-tile-actions] {
+    container-type: inline-size;
+}
+
+/* Under 248px: text-xs, no icon, tighter padding and tracking, so the
+ * translations stay on one line in a 186 to 247px button (beside a rail at
+ * 1280 and 1440, the search grid at 768). The wish list / compare labels
+ * (shown from xl by their utilities) need over 100px per button for the
+ * icon and "LISTA DESIDERI": they stay screen reader only in a narrow tile,
+ * the buttons keep their aria-label and title. */
+@container (max-width: 15.49rem) {
+    /* Two attribute selectors: this file precedes the Tailwind utilities,
+     * so a single one would lose to `text-sm`, `px-3`, `tracking-wider` and
+     * `leading-tight` on the button. */
+    [data-hyperion-tile-actions] [data-hyperion-tile-cart] {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        font-size: 0.75rem;
+        line-height: 1rem;
+        letter-spacing: 0.025em;
+    }
+
+    [data-hyperion-tile-actions] [data-hyperion-tile-cart-icon] {
+        display: none;
+    }
+
+    [data-hyperion-tile-actions] [data-hyperion-toggle-label] {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+    }
+}
+
+/* Under 184px (two tiles per row on a phone: 126 to 131px buttons, beside a
+ * rail at 768: 175px) a translated label may need two lines even at
+ * text-xs: normal tracking buys the last few pixels and a two line
+ * min-height (2 x 1rem + py-2) keeps every button of the grid 48px tall,
+ * whatever its label. */
+@container (max-width: 11.49rem) {
+    [data-hyperion-tile-actions] [data-hyperion-tile-cart] {
+        min-height: 3rem;
+        letter-spacing: 0;
+    }
+}
+
+/* Search autocomplete sidebar (HyperionSearch::suggest.phtml): the recent
+ * searches section is hidden until lib/search-history.js fills it from
+ * localStorage, and a store nobody searched yet has no popular terms. With
+ * every section hidden the column goes, and the product column loses the
+ * divider it would otherwise keep against an invisible sibling. */
+[data-hyperion-suggest-aside]:not(:has(> :not([hidden]))) {
+    display: none;
+}
+/* Specificity above the `divide-*` utilities (0,3,0), which would keep the
+ * border against the hidden column. */
+[data-hyperion-search-suggest] > [data-hyperion-suggest-aside]:not(:has(> :not([hidden]))) + [data-hyperion-suggest-section] {
+    border-top-width: 0;
+    border-left-width: 0;
+}
+
+/* --- Hyperion switch (animated iOS-style toggle) -----------------
+ * A reusable two-element checkbox companion. Usage:
+ *
+ *     <label class="flex items-center gap-3 cursor-pointer select-none">
+ *         <input type="checkbox" class="peer sr-only" name="...">
+ *         <span class="hyperion-switch" aria-hidden="true">
+ *             <span class="hyperion-switch__knob"></span>
+ *         </span>
+ *         Change Password
+ *     </label>
+ *
+ * Tailwind's `peer-checked:` modifier applies to the sibling `span`
+ * that wraps the track. The knob (a child of that span) inherits the
+ * translation via a descendant selector on the CHECKED peer state --
+ * keyed to the `checked` class we toggle below, since Tailwind cannot
+ * express "checkbox checked -> descendant transform" from a child
+ * utility alone. */
+.hyperion-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 2.25rem;
+    height: 1.25rem;
+    padding: 0 0.125rem;
+    border-radius: 9999px;
+    background-color: rgb(var(--color-subtle));
+    transition: background-color 180ms ease-in-out;
+    flex-shrink: 0;
+}
+
+.hyperion-switch__knob {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    background-color: rgb(var(--color-surface));
+    border-radius: 9999px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+    transform: translateX(0);
+    transition: transform 180ms ease-in-out;
+}
+
+/* Sibling-checkbox driven state -- whenever the input right before the
+   switch span is checked, slide the knob + flip the track color. */
+.peer:checked + .hyperion-switch {
+    background-color: rgb(var(--color-primary));
+}
+
+.peer:checked + .hyperion-switch .hyperion-switch__knob {
+    transform: translateX(1rem);
+}
+
+.peer:focus-visible + .hyperion-switch {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+}
+
+.peer:disabled + .hyperion-switch {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Order document tables (order, invoice, shipment, refund). The rows
+   come from Magento's core item renderers, which emit their own
+   <tr><td class="col ..."> markup, so the cells are styled from the
+   table instead of from utilities on each cell. */
+.hyperion-order-table {
+    width: 100%;
+    font-size: 0.875rem;
+    text-align: left;
+    color: rgb(var(--color-secondary));
+}
+
+.hyperion-order-table thead th {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    color: rgb(var(--color-muted));
+    border-bottom: 1px solid rgb(var(--color-subtle));
+}
+
+.hyperion-order-table tbody td {
+    padding: 0.75rem 0.5rem;
+    vertical-align: top;
+    border-bottom: 1px solid rgb(var(--color-divider));
+}
+
+.hyperion-order-table th:first-child,
+.hyperion-order-table td:first-child {
+    padding-left: 0;
+}
+
+.hyperion-order-table .col.price,
+.hyperion-order-table .col.qty,
+.hyperion-order-table .col.subtotal,
+.hyperion-order-table .col.discount,
+.hyperion-order-table .col.total {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.hyperion-order-table .product-item-name {
+    font-weight: 600;
+}
+
+.hyperion-order-table .item-options {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: rgb(var(--color-muted));
+}
+
+.hyperion-order-table .item-options dt {
+    display: inline;
+    font-weight: 500;
+}
+
+.hyperion-order-table .item-options dt::after {
+    content: ': ';
+}
+
+.hyperion-order-table .item-options dd {
+    display: inline;
+    margin-right: 0.5rem;
+}
+
+.hyperion-order-table .items-qty .title::after {
+    content: ': ';
+}
+
+/* Order document tabs (Items Ordered / Invoices / Shipments / Refunds):
+   core Html\Links markup, <li><a> or <li class="current"><strong>. */
+.hyperion-order-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid rgb(var(--color-subtle));
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.hyperion-order-tabs a,
+.hyperion-order-tabs strong {
+    display: block;
+    padding: 0.625rem 1rem;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    color: rgb(var(--color-muted));
+}
+
+.hyperion-order-tabs a:hover {
+    color: rgb(var(--color-primary));
+}
+
+.hyperion-order-tabs .current strong {
+    color: rgb(var(--color-primary));
+    border-bottom-color: rgb(var(--color-primary));
+    font-weight: 600;
+}
+
+/*
+ * htmx request indicator. htmx would inject these two rules in a <style>
+ * tag at runtime; that is switched off (`includeIndicatorStyles: false` in
+ * the htmx-config meta tag) so no inline style is needed.
+ */
+.htmx-indicator {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 200ms ease-in;
+}
+
+/* --- Header drawers before their chunk upgrades them --------------
+ * `<hyperion-dropdown>` (account menu, mobile menu) and
+ * `<hyperion-mini-cart>` ship their panel content in the light DOM
+ * (the account menu placeholder, the mobile navigation, the drawer
+ * title). Until the component chunk defines the element, that content
+ * would render in flow next to the trigger and widen the action bar,
+ * which pushes the centered top menu and the icons sideways for the
+ * time the chunk takes to arrive (visible on slow networks). Only the
+ * trigger is shown before the upgrade; the mini-cart host mirrors the
+ * 0.5rem padding of its shadow trigger button so the footprint of the
+ * action bar is the same before and after the upgrade (checked by
+ * frontend/e2e/pw-ui-polish.mjs with scripting off against the upgraded page). */
+hyperion-dropdown:not(:defined) > :not([slot="trigger"]),
+hyperion-mini-cart:not(:defined) > :not([slot="trigger"]) {
+    display: none;
+}
+
+hyperion-mini-cart:not(:defined) {
+    padding: 0.5rem;
+}
+
+/* --- Infinite loading of the listings ------------------------------ */
+/* htmx puts `htmx-request` on the hx-indicator (the load more container)
+   while the next page is on its way: the link shows its loading label. */
+[data-hyperion-load-more].htmx-request [data-hyperion-load-more-label] {
+    display: none;
+}
+
+[data-hyperion-load-more].htmx-request [data-hyperion-load-more-loading][hidden] {
+    display: inline;
+}
+
+[data-hyperion-load-more].htmx-request [data-hyperion-load-more-button] {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* --- Swatch skeleton (no layout shift) ----------------------------- */
+/* <hyperion-swatches> ships a server rendered skeleton with the final
+   geometry of its rows (product/swatches/skeleton.phtml): visible while
+   the element is not upgraded, gone as soon as it is (the component
+   renders no slot; this rule covers the slot it renders without a config). */
+hyperion-swatches:not(:defined) {
+    display: block;
+}
+
+hyperion-swatches:defined > [data-hyperion-swatch-skeleton] {
+    display: none;
+}
+
+/* --- Gallery skeleton (no layout shift) ---------------------------- */
+/* <hyperion-gallery> ships its first image and a skeleton of the thumbnail
+   strip as light children (product/view.phtml); both show until the element
+   upgrades and renders its own stage (no slot once it has images). */
+hyperion-gallery:not(:defined) {
+    display: block;
+}
+
+hyperion-gallery:defined > [data-hyperion-gallery-skeleton] {
+    display: none;
+}
+
+/* --- Tabs before the upgrade (CLS) ---------------------------------- */
+/* <hyperion-tabs> (product/view.phtml) ships a skeleton of its tab strip and
+   every panel as light children. Until the chunk arrives only the strip and
+   the first panel show, the panel with the 1rem padding the shadow
+   `[part="panel"]` gives it, so the section has the height the upgraded
+   component has; every panel in the flow was 1450px that collapsed to 282.
+   Once defined the component hides the inactive tabs itself and the strip
+   goes (it would be slotted into the panel). */
+hyperion-tabs:not(:defined) > hyperion-tab {
+    display: block;
+    padding: 1rem 0;
+}
+
+hyperion-tabs:not(:defined) > hyperion-tab:not(:first-of-type) {
+    display: none;
+}
+
+hyperion-tabs:defined > [data-hyperion-tabs-skeleton] {
+    display: none;
+}
+
+/* --- PayPal smart buttons placement (CLS) --------------------------- */
+/* The SDK renders `.paypal-buttons` as an inline-block: on the text baseline
+   it adds a 6px descender gap under the iframe. A column flex container
+   makes it a block, so the placement measures exactly the rows the view
+   model reserved (HyperionCheckout\ViewModel\PaypalExpress::getReservedHeight). */
+hyperion-paypal-buttons [data-hyperion-paypal-container] {
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- reCAPTCHA v3 legal note (A06, contrast) ---------------------- */
+/* `Magento_ReCaptchaFrontendUi::recaptcha.phtml` prints the Google
+   attribution at 12px wherever a protected form renders: on light surfaces
+   (login, register, contact, checkout) and inside the dark footer newsletter
+   block. `text-muted` is 3.67:1 on the inverted surface, so the colour is
+   chosen by the surface: muted (4.83:1 on surface, 4.63:1 on surface-raised)
+   or on-inverted-muted (6.99:1 on surface-inverted). The links inherit it
+   (`a { color: inherit }`) and stay underlined. */
+[data-hyperion-recaptcha-legal] {
+    color: rgb(var(--color-muted));
+}
+
+.bg-inverted [data-hyperion-recaptcha-legal] {
+    color: rgb(var(--color-on-inverted-muted));
+}

@@ -1,0 +1,75 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * "Order Information" card of the print documents (invoice, shipment,
+ * refund): addresses, shipping method with tracking numbers, payment
+ * method with its details. Rendered through fetchView() by the print
+ * templates, which set on the block:
+ *   print_shipping_address_html, print_billing_address_html (formatted HTML),
+ *   print_shipping_method (string), print_tracks (list of [title, number]),
+ *   print_is_virtual (bool).
+ *
+ * @var \Magento\Sales\Block\Order\PrintOrder\Invoice|\Magento\Sales\Block\Order\PrintOrder\Shipment|\Magento\Sales\Block\Order\PrintOrder\Creditmemo $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$order = $block->getOrder();
+$payment = $order->getPayment();
+$paymentRows = $viewModels->require(\Magentofullstackdev\HyperionCustomer\ViewModel\Sales\PaymentInfo::class)
+    ->getDetails($block->getChildBlock('payment_info'), $payment);
+$tracks = (array) $block->getData('print_tracks');
+$headingClass = 'text-sm font-semibold text-muted uppercase tracking-wide mb-2';
+?>
+<article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+    <h3 class="text-base font-semibold text-secondary"><?= $escaper->escapeHtml(__('Order Information')) ?></h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div>
+            <h4 class="<?= $escaper->escapeHtmlAttr($headingClass) ?>"><?= $escaper->escapeHtml(__('Billing Address')) ?></h4>
+            <address class="not-italic text-sm text-secondary leading-relaxed">
+                <?= /* @noEscape */ (string) $block->getData('print_billing_address_html') ?>
+            </address>
+        </div>
+        <?php if (!$block->getData('print_is_virtual')): ?>
+            <div>
+                <h4 class="<?= $escaper->escapeHtmlAttr($headingClass) ?>"><?= $escaper->escapeHtml(__('Shipping Address')) ?></h4>
+                <address class="not-italic text-sm text-secondary leading-relaxed">
+                    <?= /* @noEscape */ (string) $block->getData('print_shipping_address_html') ?>
+                </address>
+            </div>
+            <div>
+                <h4 class="<?= $escaper->escapeHtmlAttr($headingClass) ?>"><?= $escaper->escapeHtml(__('Shipping Method')) ?></h4>
+                <p class="text-sm text-secondary">
+                    <?= $escaper->escapeHtml((string) $block->getData('print_shipping_method') ?: __('No shipping information available')) ?>
+                </p>
+                <?php if ($tracks): ?>
+                    <dl class="mt-2 space-y-1 text-sm">
+                        <?php foreach ($tracks as [$title, $number]): ?>
+                            <div>
+                                <dt class="inline text-muted"><?= $escaper->escapeHtml($title) ?>:</dt>
+                                <dd class="inline font-mono text-secondary"><?= $escaper->escapeHtml($number) ?></dd>
+                            </div>
+                        <?php endforeach; ?>
+                    </dl>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+        <div>
+            <h4 class="<?= $escaper->escapeHtmlAttr($headingClass) ?>"><?= $escaper->escapeHtml(__('Payment Method')) ?></h4>
+            <p class="text-sm text-secondary"><?= $escaper->escapeHtml($payment?->getMethodInstance()->getTitle() ?? '') ?></p>
+            <?php if ($paymentRows !== []): ?>
+                <dl class="mt-2 space-y-2 text-sm">
+                    <?php foreach ($paymentRows as $row): ?>
+                        <div>
+                            <?php if ($row['label'] !== ''): ?>
+                                <dt class="text-xs font-medium text-muted"><?= $escaper->escapeHtml($row['label']) ?></dt>
+                            <?php endif; ?>
+                            <dd class="text-secondary <?= $row['multiline'] ? 'whitespace-pre-line' : '' ?>"><?= $escaper->escapeHtml($row['value']) ?></dd>
+                        </div>
+                    <?php endforeach; ?>
+                </dl>
+            <?php endif; ?>
+        </div>
+    </div>
+</article>

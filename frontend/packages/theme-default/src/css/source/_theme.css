@@ -1,0 +1,68 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Hyperion theme -- design-token foundation.
+ *
+ * Single source of truth for the suite-level palette and typography
+ * tokens lives in @magentofullstackdev/hyperion-shared. This file imports
+ * them and adds theme-level component-specific tokens (slider, carousel,
+ * mini-cart, dropdown, image-zoom, etc.) that are not part of the
+ * cross-package shared contract.
+ *
+ * Child themes override any of these declarations in their own
+ * `_theme.css` later in the cascade -- see THEMING_GUIDE.md.
+ */
+@import "@magentofullstackdev/hyperion-shared/tokens/index.css";
+
+/* The viewport keeps its scrollbar gutter while a drawer locks the body
+   scroll, so opening the mini-cart or the mobile menu never shifts the page
+   (lib/scroll-lock.js pads the body in browsers without this property). */
+html {
+    scrollbar-gutter: stable;
+    /* The header is sticky (h-16 plus its border): anchor jumps (skip link,
+       tabs) and scrollIntoView() land below it instead of under it. */
+    scroll-padding-top: calc(4rem + 1px);
+}
+
+:root {
+    /* --- Motion: the one knob of _motion.css, 0ms turns it off --- */
+    --hyperion-motion-fast: 120ms;
+
+    /* --- Component: hyperion-slider --- */
+    --slide-gap: 0px;
+    --slide-transition-duration: 300ms;
+
+    /* --- Component: hyperion-carousel --- */
+    --carousel-gap: 16px;
+    --carousel-item-width: 200px;
+
+    /* --- Component: hyperion-mini-cart --- */
+    --panel-border-radius: 0.5rem;
+    --panel-width: 32rem;
+
+    /* --- Component: hyperion-dropdown --- */
+    --dropdown-border-radius: 0.25rem;
+
+    /* --- Component: hyperion-image-zoom --- */
+    --zoom-scale: 2.5;
+
+    /* --- Component: hyperion-checkout --- */
+    --checkout-border-radius: 0.5rem;
+    --checkout-section-gap: 1.5rem;
+
+    /* --- Component: hyperion-swatches --- */
+    --swatch-size: 2rem;
+    --swatch-border-radius: 0.25rem;
+    --swatch-unavailable-opacity: 0.4;
+
+    /* --- Component: hyperion-tabs --- */
+    --tabs-header-padding: 0.75rem 1rem;
+
+    /* --- Component: hyperion-accordion --- */
+    --accordion-header-padding: 1rem;
+    --accordion-body-padding: 1rem;
+
+    /* --- Component: hyperion-rating --- */
+    --rating-star-size: 1.5rem;
+}

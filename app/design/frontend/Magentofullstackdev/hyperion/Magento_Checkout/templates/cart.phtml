@@ -1,0 +1,114 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion cart page -- 2-column on lg+ (items left, sticky summary right).
+ * Hyvä-inspired layout, newversion architecture (Magentofullstackdev\HyperionCheckout\
+ * ViewModel\CartData) and semantic Tailwind tokens.
+ *
+ * @var \Magento\Checkout\Block\Cart $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CartData|null $cart */
+$cart = $block->getData('cart_data_view_model');
+
+$itemsCount = $cart?->getItemCount() ?? (int) $block->getItemsCount();
+$discount = $cart?->getDiscountAmount() ?? 0.0;
+$shipping = $cart?->getShippingAmount() ?? 0.0;
+$tax = $cart?->getTaxAmount() ?? 0.0;
+$appliedCoupon = $cart?->getAppliedCoupon() ?? '';
+$checkoutUrl = $cart?->getCheckoutUrl() ?? $block->getUrl('checkout');
+?>
+<?php if ($itemsCount > 0): ?>
+    <div class="mb-6">
+        <h1 class="text-2xl md:text-3xl font-bold text-secondary tracking-tight">
+            <?= $escaper->escapeHtml(__('Shopping Cart')) ?>
+        </h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
+
+        <?php /* -- Items + cross-sell ------------------------ */ ?>
+        <div class="space-y-6 min-w-0">
+            <?= $block->getChildHtml('with-items') ?>
+            <?= $block->getChildHtml('checkout.cart.crosssell') ?>
+        </div>
+
+        <?php /* -- Summary sidebar --------------------------- */ ?>
+        <aside id="cart-summary"
+               class="bg-surface rounded-xl border border-subtle shadow-sm p-6 sticky top-24">
+            <h2 class="text-base font-bold text-secondary uppercase tracking-wider mb-4">
+                <?= $escaper->escapeHtml(__('Summary')) ?>
+            </h2>
+
+            <dl class="space-y-3 text-sm">
+                <div class="flex items-center justify-between">
+                    <dt class="text-muted">
+                        <?= $escaper->escapeHtml(__('Subtotal')) ?>
+                    </dt>
+                    <dd class="font-medium text-secondary">
+                        <?= $cart ? $escaper->escapeHtml($cart->getFormattedSubtotal()) : '' ?>
+                    </dd>
+                </div>
+
+                <?php if ($discount < 0): ?>
+                    <div class="flex items-center justify-between text-success">
+                        <dt>
+                            <?= $escaper->escapeHtml(__('Discount')) ?>
+                            <?php if ($appliedCoupon !== ''): ?>
+                                <span class="text-xs text-muted">(<?= $escaper->escapeHtml($appliedCoupon) ?>)</span>
+                            <?php endif; ?>
+                        </dt>
+                        <dd class="font-medium">
+                            <?= $cart ? $escaper->escapeHtml($cart->getFormattedDiscount()) : '' ?>
+                        </dd>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($shipping > 0): ?>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-muted"><?= $escaper->escapeHtml(__('Shipping')) ?></dt>
+                        <dd class="font-medium text-secondary">
+                            <?= $cart ? $escaper->escapeHtml($cart->getFormattedShipping()) : '' ?>
+                        </dd>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($tax > 0): ?>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-muted"><?= $escaper->escapeHtml(__('Tax')) ?></dt>
+                        <dd class="font-medium text-secondary">
+                            <?= $cart ? $escaper->escapeHtml($cart->getFormattedTax()) : '' ?>
+                        </dd>
+                    </div>
+                <?php endif; ?>
+
+                <div class="flex items-center justify-between pt-3 border-t border-subtle">
+                    <dt class="text-base font-bold text-secondary">
+                        <?= $escaper->escapeHtml(__('Order Total')) ?>
+                    </dt>
+                    <dd class="text-xl font-bold text-secondary">
+                        <?= $cart ? $escaper->escapeHtml($cart->getFormattedGrandTotal()) : '' ?>
+                    </dd>
+                </div>
+            </dl>
+
+            <a href="<?= $escaper->escapeUrl($checkoutUrl) ?>"
+               class="block mt-6 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
+                      bg-primary text-on-primary shadow-sm
+                      hover:bg-primary-hover hover:shadow-md transition-all
+                      focus:outline-none focus:ring-2 focus:ring-primary">
+                <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+            </a>
+
+            <?php $paypal = $block->getChildHtml('cart_paypal'); ?>
+            <?php if ($paypal): ?>
+                <div class="mt-3"><?= /* @noEscape */ $paypal ?></div>
+            <?php endif; ?>
+        </aside>
+    </div>
+
+<?php else: ?>
+    <?= $block->getChildHtml('no-items') ?>
+<?php endif; ?>

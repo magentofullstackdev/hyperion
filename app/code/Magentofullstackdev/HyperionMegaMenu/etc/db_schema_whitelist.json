@@ -1,0 +1,74 @@
+{
+    "hyperion_megamenu_group": {
+        "column": {
+            "group_id": true,
+            "identifier": true,
+            "title": true,
+            "menu_type": true,
+            "website_ids": true,
+            "devices": true,
+            "root_category_id": true,
+            "is_active": true,
+            "priority": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "HYPERION_MEGAMENU_GROUP_IS_ACTIVE_PRIORITY": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "HYPERION_MEGAMENU_GROUP_IDENTIFIER": true
+        }
+    },
+    "hyperion_megamenu_item": {
+        "column": {
+            "item_id": true,
+            "group_id": true,
+            "parent_id": true,
+            "title": true,
+            "is_active": true,
+            "level": true,
+            "position": true,
+            "item_type": true,
+            "item_target_value": true,
+            "url_target": true,
+            "dropdown_width": true,
+            "is_container": true,
+            "custom_class": true,
+            "nofollow": true,
+            "badge_text": true,
+            "badge_color": true,
+            "customer_group_ids": true,
+            "store_ids": true,
+            "children_depth": true,
+            "source_category_id": true
+        },
+        "index": {
+            "HYPERION_MEGAMENU_ITEM_GROUP_ID_PARENT_ID_POSITION": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "HYPERION_MEGAMENU_ITEM_GROUP_ID_HYPERION_MEGAMENU_GROUP_GROUP_ID": true
+        }
+    },
+    "hyperion_megamenu_item_store": {
+        "column": {
+            "row_id": true,
+            "item_id": true,
+            "store_id": true,
+            "title": true,
+            "badge_text": true,
+            "badge_color": true,
+            "item_target_value": true,
+            "is_active": true,
+            "position": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "FK_F678F42D209DEA938BE7B64D19D21F27": true,
+            "HYPERION_MEGAMENU_ITEM_STORE_STORE_ID_STORE_STORE_ID": true,
+            "HYPERION_MEGAMENU_ITEM_STORE_ITEM_ID_STORE_ID": true
+        }
+    }
+}

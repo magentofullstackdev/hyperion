@@ -1,0 +1,70 @@
+{
+    "name": "@magentofullstackdev/hyperion-shared",
+    "version": "0.9.0-beta.1",
+    "description": "Shared design tokens, Tailwind preset, and base Lit element/mixins for the Hyperion Magento 2 theme suite. Consumed by @magentofullstackdev/hyperion-theme and @magentofullstackdev/hyperion-checkout.",
+    "license": "MIT",
+    "author": "Sergiu Ro <sergiu.ro@magentofullstack.dev>",
+    "homepage": "https://hyperionfront.dev",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/magentofullstackdev/hyperion.git",
+        "directory": "frontend/packages/shared"
+    },
+    "bugs": {
+        "url": "https://github.com/magentofullstackdev/hyperion/issues"
+    },
+    "keywords": [
+        "magento",
+        "magento2",
+        "hyperion",
+        "tailwind",
+        "tailwind-preset",
+        "lit",
+        "design-tokens",
+        "frontend"
+    ],
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./tokens/*": "./src/tokens/*",
+        "./tailwind/preset": "./src/tailwind/preset.ts",
+        "./lit": "./src/lit/index.ts",
+        "./lit/*": "./src/lit/*",
+        "./html": "./src/html/index.ts"
+    },
+    "files": [
+        "src",
+        "README.md",
+        "LICENSE",
+        "!src/**/__tests__",
+        "!src/**/*.test.*",
+        "!src/**/*.spec.*"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "echo \"@magentofullstackdev/hyperion-shared has no build step: consumed as TypeScript source by sibling workspaces\"",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint 'src/**/*.ts'",
+        "prepublishOnly": "npm run typecheck && npm run lint"
+    },
+    "dependencies": {
+        "@tailwindcss/typography": "^0.5.19"
+    },
+    "peerDependencies": {
+        "lit": "^3.1.2",
+        "tailwindcss": "^3.4.0"
+    },
+    "devDependencies": {
+        "@typescript-eslint/eslint-plugin": "^6.15.0",
+        "@typescript-eslint/parser": "^6.15.0",
+        "eslint": "^8.56.0",
+        "typescript": "^5.3.0"
+    },
+    "engines": {
+        "node": ">=22.0.0"
+    }
+}

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    My Wish List page.
+
+    The core block tree (customer.wishlist > items > columns, control
+    buttons, pager, RSS link) is kept untouched so columns and buttons
+    scheduled by other modules keep rendering; the Hyperion look comes
+    from the template overrides under Magento_Wishlist/templates.
+    The account shell (customer_account handle) already retires
+    page.main.title and the Luma sidebar widgets.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Selected options are listed right under the product name. -->
+        <move element="customer.wishlist.item.options" destination="customer.wishlist.item.name"/>
+
+
+        <referenceBlock name="customer.wishlist.item.inner">
+            <arguments>
+                <argument name="css_class" xsi:type="string">mt-auto flex flex-col gap-3</argument>
+            </arguments>
+        </referenceBlock>
+        <referenceBlock name="customer.wishlist.item.actions">
+            <arguments>
+                <argument name="css_class" xsi:type="string">flex items-center justify-end gap-3 pt-2 border-t border-subtle</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

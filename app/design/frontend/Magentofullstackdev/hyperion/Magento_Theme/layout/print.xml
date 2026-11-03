@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Core's print handle removes the header and footer and moves the Luma logo
+             (which the theme does not render). Hyperion prints its own document header:
+             store logo, document heading, order number and date. -->
+        <referenceContainer name="main.content">
+            <block class="Magento\Theme\Block\Html\Header\Logo"
+                   name="hyperion.print.header"
+                   template="Magento_Theme::html/print/header.phtml"
+                   before="-"/>
+        </referenceContainer>
+    </body>
+</page>

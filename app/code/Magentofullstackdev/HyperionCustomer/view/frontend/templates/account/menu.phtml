@@ -1,0 +1,56 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion account dropdown menu fragment.
+ *
+ * @var \Magentofullstackdev\HyperionCustomer\Block\AccountMenu $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$customer = $block->getCustomerData();
+?>
+<?php if ($customer->isLoggedIn()): ?>
+    <div class="px-4 py-3 border-b border-divider">
+        <p class="text-xs text-text-tertiary"><?= $escaper->escapeHtml(__('Signed in as')) ?></p>
+        <p class="text-sm font-semibold text-text-default truncate">
+            <?= $escaper->escapeHtml($customer->getCustomerName()) ?>
+        </p>
+    </div>
+    <a href="<?= $escaper->escapeUrl($customer->getAccountUrl()) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('My Account')) ?>
+    </a>
+    <a href="<?= $escaper->escapeUrl($block->getUrl('sales/order/history')) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('My Orders')) ?>
+    </a>
+    <a href="<?= $escaper->escapeUrl($block->getUrl('customer/address')) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('Address Book')) ?>
+    </a>
+    <a href="<?= $escaper->escapeUrl($customer->getWishlistUrl()) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('My Wish List')) ?>
+    </a>
+    <div class="border-t border-divider my-1"></div>
+    <a href="<?= $escaper->escapeUrl($customer->getLogoutUrl()) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-accent/5 hover:text-accent transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('Sign Out')) ?>
+    </a>
+<?php else: ?>
+    <a href="<?= $escaper->escapeUrl($customer->getLoginUrl()) ?>"
+       class="block px-4 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('Sign In')) ?>
+    </a>
+    <a href="<?= $escaper->escapeUrl($customer->getRegisterUrl()) ?>"
+       class="block px-4 py-2 text-sm text-text-secondary hover:bg-primary/5 hover:text-primary transition-colors"
+       role="menuitem">
+        <?= $escaper->escapeHtml(__('Create an Account')) ?>
+    </a>
+<?php endif; ?>

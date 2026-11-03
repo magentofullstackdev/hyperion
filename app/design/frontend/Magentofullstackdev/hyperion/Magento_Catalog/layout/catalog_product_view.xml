@@ -1,0 +1,169 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion PDP (Phase 3).
+
+    Owns a single block tree under `content`:
+      hyperion.product.view          - the main PDP shell (Magentofullstackdev\HyperionCatalog\Block\Product\View)
+        hyperion.product.swatches    - as=product.info.swatches; renders <hyperion-swatches>
+      hyperion.product.details       - description + attributes (unchanged Magento blocks)
+
+    Magento's native product.info sub-tree (product.info.main, product.info.media, product.info.details)
+    is retired here because Hyperion renders the entire PDP from its own template. Leaving them in
+    would double-render and emit RequireJS-dependent widgets (gallery, review, options) that Hyperion
+    replaces with Lit custom elements.
+-->
+<page layout="1column" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <!-- Magento ships a RequireJS-driven gallery CSS; Hyperion replaces the gallery. -->
+        <remove src="mage/gallery/gallery.css"/>
+    </head>
+    <body>
+        <attribute name="itemtype" value="http://schema.org/Product"/>
+        <attribute name="itemscope" value="itemscope"/>
+
+        <!-- Use Magento_Theme breadcrumbs (server-rendered), not the Luma Knockout one. -->
+        <referenceBlock name="breadcrumbs" template="Magento_Theme::html/breadcrumbs.phtml"/>
+
+        <!-- Retire the native Magento PDP sub-tree. Hyperion owns the whole view below. -->
+        <referenceContainer name="product.info.main" remove="true"/>
+        <referenceContainer name="product.info.media" remove="true"/>
+        <referenceBlock name="product.info.details" remove="true"/>
+        <referenceBlock name="product.info" remove="true"/>
+
+        <!--
+            Retire the generic page title block. Hyperion's view.phtml renders
+            its own SEO h1 with itemprop="name" - leaving page.main.title in
+            place duplicates the product name above the main column.
+        -->
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <referenceContainer name="content">
+            <!-- - PDP main view - -->
+            <block class="Magentofullstackdev\HyperionCatalog\Block\Product\View"
+                   name="hyperion.product.view"
+                   template="Magento_Catalog::product/view.phtml"
+                   before="-">
+                <arguments>
+                    <argument name="product_view_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductView</argument>
+                    <argument name="swatch_config_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\SwatchConfig</argument>
+                    <argument name="pricing_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\Pricing</argument>
+                    <argument name="cache_lifetime" xsi:type="number">1800</argument>
+                </arguments>
+
+                <!--
+                    Swatches sub-block - alias `product.info.swatches` so the
+                    parent template's $block->getChildHtml('product.info.swatches')
+                    picks it up. The block is a plain Template element; the
+                    Hyperion SwatchConfig ViewModel is forwarded via argument so
+                    the phtml can call getEncodedConfigAttribute().
+                -->
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.product.swatches"
+                       as="product.info.swatches"
+                       template="Magento_Catalog::product/view/swatches.phtml">
+                    <arguments>
+                        <argument name="swatch_config_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\SwatchConfig</argument>
+                    </arguments>
+                </block>
+            </block>
+
+            <!--
+                Product attributes block (server-rendered). Attached to the
+                Hyperion view so `view.phtml` can surface it inside the
+                "Additional Information" tab via
+                `$block->getChildHtml('product.attributes')`. Previously
+                this block sat inside a parallel `hyperion.product.details`
+                server-rendered tab strip that duplicated the
+                `<hyperion-tabs>` component's output - we keep the data
+                source but drop the duplicate tab strip.
+            -->
+            <referenceBlock name="hyperion.product.view">
+                <block class="Magento\Catalog\Block\Product\View\Attributes"
+                       name="product.attributes"
+                       as="product.attributes"
+                       template="Magento_Catalog::product/view/attributes.phtml">
+                    <arguments>
+                        <argument translate="true" name="title" xsi:type="string">More Information</argument>
+                    </arguments>
+                </block>
+            </referenceBlock>
+        </referenceContainer>
+
+        <!--
+            Declare the Related + Upsell carousels inside the Hyperion
+            PDP view block directly. Magento's native declaration
+            attaches them to `content.aside` which Hyperion's page
+            layout doesn't surface, and a `<move>` across handles was
+            unreliable under FPC. Declaring them fresh here keeps the
+            block graph self-contained - `view.phtml` resolves them
+            by name on the layout object and calls toHtml() inline.
+        -->
+        <!-- Customizable options: core blocks, Hyperion templates, rendered inside the add-to-cart form -->
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Catalog\Block\Product\View\Options"
+                   name="hyperion.product.options"
+                   as="custom_options"
+                   template="Magento_Catalog::product/view/options.phtml">
+                <block class="Magento\Catalog\Block\Product\View\Options\Type\DefaultType"
+                       name="hyperion.product.options.default"
+                       as="default"
+                       template="Magento_Catalog::product/view/options/type/default.phtml"/>
+                <block class="Magento\Catalog\Block\Product\View\Options\Type\Text"
+                       name="hyperion.product.options.text"
+                       as="text"
+                       template="Magento_Catalog::product/view/options/type/text.phtml"/>
+                <block class="Magento\Catalog\Block\Product\View\Options\Type\File"
+                       name="hyperion.product.options.file"
+                       as="file"
+                       template="Magento_Catalog::product/view/options/type/file.phtml"/>
+                <block class="Magento\Catalog\Block\Product\View\Options\Type\Select"
+                       name="hyperion.product.options.select"
+                       as="select"
+                       template="Magento_Catalog::product/view/options/type/select.phtml"/>
+                <block class="Magento\Catalog\Block\Product\View\Options\Type\Date"
+                       name="hyperion.product.options.date"
+                       as="date"
+                       template="Magento_Catalog::product/view/options/type/date.phtml"/>
+            </block>
+        </referenceBlock>
+
+        <!--
+            "Email a Friend" link: a core product block so the
+            template reads the current product; shown by the SendFriend view
+            model only when the feature is on and the visitor may use it.
+            view.phtml prints it in the wishlist / compare action row.
+        -->
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Catalog\Block\Product\View"
+                   name="hyperion.product.sendfriend"
+                   as="sendfriend"
+                   template="Magento_Catalog::product/view/sendfriend.phtml"/>
+        </referenceBlock>
+
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\Catalog\Block\Product\ProductList\Related"
+                   name="hyperion.catalog.product.related"
+                   as="catalog.product.related"
+                   template="Magento_Catalog::product/list/items.phtml">
+                <arguments>
+                    <argument name="type" xsi:type="string">related</argument>
+                    <argument name="view_model" xsi:type="object">Magento\Catalog\ViewModel\Product\Listing\PreparePostData</argument>
+                </arguments>
+            </block>
+            <block class="Magento\Catalog\Block\Product\ProductList\Upsell"
+                   name="hyperion.product.info.upsell"
+                   as="product.info.upsell"
+                   template="Magento_Catalog::product/list/items.phtml">
+                <arguments>
+                    <argument name="type" xsi:type="string">upsell</argument>
+                    <argument name="view_model" xsi:type="object">Magento\Catalog\ViewModel\Product\Listing\PreparePostData</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion 3columns page layout.
+
+    Three grid columns on md+: `div.sidebar.main` on the left, `main` in
+    the centre, `div.sidebar.additional` on the right; one column on
+    mobile in DOM order. Narrower rails (14rem, 16rem from 1024px) keep the
+    centre column usable on tablets. What lands in the rails comes from
+    the layout handles: the layered navigation (`catalog.leftnav`, moved
+    into `sidebar.main` by Magento_LayeredNavigation/page_layout/
+    3columns.xml) and whatever Hyperion, core or an admin widget instance
+    schedules in `sidebar.additional`; an empty or all-hidden rail leaves
+    its column empty.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="1column"/>
+    <referenceContainer name="columns"
+                        htmlClass="page-columns container mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[14rem_1fr_14rem] lg:grid-cols-[16rem_1fr_16rem] gap-6 md:items-start flex-grow"/>
+    <referenceContainer name="main"
+                        htmlClass="column main min-w-0 w-full md:col-start-2 md:row-start-1"/>
+    <referenceContainer name="div.sidebar.main"
+                        htmlClass="sidebar sidebar-main w-full md:col-start-1 md:row-start-1 empty:hidden"/>
+    <!-- The 1column files of every module are merged into this layout too:
+         Magento_LayeredNavigation/page_layout/1column.xml moves the additional
+         wrapper into the inline container (under the inline filters of a
+         1column category page); here it belongs to the rail, so it is moved
+         back next to the filters. -->
+    <move element="div.sidebar.additional" destination="columns" after="div.sidebar.main"/>
+    <referenceContainer name="div.sidebar.additional"
+                        htmlClass="sidebar sidebar-additional w-full md:col-start-3 md:row-start-1 empty:hidden"/>
+</layout>

@@ -1,0 +1,370 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * @var \Magentofullstackdev\HyperionNavigation\Block\Header $block
+ * @var \Magento\Framework\Escaper $escaper
+ *
+ * Site-wide page header, Hyvä-inspired layout ported onto newversion
+ * architecture (Lit components, HTMX fragments, semantic Tailwind tokens):
+ *
+ *   [Logo] [Desktop topmenu]               [search] [compare] [wishlist]
+ *                                          [account] [mini-cart] [burger]
+ *   [full-width search panel -- hidden until #search-toggle clicked]
+ *
+ * Chrome conventions:
+ *   * Logo: wordmark or configured <img>; always visible.
+ *   * Topmenu:  <hyperion.topmenu> child block on lg+ (1024px), the burger
+ *               drawer below: a tablet has no room for the logo, six menu
+ *               items and five icons on one line.
+ *   * Search:   magnifier button toggles #search-panel open/closed. The
+ *               panel contains an HTMX-bound <input> that fires suggest
+ *               fragment fetches. Ctrl+K / Cmd+K shortcut.
+ *   * Session state: one hx-get to hyperion/header/state fills, by id and
+ *               out of band, the four placeholders below (one request and
+ *               one session lock per page view).
+ *   * Compare:  <a id="hyperion-compare-count"> -- hidden until the state
+ *               response brings a visible count.
+ *   * Wishlist: <a id="hyperion-wishlist-count"> -- always visible (guests see
+ *               "Sign in" link; logged-in customers see the heart + count).
+ *   * Account:  <hyperion-dropdown placement="bottom-end"> whose panel
+ *               #hyperion-account-menu receives the welcome fragment
+ *               (Magentofullstackdev\HyperionCustomer\Block\Welcome\Fragment).
+ *   * Mini-cart:<hyperion-mini-cart> drawer (fixed right-edge) -- panel
+ *               content fetched via fragment-url on first open.
+ *   * Burger:   <hyperion-dropdown placement="drawer"> -- lg:hidden only.
+ */
+
+$logoUrl = $block->getLogoUrl();
+// The logo link's accessible name: the image's alt (configured alt text or
+// store name, plus where the link goes), or the wordmark's visible text
+// followed by the same words in sr-only.
+$homeLabel = __('%1 Home', $block->getStoreName());
+$logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
+$homeUrl = $escaper->escapeUrl($block->getHomeUrl());
+$searchUrl = $escaper->escapeUrl($block->getSearchActionUrl());
+$cartUrl = $escaper->escapeUrl($block->getCartUrl());
+// Catalog mode and other purchase restrictions: no mini-cart for visitors who cannot buy.
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+?>
+<?php /* First focusable element of the page: keyboard and screen reader users jump past the header. */ ?>
+<a href="#contentarea"
+   class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2
+          focus:rounded-lg focus:bg-primary focus:text-on-primary focus:font-semibold focus:shadow-lg">
+    <?= $escaper->escapeHtml(__('Skip to Content')) ?>
+</a>
+<?php /* Sticky: the classes live on the `header.container` wrapper (Magento_Theme/layout/default.xml),
+        the containing block of this element. `relative` anchors the search panel and the mega
+        menu panels (full header width, _topmenu.css). */ ?>
+<header role="banner"
+        class="relative bg-surface border-b border-subtle shadow-sm"
+        data-hyperion-header>
+
+    <div class="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+
+        <?php /* -- Logo ------------------------------------------- */ ?>
+        <?php /*
+            Resolution order (mirrors \Magento\Theme\Block\Html\Header\Logo::_getLogoUrl):
+              1. Admin-uploaded logo (Stores > Configuration > Design > Header).
+              2. Theme asset images/logo.svg when present on disk.
+              3. HYPERION wordmark -- text fallback, styled per main branch.
+        */ ?>
+        <a href="<?= /* @noEscape -- escaped above */ $homeUrl ?>"
+           class="shrink-0 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
+            <?php if ($logoUrl !== ''): ?>
+                <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
+                     alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
+                     width="140" height="40"
+                     class="h-10 w-auto object-contain"
+                     loading="eager" fetchpriority="high">
+            <?php else: ?>
+                <span class="text-2xl font-black tracking-tighter text-primary hover:text-primary-hover transition-colors">
+                    HYPERION<span class="text-secondary">.</span>
+                </span>
+                <?php /* The accessible name starts with the visible text (no aria-label on the link). */ ?>
+                <span class="sr-only"> <?= $escaper->escapeHtml($homeLabel) ?></span>
+            <?php endif; ?>
+        </a>
+
+        <?php /* -- Desktop topmenu (centered) ------------------- */ ?>
+        <nav aria-label="<?= $escaper->escapeHtmlAttr(__('Main navigation')) ?>"
+             class="hidden lg:flex items-center justify-center flex-1 min-w-0 ml-4">
+            <?= $block->getChildHtml('hyperion.topmenu') ?>
+        </nav>
+
+        <?php /* -- Icon action bar ------------------------------- */ ?>
+        <div class="flex items-center gap-1 lg:gap-2 shrink-0">
+
+            <?php /* Search toggle (reveals #search-panel on click) */ ?>
+            <button id="search-toggle"
+                    type="button"
+                    data-hyperion-search-toggle
+                    aria-label="<?= $escaper->escapeHtmlAttr(__('Toggle search')) ?>"
+                    aria-expanded="false"
+                    aria-controls="search-panel"
+                    class="p-2 rounded-md text-muted hover:text-primary hover:bg-surface-raised
+                           focus:outline-none focus:ring-2 focus:ring-primary transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </button>
+
+            <?php /* Session state of the header (account menu, wish list and compare
+                    counters, mini-cart badge) arrives in ONE request: the response of
+                    hyperion/header/state is a set of out-of-band swaps keyed by the ids of
+                    the placeholders below. */ ?>
+            <span hidden
+                  hx-get="<?= $escaper->escapeUrl($block->getUrl('hyperion/header/state')) ?>"
+                  hx-trigger="load"
+                  hx-swap="none"></span>
+
+            <?php /* Compare and wish list: the icons are part of the cached page with the
+                    SAME footprint as the fragments the header state request swaps in
+                    (HyperionCatalog::compare/fragment.phtml, HyperionCustomer::wishlist/fragment.phtml):
+                    an inline-flex p-2 link with a w-5 icon and an absolutely positioned badge, so
+                    the action bar never moves when the counts arrive. */ ?>
+            <a id="hyperion-compare-count"
+               href="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare')) ?>"
+               data-hyperion-compare-count
+               data-hyperion-compare-ids=""
+               class="relative hidden lg:inline-flex p-2 rounded-md text-muted hover:text-primary hover:bg-surface-raised
+                      focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+               aria-label="<?= $escaper->escapeHtmlAttr(__('Compare products')) ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+                </svg>
+            </a>
+
+            <a id="hyperion-wishlist-count"
+               href="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
+               data-hyperion-wishlist-count
+               data-hyperion-wishlist-items="{}"
+               class="relative hidden lg:inline-flex p-2 rounded-md text-muted hover:text-primary hover:bg-surface-raised
+                      focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+               aria-label="<?= $escaper->escapeHtmlAttr(__('My Wish List')) ?>">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                </svg>
+            </a>
+
+            <?php /* Account dropdown -- lazy-loads welcome/account fragment */ ?>
+            <hyperion-dropdown placement="bottom-end"
+                               menu-label="<?= $escaper->escapeHtmlAttr(__('Account')) ?>"
+                               class="hidden lg:inline-block">
+                <button slot="trigger"
+                        type="button"
+                        class="p-2 rounded-md text-muted hover:text-primary hover:bg-surface-raised
+                               focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                        aria-label="<?= $escaper->escapeHtmlAttr(__('Account')) ?>"
+                        aria-haspopup="menu">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                </button>
+
+                <?php /* Welcome fragment doubles as the account menu body --
+                        guest view renders sign-in/register links; signed-in
+                        customer renders name + My Account / Sign Out. */ ?>
+                <div id="hyperion-account-menu"
+                     class="min-w-[220px] bg-surface border border-subtle rounded-lg shadow-lg py-1"
+                     aria-live="polite">
+                    <span class="block px-4 py-2 text-sm text-muted">
+                        <?= $escaper->escapeHtml(__('Loading...')) ?>
+                    </span>
+                </div>
+            </hyperion-dropdown>
+
+            <?php /* Mini-cart drawer */ ?>
+            <?php if ($canPurchase): ?>
+            <hyperion-mini-cart
+                trigger-label="<?= $escaper->escapeHtmlAttr(__('Shopping cart')) ?>"
+                close-label="<?= $escaper->escapeHtmlAttr(__('Close shopping cart')) ?>"
+                empty-message="<?= $escaper->escapeHtmlAttr(__('Your cart is empty.')) ?>"
+                trigger-url="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                remove-confirm="<?= $escaper->escapeHtmlAttr(__('Remove this item from your cart?')) ?>"
+                fragment-url="<?= $escaper->escapeUrl($block->getMinicartFragmentUrl()) ?>">
+                <?php /* Light-DOM trigger fallback (visible when JS fails / before upgrade). */ ?>
+                <a slot="trigger"
+                   href="<?= /* @noEscape -- escaped above */ $cartUrl ?>"
+                   class="inline-flex items-center gap-1 p-2 rounded-md relative
+                          bg-primary/10 text-primary hover:bg-primary/20
+                          focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                   aria-label="<?= $escaper->escapeHtmlAttr(__('Shopping cart')) ?>">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                    </svg>
+                    <span class="sr-only"><?= $escaper->escapeHtml(__('Cart')) ?></span>
+                    <?php /* Count badge: empty on the cached page, filled by the header state
+                            request, then kept in sync by the out-of-band span that every cart
+                            mutation response carries. */ ?>
+                    <span id="hyperion-mini-cart-count"
+                          aria-live="polite"
+                          class="hidden absolute -top-1 -right-1 min-w-[1.125rem] px-1 py-0.5 text-[10px] leading-none
+                                 font-bold text-center rounded-full bg-primary text-on-primary"></span>
+                </a>
+
+                <?php /* Title slot shown inside the drawer's sticky header. */ ?>
+                <h2 slot="title" class="text-base font-semibold text-secondary">
+                    <?= $escaper->escapeHtml(__('Shopping cart')) ?>
+                </h2>
+            </hyperion-mini-cart>
+            <?php endif; ?>
+
+            <?php /* Mobile hamburger -- opens a right-edge drawer via hyperion-dropdown */ ?>
+            <hyperion-dropdown placement="drawer" class="lg:hidden"
+                               menu-label="<?= $escaper->escapeHtmlAttr(__('Mobile navigation')) ?>">
+                <button slot="trigger"
+                        type="button"
+                        class="p-2 rounded-md text-muted hover:text-primary hover:bg-surface-raised
+                               focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
+                        aria-label="<?= $escaper->escapeHtmlAttr(__('Open navigation menu')) ?>"
+                        aria-haspopup="dialog">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+
+                <nav aria-label="<?= $escaper->escapeHtmlAttr(__('Mobile navigation')) ?>"
+                     class="flex flex-col gap-4 p-4">
+
+                    <?php /* Mobile search form */ ?>
+                    <form action="<?= /* @noEscape -- escaped above */ $searchUrl ?>"
+                          method="get"
+                          role="search"
+                          class="relative">
+                        <label for="mobile-search-input" class="sr-only">
+                            <?= $escaper->escapeHtml(__('Search')) ?>
+                        </label>
+                        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </span>
+                        <input id="mobile-search-input"
+                               type="search"
+                               name="q"
+                               placeholder="<?= $escaper->escapeHtmlAttr(__('Search')) ?>"
+                               autocomplete="off"
+                               minlength="2"
+                               class="w-full pl-9 pr-3 py-2 text-sm border border-subtle rounded-lg bg-surface
+                                      focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+                                      placeholder:text-muted">
+                    </form>
+
+                    <?php /* Mobile topmenu -- collapsible <details> tree */ ?>
+                    <?= $block->getChildHtml('hyperion.topmenu.mobile') ?>
+
+                    <?php /* Quick links for mobile */ ?>
+                    <div class="pt-4 border-t border-subtle flex flex-col gap-1">
+                        <a href="<?= $escaper->escapeUrl($block->getUrl('customer/account')) ?>"
+                           class="block py-2 px-3 rounded-lg text-secondary font-medium
+                                  hover:bg-primary/10 hover:text-primary transition-colors">
+                            <?= $escaper->escapeHtml(__('My account')) ?>
+                        </a>
+                        <a href="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
+                           class="block py-2 px-3 rounded-lg text-secondary font-medium
+                                  hover:bg-primary/10 hover:text-primary transition-colors">
+                            <?= $escaper->escapeHtml(__('My Wish List')) ?>
+                        </a>
+                        <a href="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare')) ?>"
+                           class="block py-2 px-3 rounded-lg text-secondary font-medium
+                                  hover:bg-primary/10 hover:text-primary transition-colors">
+                            <?= $escaper->escapeHtml(__('Compare')) ?>
+                        </a>
+                    </div>
+                </nav>
+            </hyperion-dropdown>
+
+        </div>
+    </div>
+
+    <?php /* -- Without scripting: the search toggle, the suggest panel and the burger
+             drawer are dead, so a plain search form and the top level links render
+             inline (the ESI top menu still serves lg+). The block is parsed only when
+             scripting is off; the tree is the same block the drawer prints. */ ?>
+    <noscript>
+        <div class="container mx-auto px-4 pb-4 flex flex-col gap-4" data-hyperion-noscript-nav>
+            <form action="<?= /* @noEscape -- escaped above */ $searchUrl ?>"
+                  method="get"
+                  role="search"
+                  class="flex items-stretch gap-2">
+                <label for="noscript-search-input" class="sr-only">
+                    <?= $escaper->escapeHtml(__('Search')) ?>
+                </label>
+                <input id="noscript-search-input"
+                       type="search"
+                       name="q"
+                       placeholder="<?= $escaper->escapeHtmlAttr(__('Search products...')) ?>"
+                       minlength="2"
+                       class="w-full min-w-0 px-3 py-2 text-sm border border-subtle rounded-lg bg-surface text-secondary">
+                <button type="submit"
+                        class="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-on-primary">
+                    <?= $escaper->escapeHtml(__('Search')) ?>
+                </button>
+            </form>
+            <nav aria-label="<?= $escaper->escapeHtmlAttr(__('Main navigation')) ?>" class="lg:hidden">
+                <?= $block->getChildHtml('hyperion.topmenu.mobile', false) ?>
+            </nav>
+        </div>
+    </noscript>
+
+    <?php /* -- Full-width search panel -- hidden until #search-toggle -- */ ?>
+    <div id="search-panel"
+         hidden
+         data-hyperion-search-panel
+         class="absolute left-0 right-0 top-full z-30 bg-surface border-b border-subtle shadow-md">
+        <div class="container mx-auto px-4 py-4">
+            <?php /*
+                ~60% of the page width on lg+ so the search input feels
+                like the primary action when the panel is open, dropping
+                back to full width on mobile where the panel is already
+                narrow.
+            */ ?>
+            <form action="<?= /* @noEscape -- escaped above */ $searchUrl ?>"
+                  method="get"
+                  role="search"
+                  class="relative w-full lg:w-[60%] mx-auto">
+                <label for="header-search-input" class="sr-only">
+                    <?= $escaper->escapeHtml(__('Search')) ?>
+                </label>
+                <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </span>
+                <input id="header-search-input"
+                       type="search"
+                       name="q"
+                       placeholder="<?= $escaper->escapeHtmlAttr(__('Search products...')) ?>"
+                       autocomplete="off"
+                       minlength="2"
+                       class="w-full pl-12 pr-4 py-3 text-base border border-subtle rounded-lg bg-surface
+                              focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+                              placeholder:text-muted"
+                       hx-get="<?= $escaper->escapeUrl($block->getUrl('hyperion/search/suggest')) ?>"
+                       hx-trigger="keyup changed delay:300ms, search"
+                       hx-target="#header-search-suggestions"
+                       hx-swap="innerHTML"
+                       hx-params="q">
+                <button type="submit"
+                        aria-label="<?= $escaper->escapeHtmlAttr(__('Search')) ?>"
+                        class="sr-only">
+                    <?= $escaper->escapeHtml(__('Search')) ?>
+                </button>
+            </form>
+            <div id="header-search-suggestions"
+                 class="max-w-6xl mx-auto mt-2"
+                 aria-live="polite"
+                 aria-atomic="true"></div>
+        </div>
+    </div>
+
+</header>

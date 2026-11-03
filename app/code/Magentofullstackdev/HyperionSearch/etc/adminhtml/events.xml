@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <!-- Section sizes, fuzziness, promoted SKUs and stop words are not part of the suggest cache key:
+         a save of the section (etc/adminhtml/system.xml, id hyperion_search) drops the cached answers. -->
+    <event name="admin_system_config_changed_section_hyperion_search">
+        <observer name="hyperion_search_flush_suggest_cache" instance="Magentofullstackdev\HyperionSearch\Observer\FlushSuggestCache"/>
+    </event>
+</config>

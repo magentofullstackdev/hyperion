@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Wishlist and compare sidebars (see Magento_Theme/layout/default.xml): the listing
+             pages carry them in the additional rail (under the filters on 2 / 3 column layouts,
+             under the inline filters on 1column). -->
+        <referenceContainer name="sidebar.additional">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.wishlist.sidebar"
+                   template="Magento_Wishlist::sidebar.phtml"
+                   ifconfig="wishlist/general/show_in_sidebar"
+                   before="-"/>
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.compare.sidebar"
+                   template="Magento_Catalog::product/compare/sidebar.phtml"
+                   after="hyperion.wishlist.sidebar"/>
+        </referenceContainer>
+        <!-- Luma page-title container is unused; Hyperion's category/view.phtml
+             renders the category header inline. -->
+        <referenceBlock name="page.main.title" remove="true"/>
+        <referenceContainer name="columns.top" remove="true"/>
+
+        <!-- Drop the old Magentofullstackdev_HyperionCore category wrapper (retired in Phase 3). -->
+        <referenceBlock name="hyperion.category.wrapper" remove="true"/>
+
+        <!--
+            Mount the Hyperion category-view wrapper inside the native `content`
+            container (which itself sits inside `main`). The wrapper renders
+            the category header, image, CMS block, description, and product
+            grid. Layered navigation is mounted by the native
+            Magento_LayeredNavigation handle into `sidebar.main`, and the
+            `columns` container in default.xml handles the flex row that
+            places sidebar.main beside main on md+ screens.
+        -->
+        <referenceContainer name="content">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.category.view"
+                   template="Magento_Catalog::category/view.phtml"
+                   before="-">
+                <arguments>
+                    <argument name="product_list_view_model" xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductList</argument>
+                </arguments>
+
+                <!--
+                    Re-mount the category image, CMS block, and description blocks
+                    inside the Hyperion wrapper. Upstream Magento places them in
+                    `columns.top` (removed above) so view.phtml can render them
+                    above the product grid via $block->getChildHtml('...').
+                    The title is a block of its own for the same reason: the
+                    category-full-width page layout moves these four blocks
+                    above the columns (Magento_PageBuilder/page_layout/override).
+                -->
+                <block class="Magento\Catalog\Block\Category\View"
+                       name="category.title"
+                       template="Magento_Catalog::category/title.phtml"/>
+                <block class="Magento\Catalog\Block\Category\View"
+                       name="category.image"
+                       template="Magento_Catalog::category/image.phtml">
+                    <arguments>
+                        <argument name="image" xsi:type="object">Magento\Catalog\ViewModel\Category\Image</argument>
+                        <argument name="output" xsi:type="object">Magento\Catalog\ViewModel\Category\Output</argument>
+                    </arguments>
+                </block>
+                <block class="Magento\Catalog\Block\Category\View"
+                       name="category.cms"
+                       template="Magento_Catalog::category/cms.phtml"/>
+                <block class="Magento\Catalog\Block\Category\View"
+                       name="category.description"
+                       template="Magento_Catalog::category/description.phtml"/>
+            </block>
+        </referenceContainer>
+
+        <!-- Inject the Hyperion ProductList + Pricing ViewModels into the
+             native product list block so list.phtml can call them via
+             $block->getData('product_list_view_model') / 'pricing_view_model'. -->
+        <referenceBlock name="category.products.list">
+            <arguments>
+                <argument name="product_list_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductList</argument>
+                <argument name="pricing_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\Pricing</argument>
+            </arguments>
+            <!-- Infinite loading foot of the grid: rendered by list.phtml instead of the bottom pager when the listing's mode is not disabled. -->
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.category.load_more" as="load_more" template="Magento_Catalog::product/list/load-more.phtml"/>
+        </referenceBlock>
+
+        <!-- Pager + toolbar point at theme templates (rewritten). -->
+        <referenceBlock name="product_list_toolbar_pager" template="Magento_Theme::html/pager.phtml"/>
+        <referenceBlock name="product_list_toolbar" template="Magento_Catalog::product/list/toolbar.phtml"/>
+
+        <!-- Move the product list INSIDE the Hyperion category-view wrapper so
+             the wrapper template can render it via
+             $block->getChildHtml('category.products'). -->
+        <move element="category.products" destination="hyperion.category.view" as="category.products"/>
+
+        <!-- The inline additional sidebar container (Magento_Theme/page_layout/1column.xml)
+             comes along: on 1column pages it holds the wishlist / compare wrapper and
+             category/view.phtml prints it under the inline filters; on the two and three
+             column layouts the wrapper is pinned to the rail and the container is empty. -->
+        <move element="hyperion.sidebar.inline" destination="hyperion.category.view" after="-"/>
+
+        <!--
+            `catalog.leftnav` placement is LAYOUT-SCOPED.
+
+            On 1column category pages the block is moved into
+            `hyperion.category.view` by the page_layout override at
+            `Magento_LayeredNavigation/page_layout/1column.xml`, so
+            `category/view.phtml`'s `$leftnav->toHtml()` renders it inline
+            as a horizontal chip bar above the grid.
+
+            On 2columns-left / 2columns-right / 3columns pages Magento's
+            vendor page_layout files put it in `sidebar.main`, which is
+            where it SHOULD stay so the sidebar rail renders as vertical
+            filter cards next to the product column. Nothing in this
+            universal handle touches the block.
+        -->
+    </body>
+</page>

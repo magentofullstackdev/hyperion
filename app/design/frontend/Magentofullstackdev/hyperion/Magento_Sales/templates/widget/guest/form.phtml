@@ -1,0 +1,23 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Orders and Returns CMS widget: the guest order lookup form in a card,
+ * guests only (core's isEnable()). Renders the page form
+ * (Magento_Sales::guest/form.phtml) with its own id prefix and the form
+ * key core's widget template lacks.
+ *
+ * @var \Magento\Sales\Block\Widget\Guest\Form $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->isEnable()) {
+    return;
+}
+$block->setData('hyperion_form_id', 'oar-widget');
+$block->setData('hyperion_compact', true);
+?>
+<section class="bg-surface border border-subtle rounded-xl p-5 mb-6 space-y-3" aria-labelledby="oar-widget-heading" data-hyperion-oar-widget>
+    <h2 id="oar-widget-heading" class="text-base font-semibold text-secondary"><?= $escaper->escapeHtml(__('Orders and Returns')) ?></h2>
+    <?= /* @noEscape */ $block->fetchView((string) $block->getTemplateFile('Magento_Sales::guest/form.phtml')) ?>
+</section>

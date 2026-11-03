@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Fragment-only layout handle for the cart page body.
+
+    Rendered by the HTMX cart mutation plugins (Delete, UpdatePost,
+    CouponPost, the GiftMessage controller) through Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer
+    so the `#hyperion-cart-items` section they swap back contains the
+    SAME block tree the page renders: items + `coupon` + `totals`
+    children. Rendering `Block\Cart\Items` on its own (the previous
+    approach) produced a section without the summary card and the
+    coupon form, which then vanished after every remove / update.
+
+    Keep this tree in sync with the theme layout
+    app/design/frontend/Magentofullstackdev/hyperion/Magento_Checkout/layout/checkout_cart_index.xml.
+
+    cacheable="false": session data, see hyperion_checkout_minicart*.xml.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Items"
+               name="hyperion.cart.items"
+               template="Magento_Checkout::cart/items.phtml"
+               cacheable="false">
+            <arguments>
+                <argument name="cart_data_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCheckout\ViewModel\CartData</argument>
+            </arguments>
+            <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Coupon"
+                   name="hyperion.cart.coupon"
+                   as="coupon"
+                   template="Magento_Checkout::cart/coupon.phtml"/>
+            <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Totals"
+                   name="hyperion.cart.totals"
+                   as="totals"
+                   template="Magento_Checkout::cart/totals.phtml">
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.cart.estimate"
+                       as="estimate"
+                       template="Magento_Checkout::cart/estimate.phtml"/>
+            </block>
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.cart.gift_message"
+                   as="gift_message"
+                   template="Magentofullstackdev_HyperionCheckout::cart/gift-message.phtml"/>
+        </block>
+    </body>
+</page>

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!--
+    Cart line edit of a bundle: core adds a RequireJS components block to the
+    head on this handle; Hyperion has no RequireJS, so it goes.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="bundle_cart_configure_head_components" remove="true"/>
+    </body>
+</page>

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!-- The category form lists its fields explicitly (Category\DataProvider::getFieldsMap),
+     so the `hyperion_infinite_scroll` attribute is declared here in the
+     Display Settings group; the data provider adds "Use Default Value" per store view
+     because the attribute has store scope. -->
+<form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <fieldset name="display_settings">
+        <field name="hyperion_infinite_scroll" formElement="select" sortOrder="55">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="source" xsi:type="string">category</item>
+                </item>
+            </argument>
+            <settings>
+                <dataType>text</dataType>
+                <label translate="true">Infinite Scroll</label>
+                <notice translate="true">Overrides Stores > Configuration > Hyperion Theme > Catalog > Infinite Scroll for this category: "Please select" follows the configuration.</notice>
+                <dataScope>hyperion_infinite_scroll</dataScope>
+            </settings>
+            <formElements>
+                <select>
+                    <settings>
+                        <options class="Magentofullstackdev\HyperionCatalog\Model\Category\Attribute\Source\InfiniteScroll"/>
+                    </settings>
+                </select>
+            </formElements>
+        </field>
+    </fieldset>
+</form>

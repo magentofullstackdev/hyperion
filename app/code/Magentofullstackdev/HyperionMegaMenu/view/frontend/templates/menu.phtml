@@ -1,0 +1,17 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * A menu group placed by the widget or a layout block. The block emits
+ * escaped markup (Model\Menu\Renderer); nothing to escape here.
+ *
+ * @var \Magentofullstackdev\HyperionMegaMenu\Block\Menu $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$html = $block->getMenuHtml();
+?>
+<?php if ($html !== ''): ?>
+    <nav class="hyperion-megamenu" data-hyperion-megamenu-widget="<?= $escaper->escapeHtmlAttr($block->getGroupIdentifier()) ?>">
+        <?= /* @noEscape */ $html ?>
+    </nav>
+<?php endif; ?>

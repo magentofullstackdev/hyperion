@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        Bind the DTO interface to its concrete class so the queue
+        framework's preference resolver finds it when serializing
+        message bodies.
+    -->
+    <preference for="Magentofullstackdev\HyperionImage\Api\Data\ConversionRequestInterface"
+                type="Magentofullstackdev\HyperionImage\Model\ConversionRequest"/>
+
+    <!--
+        Hook the moment Magento writes a cached JPG/PNG to disk so
+        we can schedule WebP/AVIF generation alongside it.
+    -->
+    <type name="Magento\Catalog\Model\Product\Image">
+        <plugin name="hyperion_image_schedule_conversion"
+                type="Magentofullstackdev\HyperionImage\Plugin\Catalog\Product\Image\ScheduleConversionPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!--
+        Core's ImageResize service (catalog:images:resize, the product save
+        observer, the resize consumer, get.php) writes the cache files the
+        Hyperion templates link through UrlBuilder; it bypasses
+        Product\Image::saveFile, so its files are scheduled here.
+    -->
+    <type name="Magento\MediaStorage\Service\ImageResize">
+        <plugin name="hyperion_image_schedule_companions"
+                type="Magentofullstackdev\HyperionImage\Plugin\MediaStorage\Service\ImageResize\ScheduleCompanionsPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!--
+        Wipe companion .webp/.avif files when Magento clears the
+        product image cache. Strictly scoped to
+        `pub/media/catalog/product/cache/` - see plugin docblock.
+    -->
+    <type name="Magento\Catalog\Helper\Image">
+        <plugin name="hyperion_image_clear_cache"
+                type="Magentofullstackdev\HyperionImage\Plugin\Catalog\Helper\Image\ClearCachePlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!--
+        Register the bulk CLI command (`bin/magento hyperion:image:convert`).
+    -->
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="hyperion_image_convert" xsi:type="object">
+                    Magentofullstackdev\HyperionImage\Console\Command\ConvertCommand
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Rewrite <img> tags inside CMS-block / CMS-page / widget HTML to
+        <picture> wrappers with WebP/AVIF <source> siblings. The rewrite
+        is post-render (afterToHtml), so any {{media url=...}} directives
+        have already resolved. Only emits <source> when companion files
+        actually exist on disk - see HtmlImageRewriter docblock for the
+        anti-double-wrap and 404-avoidance reasoning.
+    -->
+    <type name="Magento\Cms\Block\Block">
+        <plugin name="hyperion_image_rewrite_cms_block"
+                type="Magentofullstackdev\HyperionImage\Plugin\Cms\RewriteImagesPlugin"
+                sortOrder="100"/>
+    </type>
+    <type name="Magento\Cms\Block\Widget\Block">
+        <plugin name="hyperion_image_rewrite_cms_widget"
+                type="Magentofullstackdev\HyperionImage\Plugin\Cms\RewriteImagesPlugin"
+                sortOrder="100"/>
+    </type>
+    <type name="Magento\Cms\Block\Page">
+        <plugin name="hyperion_image_rewrite_cms_page"
+                type="Magentofullstackdev\HyperionImage\Plugin\Cms\RewriteImagesPlugin"
+                sortOrder="100"/>
+    </type>
+</config>

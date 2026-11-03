@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Attribute blocks for the "Product - Full Width" page layout (core declares
+    them in the page layout file the theme replaces). `pagebuilder_only`
+    lists the attributes edited with PageBuilder, rendered full width;
+    `non_pagebuilder` is the "Additional Information" table without them.
+    Magento_Catalog::product/view.phtml uses them only on that page layout.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="hyperion.product.view">
+            <block class="Magento\PageBuilder\Block\Catalog\Block\Product\View\Attributes"
+                   name="product.attributes.only.pagebuilder"
+                   as="product.attributes.pagebuilder"
+                   template="Magento_PageBuilder::catalog/product/view/attribute_list.phtml">
+                <arguments>
+                    <argument name="display_attributes" xsi:type="string">pagebuilder_only</argument>
+                </arguments>
+            </block>
+            <block class="Magento\PageBuilder\Block\Catalog\Block\Product\View\Attributes"
+                   name="product.attributes.exclude.pagebuilder"
+                   as="product.attributes.non_pagebuilder"
+                   template="Magento_Catalog::product/view/attributes.phtml">
+                <arguments>
+                    <argument name="display_attributes" xsi:type="string">non_pagebuilder</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

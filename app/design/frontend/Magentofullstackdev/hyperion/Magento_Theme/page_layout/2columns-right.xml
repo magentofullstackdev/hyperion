@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion 2columns-right page layout.
+
+    The mirror of 2columns-left: `main` on the left spanning both rows, a
+    16rem rail on the RIGHT with `div.sidebar.main` (the layered
+    navigation, still moved there by Magento's vendor page_layout file)
+    and `div.sidebar.additional` stacked under it.
+-->
+<layout xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_layout.xsd">
+    <update handle="2columns-left"/>
+    <referenceContainer name="columns"
+                        htmlClass="page-columns container mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-[1fr_16rem] gap-6 md:grid-rows-[auto_1fr] md:items-start flex-grow"/>
+    <referenceContainer name="main"
+                        htmlClass="column main min-w-0 w-full md:col-start-1 md:row-start-1 md:row-span-2"/>
+    <referenceContainer name="div.sidebar.main"
+                        htmlClass="sidebar sidebar-main w-full md:col-start-2 md:row-start-1 empty:hidden"/>
+    <referenceContainer name="div.sidebar.additional"
+                        htmlClass="sidebar sidebar-additional w-full md:col-start-2 md:row-start-2 empty:hidden"/>
+</layout>

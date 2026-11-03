@@ -1,0 +1,60 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion currency switcher -- Tailwind <details> dropdown, CSRF-safe POST.
+ *
+ * Opens UPWARD (mb-1 bottom-full) so it works inside the footer bottom bar.
+ *
+ * @var \Magento\Directory\Block\Currency $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+if ($block->getCurrencyCount() <= 1) {
+    return;
+}
+
+$currencies = $block->getCurrencies();
+$currentCurrencyCode = (string) $block->getCurrentCurrencyCode();
+$id = $block->getIdModifier() ? '-' . $block->getIdModifier() : '';
+?>
+<details class="relative group"
+         name="hyperion-switcher<?= $escaper->escapeHtmlAttr($id) ?>"
+         id="hyperion-currency-switcher<?= $escaper->escapeHtmlAttr($id) ?>">
+    <summary class="flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-xs font-medium
+                    text-on-inverted-muted hover:text-primary rounded-md transition-colors select-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <span><?= $escaper->escapeHtml($currentCurrencyCode) ?></span>
+        <svg class="w-3.5 h-3.5 transition-transform group-open:rotate-180"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </summary>
+    <?php /* An absolutely positioned box shrinks to its containing block (the narrow
+            <details>): w-max lets the menu grow with the longest name so a label
+            stays on one line, max-w-xs bounds it on a phone and truncate covers
+            a name longer than that. */ ?>
+    <div class="absolute right-0 bottom-full mb-1 z-50 w-max min-w-[200px] max-w-xs bg-surface border border-subtle
+                rounded-lg shadow-lg py-1 text-secondary"
+         role="group"
+         aria-label="<?= $escaper->escapeHtmlAttr(__('Select currency')) ?>">
+        <?php foreach ($currencies as $_code => $_name): ?>
+            <?php $isActive = $_code === $currentCurrencyCode; ?>
+            <form method="post"
+                  action="<?= $escaper->escapeUrl($block->getUrl('directory/currency/switch')) ?>"
+                  class="block">
+                <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+                <input type="hidden" name="currency" value="<?= $escaper->escapeHtmlAttr($_code) ?>"/>
+                <input type="hidden" name="uenc" value="<?= $escaper->escapeHtmlAttr($block->getUenc()) ?>"/>
+                <button type="submit"
+                        class="block w-full text-left truncate px-4 py-2 text-sm transition-colors
+                               <?= $isActive
+                                   ? 'text-primary bg-primary/10 font-semibold'
+                                   : 'text-secondary hover:bg-primary/10 hover:text-primary' ?>"
+                        <?= $isActive ? 'aria-current="true"' : '' ?>>
+                    <?= $escaper->escapeHtml($_code) ?><?php if ($_name): ?> -- <?= $escaper->escapeHtml((string) $_name) ?><?php endif; ?>
+                </button>
+            </form>
+        <?php endforeach; ?>
+    </div>
+</details>

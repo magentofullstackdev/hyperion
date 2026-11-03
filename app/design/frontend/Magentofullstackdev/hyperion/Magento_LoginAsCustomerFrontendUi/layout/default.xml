@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The banner is delivered by the Hyperion header-state fragment
+    (Magentofullstackdev_HyperionCustomer, handle hyperion_customer_lac_notice),
+    which carries its own "Close Session" logout form. Core's Knockout
+    logout link child is not rendered by the Hyperion notices.phtml, so
+    drop it instead of building an unused block on every page.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="login-as-customer-logout-link" remove="true"/>
+    </body>
+</page>

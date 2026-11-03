@@ -1,0 +1,144 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- HTMX response transformers for core cart controllers -->
+    <type name="Magento\Checkout\Controller\Cart\Add">
+        <plugin name="hyperion_core_cart_add_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\AddPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <type name="Magento\Checkout\Controller\Cart\Delete">
+        <plugin name="hyperion_core_cart_delete_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\DeletePlugin"
+                sortOrder="100"/>
+    </type>
+
+    <type name="Magento\Checkout\Controller\Cart\CouponPost">
+        <plugin name="hyperion_core_cart_coupon_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\CouponPostPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <type name="Magento\Checkout\Controller\Cart\UpdatePost">
+        <plugin name="hyperion_core_cart_update_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\UpdatePostPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <type name="Magento\Wishlist\Controller\Index\Add">
+        <plugin name="hyperion_core_wishlist_add_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index\AddPlugin"
+                sortOrder="100"/>
+    </type>
+    <type name="Magento\Wishlist\Controller\Index\Remove">
+        <plugin name="hyperion_core_wishlist_remove_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index\RemovePlugin"
+                sortOrder="100"/>
+    </type>
+    <type name="Magento\Wishlist\Controller\Index\Fromcart">
+        <plugin name="hyperion_core_wishlist_fromcart_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index\FromcartPlugin"
+                sortOrder="100"/>
+    </type>
+
+    <type name="Magento\Catalog\Controller\Product\Compare\Add">
+        <plugin name="hyperion_core_compare_add_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Catalog\Controller\Product\Compare\AddPlugin"
+                sortOrder="100"/>
+    </type>
+    <type name="Magento\Catalog\Controller\Product\Compare\Remove">
+        <plugin name="hyperion_core_compare_remove_htmx"
+                type="Magentofullstackdev\HyperionCore\Plugin\Catalog\Controller\Product\Compare\RemovePlugin"
+                sortOrder="100"/>
+    </type>
+
+    <!--
+        Public-route whitelist: HTMX endpoints whose responses are session-
+        agnostic and must reach Varnish with `Cache-Control: public, s-maxage=...`.
+        The session cache-limiter plugin and the response cache-headers plugin
+        both read this registry - adding a new public HTMX endpoint is a
+        single-line XML change.
+    -->
+    <type name="Magentofullstackdev\HyperionCore\Model\PublicRouteRegistry">
+        <arguments>
+            <argument name="paths" xsi:type="array">
+                <item name="category_filter" xsi:type="string">/hyperion/category/filter</item>
+                <item name="catalog_search" xsi:type="string">/hyperion/catalog/search</item>
+                <item name="navigation_menu" xsi:type="string">/hyperion/navigation/menu</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Suppress PHP session_cache_limiter nocache headers on public HTMX
+        routes. Runs as a before-plugin on SessionManager::start so PHP's
+        session_start() never emits Pragma/Cache-Control/Expires in the
+        first place for these routes.
+    -->
+    <type name="Magento\Framework\Session\SessionManagerInterface">
+        <plugin name="hyperion_core_public_route_cache_limiter"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\Session\PublicRouteCacheLimiterPlugin"
+                sortOrder="5"/>
+    </type>
+
+    <!--
+        Response-level enforcement: strip Pragma/Expires and assert strict
+        Cache-Control on any response that carries the
+        X-Hyperion-Public-Cache: <ttl> marker set by
+        Magentofullstackdev\HyperionCore\Model\CacheHeaders::applyPublic(). Two plugins both
+        hook onto Magento\Framework\App\Response\Http, so they coexist via
+        separate plugin names.
+    -->
+    <type name="Magento\Framework\App\CacheInterface">
+        <plugin name="hyperion_core_degraded_block_cache"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Cache\DegradedBlockCachePlugin"/>
+    </type>
+    <type name="Magento\Framework\View\Layout">
+        <plugin name="hyperion_core_degraded_response"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\DegradedResponsePlugin"/>
+    </type>
+    <type name="Magento\Framework\App\Response\Http">
+        <plugin name="hyperion_core_esi_marker"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Response\EsiMarkerPlugin"
+                sortOrder="100"/>
+        <plugin name="hyperion_core_public_route_cache_headers"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Response\PublicRouteCacheHeadersPlugin"
+                sortOrder="200"/>
+    </type>
+    <!--
+        Store + currency HTTP context for controllers that implement
+        ActionInterface directly (core only sets it on AbstractAction::dispatch),
+        so the X-Magento-Vary cookie survives the header state request.
+    -->
+    <type name="Magento\Framework\App\ActionInterface">
+        <plugin name="hyperion_core_store_context"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\StoreContextPlugin"
+                sortOrder="5"/>
+        <!-- Rate limiter (Anti-Abuse Shield): route groups are mapped by the modules that own the routes. -->
+        <plugin name="hyperion_core_rate_limit"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\RateLimitPlugin"
+                sortOrder="10"/>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Model\Security\RateLimiter">
+        <arguments>
+            <argument name="groups" xsi:type="array">
+                <item name="search_suggest" xsi:type="string">hyperion/security/search_suggest_limit</item>
+                <item name="search_result" xsi:type="string">hyperion/security/search_suggest_limit</item>
+                <item name="category_filter" xsi:type="string">hyperion/security/catalog_filter_limit</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\RateLimitPlugin">
+        <arguments>
+            <argument name="routes" xsi:type="array">
+                <item name="catalogsearch_result_index" xsi:type="string">search_result</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

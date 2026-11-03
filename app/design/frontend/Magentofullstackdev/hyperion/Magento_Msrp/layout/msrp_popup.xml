@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Core merges this handle into every catalog, cart and wishlist page to
+    print the RequireJS MAP popup templates (Magento_Msrp::popup.phtml,
+    `x-magento-template` scripts driven by the `addToCart` widget). Hyperion
+    renders the dialog itself from Magento_Msrp::product/price/msrp.phtml
+    (<hyperion-msrp-popup>), so the block is dropped here.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="product.tooltip" remove="true"/>
+    </body>
+</page>

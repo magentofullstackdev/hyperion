@@ -1,0 +1,90 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion shipment list of an order: one section per shipment with
+ * its tracking numbers, items and comments. Rows come from the core
+ * item renderers (styled through .hyperion-order-table).
+ *
+ * @var \Magento\Shipping\Block\Items $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$order = $block->getOrder();
+/** @var \Magento\Shipping\Block\Tracking\Link|false $trackingLink */
+$trackingLink = $block->getChildBlock('track-all-link');
+$linkClass = 'text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline';
+?>
+<div class="flex flex-wrap items-center justify-end gap-4">
+    <?php if ($trackingLink && $order->getTracksCollection()->count()): ?>
+        <?= $trackingLink->toHtml() ?>
+    <?php endif; ?>
+    <a href="<?= $escaper->escapeUrl($block->getPrintAllShipmentsUrl($order)) ?>" target="_blank" rel="noopener"
+       class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+        <?= $escaper->escapeHtml(__('Print All Shipments')) ?>
+    </a>
+</div>
+
+<?php foreach ($order->getShipmentsCollection() as $shipment): ?>
+    <section class="space-y-3 border-t border-subtle pt-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h4 class="text-sm font-semibold text-secondary">
+                <?= $escaper->escapeHtml(__('Shipment #')) ?><?= $escaper->escapeHtml($shipment->getIncrementId()) ?>
+            </h4>
+            <div class="flex flex-wrap items-center gap-4">
+                <?php if ($trackingLink): ?>
+                    <a href="<?= $escaper->escapeUrl($trackingLink->getWindowUrl($shipment)) ?>"
+                       target="_blank" rel="noopener"
+                       class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+                        <?= $escaper->escapeHtml(__('Track this shipment')) ?>
+                    </a>
+                <?php endif; ?>
+                <a href="<?= $escaper->escapeUrl($block->getPrintShipmentUrl($shipment)) ?>"
+                   target="_blank" rel="noopener"
+                   class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+                    <?= $escaper->escapeHtml(__('Print Shipment')) ?>
+                </a>
+            </div>
+        </div>
+
+        <?php $tracks = $shipment->getTracksCollection(); ?>
+        <?php if ($tracks->count()): ?>
+            <dl class="flex flex-wrap gap-x-2 text-sm text-secondary">
+                <dt class="font-medium"><?= $escaper->escapeHtml(__('Tracking Number(s):')) ?></dt>
+                <dd class="flex flex-wrap gap-x-3">
+                    <?php foreach ($tracks as $track): ?>
+                        <?php if ($track->isCustom() || !$trackingLink): ?>
+                            <span><?= $escaper->escapeHtml($track->getNumber()) ?></span>
+                        <?php else: ?>
+                            <a href="<?= $escaper->escapeUrl($trackingLink->getWindowUrl($track)) ?>"
+                               target="_blank" rel="noopener"
+                               class="<?= $escaper->escapeHtmlAttr($linkClass) ?>">
+                                <?= $escaper->escapeHtml($track->getNumber()) ?>
+                            </a>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </dd>
+            </dl>
+        <?php endif; ?>
+
+        <div class="overflow-x-auto">
+            <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Items Shipped')) ?>">
+                <thead>
+                    <tr>
+                        <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Product Name')) ?></th>
+                        <th scope="col" class="col sku"><?= $escaper->escapeHtml(__('SKU')) ?></th>
+                        <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty Shipped')) ?></th>
+                    </tr>
+                </thead>
+                <?php foreach ($shipment->getAllItems() as $item): ?>
+                    <?php if (!$item->getOrderItem()->getParentItem()): ?>
+                        <tbody>
+                            <?= $block->getItemHtml($item) ?>
+                        </tbody>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </table>
+        </div>
+
+        <?= $block->getCommentsHtml($shipment) ?>
+    </section>
+<?php endforeach; ?>

@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion Lit checkout - real layout replacement.
+
+    Responsibilities:
+      1. Remove every native Knockout/RequireJS checkout block so no
+         stock Magento UI Component framework code renders.
+      2. Suppress the default page H1 (the Lit app renders its own
+         accessible heading).
+      3. Mount a single `hyperion.checkout` block whose template emits
+         the mount div, the #checkout-config JSON island, and the
+         script/stylesheet tags referencing the built bundle.
+
+    Block / container names verified against:
+      vendor/magento/module-checkout/view/frontend/layout/checkout_index_index.xml
+      vendor/magento/module-checkout/view/frontend/layout/default.xml
+      vendor/magento/module-theme/view/frontend/layout/default.xml
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <title>Checkout</title>
+        <!-- Magento_Csp/layout/checkout_index_index.xml adds its SRI helper
+             (`require.config(...)` + `require([...])`) for the Knockout
+             checkout. Hyperion ships no RequireJS, so the file throws
+             "require.config is not a function" on every load. -->
+        <remove src="Magento_Csp::js/sri.js"/>
+    </head>
+    <body>
+        <!-- Strip the Knockout/RequireJS checkout root. -->
+        <referenceBlock name="checkout.root" remove="true"/>
+
+        <!-- Strip the RequireJS component loader added by Magento_Checkout default.xml. -->
+        <referenceBlock name="checkout_page_head_components" remove="true"/>
+
+        <!-- Suppress the default page H1 (the Lit app renders its own). -->
+        <referenceBlock name="page.main.title" remove="true"/>
+
+        <referenceContainer name="content">
+            <!--
+                `cacheable="false"` is what actually marks the whole
+                Result\Page uncacheable (Varnish + built-in FPC both
+                honor it). Don't remove this attribute.
+            -->
+            <block class="Magentofullstackdev\HyperionCheckout\Block\Checkout"
+                   name="hyperion.checkout"
+                   template="Magentofullstackdev_HyperionCheckout::checkout.phtml"
+                   cacheable="false"/>
+        </referenceContainer>
+    </body>
+</page>

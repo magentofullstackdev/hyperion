@@ -1,0 +1,102 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion store switcher -- native <details> disclosure, zero JS.
+ *
+ * Core lists the store GROUPS of the current website here (the store VIEWS
+ * of the current group are the language switcher, `switch/languages.phtml`).
+ * The `scope` layout argument widens the listing: `group` (core, default),
+ * `website` (every store view of the website, one section per group) or
+ * `all` (every store view of every website, one section per website). See
+ * Magentofullstackdev\HyperionCore\ViewModel\StoreSwitcher.
+ *
+ * Every entry is a GET link to core's `stores/store/redirect` controller
+ * (it implements HttpGetActionInterface; the CSRF form key is not involved,
+ * the controller only signs the redirect data it hands to the target store),
+ * the same URL core's own SwitcherUrlProvider builds for the language
+ * switcher. The controller carries the guest cart and the customer session
+ * over to the target store whenever core allows it.
+ *
+ * Opens UPWARD (mb-1 bottom-full) so it works inside the footer bottom bar.
+ *
+ * @var \Magento\Store\Block\Switcher $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+$switcher = $block->getData('store_switcher');
+if (!$switcher instanceof \Magentofullstackdev\HyperionCore\ViewModel\StoreSwitcher) {
+    $switcher = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\StoreSwitcher::class);
+}
+
+$scope = $switcher->resolveScope($block->getData('scope'));
+$sections = $switcher->getSections($block, $scope);
+if ($switcher->countEntries($sections) < 2) {
+    return;
+}
+
+$currentName = '';
+foreach ($sections as $section) {
+    foreach ($section['entries'] as $entry) {
+        if ($entry['current']) {
+            $currentName = $entry['name'];
+            break 2;
+        }
+    }
+}
+if ($currentName === '') {
+    $currentName = (string) $block->getStoreName();
+}
+
+$id = $block->getIdModifier() ? '-' . $block->getIdModifier() : '';
+$showSectionLabels = count($sections) > 1;
+?>
+<details class="relative group"
+         name="hyperion-switcher<?= $escaper->escapeHtmlAttr($id) ?>"
+         id="hyperion-store-switcher<?= $escaper->escapeHtmlAttr($id) ?>"
+         data-hyperion-store-switcher="<?= $escaper->escapeHtmlAttr($scope) ?>">
+    <summary class="flex cursor-pointer items-center gap-1.5 px-2 py-1.5 text-xs font-medium
+                    text-on-inverted-muted hover:text-primary rounded-md transition-colors select-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 9.5 12 4l9 5.5M5 10v9h14v-9M9 19v-5h6v5"/>
+        </svg>
+        <span><?= $escaper->escapeHtml($currentName) ?></span>
+        <svg class="w-3.5 h-3.5 transition-transform group-open:rotate-180"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </summary>
+    <?php /* w-max: the absolutely positioned menu grows with the longest store name
+            (see currency.phtml), max-w-xs bounds it on a phone, truncate covers the rest. */ ?>
+    <ul class="absolute right-0 bottom-full mb-1 z-50 w-max min-w-[200px] max-w-xs bg-surface border border-subtle
+               rounded-lg shadow-lg py-1 text-secondary"
+        aria-label="<?= $escaper->escapeHtmlAttr(__('Select Store')) ?>">
+        <?php foreach ($sections as $section): ?>
+            <?php if ($showSectionLabels && $section['label'] !== ''): ?>
+                <li class="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted truncate">
+                    <?= $escaper->escapeHtml($section['label']) ?>
+                </li>
+            <?php endif; ?>
+            <?php foreach ($section['entries'] as $entry): ?>
+                <li>
+                    <?php if ($entry['current']): ?>
+                        <span aria-current="true"
+                              class="block truncate px-4 py-2 text-sm text-primary bg-primary/10 font-semibold">
+                            <?= $escaper->escapeHtml($entry['name']) ?>
+                        </span>
+                    <?php else: ?>
+                        <a href="<?= $escaper->escapeUrl($entry['url']) ?>"
+                           rel="nofollow"
+                           class="block truncate px-4 py-2 text-sm text-secondary transition-colors
+                                  hover:bg-primary/10 hover:text-primary">
+                            <?= $escaper->escapeHtml($entry['name']) ?>
+                        </a>
+                    <?php endif; ?>
+                </li>
+            <?php endforeach; ?>
+        <?php endforeach; ?>
+    </ul>
+</details>

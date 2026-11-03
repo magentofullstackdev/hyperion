@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Email a Friend form (sendfriend/product/send). Core's handle already
+    binds `sendfriend.send` to Magento_SendFriend::send.phtml, which the
+    theme overrides at the same path; the template renders its own heading
+    and the back link, so the generic title block goes. Core sets no head
+    title for this page.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <title>Email to a Friend</title>
+    </head>
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+    </body>
+</page>

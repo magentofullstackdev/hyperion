@@ -1,0 +1,14 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Recently viewed products widget, grid template: see
+ * Magento_Catalog::product/widget/history.phtml.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ */
+$block->setData('hyperion_history_kind', 'viewed');
+$block->setData('hyperion_history_mode', 'grid');
+?>
+<?= /* @noEscape */ $block->fetchView((string) $block->getTemplateFile('Magento_Catalog::product/widget/history.phtml')) ?>

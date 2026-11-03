@@ -1,0 +1,32 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Generic page title (CMS pages and every page whose layout keeps
+ * `page.main.title`). Pages that render their own heading remove the block.
+ *
+ * The block renders in `columns.top`, outside the `columns` container, so it
+ * carries the site container itself to line up with breadcrumbs and content.
+ *
+ * @var \Magento\Theme\Block\Html\Title $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$titleHtml = '';
+if (trim((string) $block->getPageHeading()) !== '') {
+    $titleHtml = '<span data-ui-id="page-title-wrapper" ' . $block->getAddBaseAttribute() . '>'
+        . $escaper->escapeHtml($block->getPageHeading()) . '</span>';
+}
+if ($titleHtml === '') {
+    return;
+}
+?>
+<div class="page-title-wrapper container mx-auto px-4 pt-6 <?= $escaper->escapeHtmlAttr((string) $block->getCssClass()) ?>">
+    <h1 class="text-3xl font-bold text-secondary tracking-tight"
+        <?php if ($block->getId()): ?>id="<?= $escaper->escapeHtmlAttr($block->getId()) ?>"<?php endif; ?>
+        <?php if ($block->getAddBaseAttributeAria()): ?>
+            aria-labelledby="<?= $escaper->escapeHtmlAttr($block->getAddBaseAttributeAria()) ?>"
+        <?php endif; ?>>
+        <?= /* @noEscape */ $titleHtml ?>
+    </h1>
+    <?= $block->getChildHtml() ?>
+</div>

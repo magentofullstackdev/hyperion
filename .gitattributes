@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT
+# Normalize line endings: LF in the repository and in every checkout.
+* text=auto eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Not part of a git-based archive (release downloads, `git archive`)
+.github/ export-ignore
+.gitattributes export-ignore
+frontend/e2e/ export-ignore
+app/code/Magentofullstackdev/*/Test/ export-ignore

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Magentofullstackdev_HyperionMegaMenu::menu" title="Menu" translate="title"
+             module="Magentofullstackdev_HyperionMegaMenu" sortOrder="45" parent="Magento_Backend::content"
+             resource="Magentofullstackdev_HyperionMegaMenu::menu"/>
+        <add id="Magentofullstackdev_HyperionMegaMenu::group" title="Menu Management" translate="title"
+             module="Magentofullstackdev_HyperionMegaMenu" sortOrder="10" parent="Magentofullstackdev_HyperionMegaMenu::menu"
+             action="hyperion_megamenu/group/index" resource="Magentofullstackdev_HyperionMegaMenu::group"/>
+    </menu>
+</config>

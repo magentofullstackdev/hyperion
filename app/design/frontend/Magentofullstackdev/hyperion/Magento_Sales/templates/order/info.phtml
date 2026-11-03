@@ -1,0 +1,80 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion order info block -- billing/shipping addresses, payment and shipping method.
+ *
+ * The payment column prints the method title plus the rows of
+ * HyperionCustomer\ViewModel\Sales\PaymentInfo (bank transfer instructions,
+ * check / money order details, purchase order number, the method's specific
+ * information) read from the `payment_info` child core prepares on the
+ * info and print blocks.
+ *
+ * @var \Magento\Sales\Block\Order\Info $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$order = $block->getOrder();
+$payment = $order->getPayment();
+$paymentRows = $viewModels->require(\Magentofullstackdev\HyperionCustomer\ViewModel\Sales\PaymentInfo::class)
+    ->getDetails($block->getChildBlock('payment_info'), $payment);
+?>
+<div class="mb-6 pb-6 border-b border-subtle">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+
+        <div>
+            <h3 class="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
+                <?= $escaper->escapeHtml(__('Billing Address')) ?>
+            </h3>
+            <address class="not-italic text-sm text-secondary leading-relaxed">
+                <?= /* @noEscape */ $block->getFormattedAddress($order->getBillingAddress()) ?>
+            </address>
+        </div>
+
+        <?php if (!$order->getIsVirtual()): ?>
+            <div>
+                <h3 class="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
+                    <?= $escaper->escapeHtml(__('Shipping Address')) ?>
+                </h3>
+                <address class="not-italic text-sm text-secondary leading-relaxed">
+                    <?= /* @noEscape */ $block->getFormattedAddress($order->getShippingAddress()) ?>
+                </address>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
+                    <?= $escaper->escapeHtml(__('Shipping Method')) ?>
+                </h3>
+                <p class="text-sm text-secondary">
+                    <?php if ($order->getShippingDescription()): ?>
+                        <?= $escaper->escapeHtml($order->getShippingDescription()) ?>
+                    <?php else: ?>
+                        <?= $escaper->escapeHtml(__('No shipping information available')) ?>
+                    <?php endif; ?>
+                </p>
+            </div>
+        <?php endif; ?>
+
+        <div>
+            <h3 class="text-sm font-semibold text-muted uppercase tracking-wide mb-2">
+                <?= $escaper->escapeHtml(__('Payment Method')) ?>
+            </h3>
+            <p class="text-sm text-secondary">
+                <?= $escaper->escapeHtml($payment?->getMethodInstance()->getTitle() ?? '') ?>
+            </p>
+            <?php if ($paymentRows !== []): ?>
+                <dl class="mt-2 space-y-2 text-sm" data-hyperion-payment-details>
+                    <?php foreach ($paymentRows as $row): ?>
+                        <div>
+                            <?php if ($row['label'] !== ''): ?>
+                                <dt class="text-xs font-medium text-muted"><?= $escaper->escapeHtml($row['label']) ?></dt>
+                            <?php endif; ?>
+                            <dd class="text-secondary <?= $row['multiline'] ? 'whitespace-pre-line' : '' ?>"><?= $escaper->escapeHtml($row['value']) ?></dd>
+                        </div>
+                    <?php endforeach; ?>
+                </dl>
+            <?php endif; ?>
+        </div>
+
+    </div>
+</div>

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Cart page layout - module-level extension point.
+
+    The Hyperion theme owns the cart page block tree.  All structural
+    changes (removing Luma/KO blocks, mounting Magentofullstackdev\HyperionCheckout\Block\Cart\Items)
+    live in:
+
+        app/design/frontend/Magentofullstackdev/hyperion/
+            Magento_Checkout/layout/checkout_cart_index.xml
+
+    This file is intentionally empty so future Magentofullstackdev_HyperionCheckout module-
+    specific tweaks (e.g. adding a backend-driven upsell block, wiring a
+    new ViewModel) have a single, obvious extension point that is cleanly
+    separated from theme-layer concerns.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body/>
+</page>

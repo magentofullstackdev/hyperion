@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Magentofullstackdev_HyperionSampleData
+
+    Optional helper for stores that installed the Magento (Luma) sample
+    data. The sample data binds every widget instance and its layout
+    links to the Magento/luma theme, so on a Hyperion storefront the home
+    page promo grid, the category banners and the other CMS blocks never
+    render. This module rebinds them to Magentofullstackdev/hyperion on
+    every `setup:upgrade` (see Setup/RecurringData.php).
+
+    Not required by the theme package on purpose: install it only when
+    you want the Luma sample content on Hyperion.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <module name="Magentofullstackdev_HyperionSampleData">
+        <sequence>
+            <module name="Magento_Theme"/>
+            <module name="Magento_Widget"/>
+            <module name="Magento_Cms"/>
+            <module name="Magento_Catalog"/>
+            <module name="Magento_CatalogInventory"/>
+            <module name="Magento_Bundle"/>
+            <module name="Magentofullstackdev_HyperionCore"/>
+        </sequence>
+    </module>
+</config>

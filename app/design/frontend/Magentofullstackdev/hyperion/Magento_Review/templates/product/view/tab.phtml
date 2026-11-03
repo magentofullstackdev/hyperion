@@ -1,0 +1,57 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * "Reviews" tab body on the product page: the star breakdown of the
+ * approved reviews (HyperionCatalog\ViewModel\ReviewBreakdown), the review
+ * list (paginated over HTMX), then the form.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$product = $block->getLayout()->getBlock('review_list')?->getProduct();
+$breakdown = $product
+    ? $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\ReviewBreakdown::class)->getDistribution($product)
+    : ['total' => 0, 'average' => 0.0, 'stars' => []];
+?>
+<div id="reviews" class="space-y-10 scroll-mt-8" data-hyperion-reviews>
+    <?php if ($breakdown['total'] > 0): ?>
+        <section class="bg-surface border border-subtle rounded-xl p-5 flex flex-col sm:flex-row gap-6"
+                 aria-labelledby="hyperion-rating-breakdown-heading"
+                 data-hyperion-rating-breakdown="<?= (int) $breakdown['total'] ?>">
+            <div class="sm:w-40 shrink-0 text-center sm:text-left">
+                <h3 id="hyperion-rating-breakdown-heading" class="text-sm font-semibold text-muted uppercase tracking-wide">
+                    <?= $escaper->escapeHtml(__('Rating breakdown')) ?>
+                </h3>
+                <p class="text-3xl font-bold text-secondary mt-1">
+                    <?= $escaper->escapeHtml((string) $breakdown['average']) ?><span class="text-base text-muted font-normal"> / 5</span>
+                </p>
+                <p class="text-xs text-muted">
+                    <?= $escaper->escapeHtml(__('%1 review(s)', $breakdown['total'])) ?>
+                </p>
+            </div>
+            <dl class="flex-1 space-y-1.5">
+                <?php foreach ($breakdown['stars'] as $star => $row): ?>
+                    <div class="flex items-center gap-3 text-sm" data-hyperion-rating-row="<?= (int) $star ?>">
+                        <dt class="w-16 text-muted whitespace-nowrap"><?= $escaper->escapeHtml((int) $star === 1 ? __('1 star') : __('%1 stars', $star)) ?></dt>
+                        <dd class="flex-1 flex items-center gap-3">
+                            <div class="flex-1 h-2 rounded-full bg-surface-raised overflow-hidden"
+                                 role="progressbar"
+                                 aria-valuemin="0" aria-valuemax="100"
+                                 aria-valuenow="<?= (int) $row['percent'] ?>"
+                                 aria-label="<?= $escaper->escapeHtmlAttr((int) $star === 1 ? __('1 star: %1%', $row['percent']) : __('%1 stars: %2%', $star, $row['percent'])) ?>">
+                                <div class="h-full rounded-full bg-accent" style="width: <?= (int) $row['percent'] ?>%"></div>
+                            </div>
+                            <span class="w-10 text-right text-xs text-muted tabular-nums"><?= (int) $row['percent'] ?>%</span>
+                        </dd>
+                    </div>
+                <?php endforeach; ?>
+            </dl>
+        </section>
+    <?php endif; ?>
+    <?= $block->getChildHtml('review_list') ?>
+    <?= $block->getChildHtml('review_form') ?>
+</div>

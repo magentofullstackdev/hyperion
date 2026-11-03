@@ -1,0 +1,222 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion public shared wishlist page.
+ *
+ * Card grid of the items the owner shared: image, name, price, selected
+ * options, the owner's comment, a per-item "Add to Cart" form, an
+ * "Add to Wish List" form and the "Add All to Cart" form. The core block
+ * hands out its actions as post-data JSON ({"action": ..., "data": {...}});
+ * each one is rendered here as a plain POST form with a form key, so the
+ * page works without any JavaScript.
+ *
+ * @var \Magento\Wishlist\Block\Share\Wishlist $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+
+/** @var \Magentofullstackdev\HyperionCatalog\ViewModel\Pricing $pricing */
+$pricing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Pricing::class);
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer $imageViewModel */
+$imageViewModel = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer::class);
+/** @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Options|false $optionsBlock */
+$optionsBlock = $block->getChildBlock('item_options');
+
+$formKeyHtml = $block->getBlockHtml('formkey');
+$backUrl = (string) $block->getBackUrl() ?: $block->getBaseUrl();
+
+$decodePostData = static function (string $json): array {
+    $post = json_decode($json, true);
+    if (!is_array($post) || empty($post['action'])) {
+        return ['action' => '', 'data' => []];
+    }
+    return ['action' => (string) $post['action'], 'data' => (array) ($post['data'] ?? [])];
+};
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+$addAllPost = $canPurchase ? $decodePostData((string) $block->getSharedAddAllToCartUrl()) : ['action' => '', 'data' => []];
+?>
+<section class="space-y-6" aria-labelledby="hyperion-shared-wishlist-heading">
+
+    <h1 id="hyperion-shared-wishlist-heading" class="text-2xl font-bold text-secondary">
+        <?= $escaper->escapeHtml($block->getHeader()) ?>
+    </h1>
+
+    <?php if ($block->hasWishlistItems()): ?>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <?php foreach ($block->getWishlistItems() as $item): ?>
+                <?php
+                    $product = $item->getProduct();
+                    $productUrl = $block->getProductUrl($item);
+                    $productName = (string) $product->getName();
+                    $qty = (float) $item->getQty();
+                    $description = trim((string) $item->getDescription());
+                    $imageUrl = $imageViewModel->getUrl($product, 'wishlist_thumbnail');
+                    $options = $optionsBlock ? $optionsBlock->setItem($item)->getConfiguredOptions() : [];
+                    $canAddToCart = $canPurchase && $product->isSaleable() && $product->isVisibleInSiteVisibility();
+                    $addToCartPost = $decodePostData((string) $block->getSharedItemAddToCartUrl($item));
+                    $addToWishlistPost = $decodePostData((string) $block->getAddToWishlistParams($item));
+                ?>
+                <article class="flex flex-col bg-surface border border-subtle rounded-xl overflow-hidden
+                                hover:shadow-lg hover:border-primary/30 transition-all"
+                         id="shared-wishlist-item-<?= (int) $item->getId() ?>">
+
+                    <a href="<?= $escaper->escapeUrl($productUrl) ?>"
+                       class="block aspect-square overflow-hidden bg-surface-raised
+                              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                       tabindex="-1"
+                       aria-hidden="true">
+                        <img src="<?= $escaper->escapeUrl($imageUrl) ?>"
+                             alt=""
+                             loading="lazy"
+                             width="240"
+                             height="300"
+                             class="w-full h-full object-cover"/>
+                    </a>
+
+                    <div class="flex flex-col gap-3 p-4 flex-1">
+                        <h2 class="text-sm md:text-base font-medium text-secondary line-clamp-2">
+                            <a href="<?= $escaper->escapeUrl($productUrl) ?>"
+                               class="hover:text-primary transition-colors
+                                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+                                <?= $escaper->escapeHtml($productName) ?>
+                            </a>
+                        </h2>
+
+                        <div class="text-sm">
+                            <?= /* @noEscape */ $pricing->getTileHtml($product) ?>
+                        </div>
+
+                        <?php if ($options): ?>
+                            <dl class="text-xs text-muted space-y-1">
+                                <?php foreach ($options as $option): ?>
+                                    <div class="flex gap-1">
+                                        <dt class="font-semibold">
+                                            <?= $escaper->escapeHtml($option['label']) ?>:
+                                        </dt>
+                                        <dd>
+                                            <?php if (is_array($option['value'])): ?>
+                                                <?= /* @noEscape */ nl2br(implode("\n", $option['value'])) ?>
+                                            <?php else: ?>
+                                                <?= /* @noEscape */ $option['value'] ?>
+                                            <?php endif; ?>
+                                        </dd>
+                                    </div>
+                                <?php endforeach; ?>
+                            </dl>
+                        <?php endif; ?>
+
+                        <?php if ($qty > 1): ?>
+                            <p class="text-xs text-muted">
+                                <?= $escaper->escapeHtml(__('Qty')) ?>: <?= $escaper->escapeHtml((string) ($qty + 0)) ?>
+                            </p>
+                        <?php endif; ?>
+
+                        <?php if ($description !== ''): ?>
+                            <blockquote class="text-sm text-secondary leading-relaxed border-l-2 border-subtle pl-3">
+                                <span class="block text-xs font-medium text-muted">
+                                    <?= $escaper->escapeHtml(__('Comment')) ?>
+                                </span>
+                                <?= /* @noEscape */ nl2br($escaper->escapeHtml($description)) ?>
+                            </blockquote>
+                        <?php endif; ?>
+
+                        <div class="mt-auto space-y-2">
+                            <?php if ($canAddToCart && $addToCartPost['action'] !== ''): ?>
+                                <form action="<?= $escaper->escapeUrl($addToCartPost['action']) ?>" method="post">
+                                    <?= /* @noEscape */ $formKeyHtml ?>
+                                    <?php foreach ($addToCartPost['data'] as $name => $value): ?>
+                                        <input type="hidden"
+                                               name="<?= $escaper->escapeHtmlAttr((string) $name) ?>"
+                                               value="<?= $escaper->escapeHtmlAttr((string) $value) ?>">
+                                    <?php endforeach; ?>
+                                    <button type="submit"
+                                            class="inline-flex w-full items-center justify-center gap-2 px-3 py-2
+                                                   rounded-lg bg-primary text-on-primary text-sm font-semibold
+                                                   hover:bg-primary-hover hover:shadow-md transition-all
+                                                   focus:outline-none focus:ring-2 focus:ring-primary"
+                                            aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Cart', $productName)) ?>">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                                             viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                        </svg>
+                                        <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+                                    </button>
+                                </form>
+                            <?php elseif ($canPurchase && !$product->isSaleable()): ?>
+                                <p class="text-sm font-medium text-error">
+                                    <?= $escaper->escapeHtml(__('Out of stock')) ?>
+                                </p>
+                            <?php endif; ?>
+
+                            <?php if ($addToWishlistPost['action'] !== ''): ?>
+                                <form action="<?= $escaper->escapeUrl($addToWishlistPost['action']) ?>" method="post">
+                                    <?= /* @noEscape */ $formKeyHtml ?>
+                                    <?php foreach ($addToWishlistPost['data'] as $name => $value): ?>
+                                        <input type="hidden"
+                                               name="<?= $escaper->escapeHtmlAttr((string) $name) ?>"
+                                               value="<?= $escaper->escapeHtmlAttr((string) $value) ?>">
+                                    <?php endforeach; ?>
+                                    <button type="submit"
+                                            class="inline-flex w-full items-center justify-center
+                                                   gap-1 rounded-lg border border-subtle
+                                                   bg-surface px-2 py-2 text-xs font-medium
+                                                   text-muted hover:text-primary
+                                                   hover:border-primary/40
+                                                   focus:outline-none focus:ring-2 focus:ring-primary
+                                                   transition-colors"
+                                            aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Wish List', $productName)) ?>">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2"
+                                             viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                        </svg>
+                                        <?= $escaper->escapeHtml(__('Add to Wish List')) ?>
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 flex-wrap pt-4 border-t border-subtle">
+            <a href="<?= $escaper->escapeUrl($backUrl) ?>"
+               class="text-sm font-medium text-primary hover:text-primary-hover underline-offset-2 hover:underline">
+                <?= $escaper->escapeHtml(__('Back')) ?>
+            </a>
+
+            <?php if ($block->isSaleable() && $addAllPost['action'] !== ''): ?>
+                <form action="<?= $escaper->escapeUrl($addAllPost['action']) ?>" method="post">
+                    <?= /* @noEscape */ $formKeyHtml ?>
+                    <?php foreach ($addAllPost['data'] as $name => $value): ?>
+                        <input type="hidden"
+                               name="<?= $escaper->escapeHtmlAttr((string) $name) ?>"
+                               value="<?= $escaper->escapeHtmlAttr((string) $value) ?>">
+                    <?php endforeach; ?>
+                    <button type="submit"
+                            class="inline-flex items-center justify-center gap-2 px-5 py-2.5
+                                   rounded-lg bg-primary text-on-primary text-sm font-semibold
+                                   hover:bg-primary-hover hover:shadow-md transition-all
+                                   focus:outline-none focus:ring-2 focus:ring-primary">
+                        <?= $escaper->escapeHtml(__('Add All to Cart')) ?>
+                    </button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php else: ?>
+        <div class="py-16 text-center space-y-3 bg-surface border border-subtle rounded-xl" role="status">
+            <svg class="w-12 h-12 mx-auto text-muted" fill="none" stroke="currentColor"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+            <p class="text-muted">
+                <?= $escaper->escapeHtml(__('Wish List is empty now.')) ?>
+            </p>
+        </div>
+    <?php endif; ?>
+</section>

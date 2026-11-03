@@ -1,0 +1,60 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Print shipment(s) of an order.
+ *
+ * @var \Magento\Sales\Block\Order\PrintOrder\Shipment $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$order = $block->getOrder();
+$details = (string) $block->getTemplateFile('Magento_Sales::order/print/details.phtml');
+if ($block->getObjectData($order, 'is_virtual')) {
+    return;
+}
+?>
+<?php $shipments = iterator_to_array($block->getShipmentsCollection()); ?>
+<div class="container mx-auto px-4 pb-10 space-y-8" data-hyperion-print="shipment">
+    <?php if ($shipments === []): ?>
+        <p class="text-sm text-muted" data-hyperion-print-empty>
+            <?= $escaper->escapeHtml(__('There are no shipments for this order.')) ?>
+        </p>
+    <?php endif; ?>
+    <?php foreach ($shipments as $shipment): ?>
+        <?php $shipmentId = (string) $block->getObjectData($shipment, 'increment_id'); ?>
+        <section class="space-y-4" aria-label="<?= $escaper->escapeHtmlAttr(__('Shipment #%1', $shipmentId)) ?>">
+            <article class="bg-surface border border-subtle rounded-xl p-5 space-y-4">
+                <h2 class="text-base font-semibold text-secondary"><?= $escaper->escapeHtml(__('Shipment #%1', $shipmentId)) ?></h2>
+                <div class="overflow-x-auto">
+                    <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Items Shipped')) ?>">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="col name"><?= $escaper->escapeHtml(__('Product Name')) ?></th>
+                                <th scope="col" class="col sku"><?= $escaper->escapeHtml(__('SKU')) ?></th>
+                                <th scope="col" class="col qty"><?= $escaper->escapeHtml(__('Qty Shipped')) ?></th>
+                            </tr>
+                        </thead>
+                        <?php foreach ($block->getShipmentItems($shipment) as $item): ?>
+                            <tbody><?= $block->getItemHtml($item) ?></tbody>
+                        <?php endforeach; ?>
+                    </table>
+                </div>
+            </article>
+            <?php
+            $tracks = [];
+            foreach ($block->getShipmentTracks($shipment) as $track) {
+                $tracks[] = [(string) $block->getObjectData($track, 'title'), (string) $block->getObjectData($track, 'number')];
+            }
+            $block->addData([
+                'print_is_virtual' => false,
+                'print_shipping_address_html' => $block->getShipmentAddressFormattedHtml($shipment),
+                'print_billing_address_html' => $block->getBillingAddressFormattedHtml($order),
+                'print_shipping_method' => (string) $block->getObjectData($order, 'shipping_description'),
+                'print_tracks' => $tracks,
+            ]);
+            ?>
+            <?= /* @noEscape */ $block->fetchView($details) ?>
+        </section>
+    <?php endforeach; ?>
+</div>

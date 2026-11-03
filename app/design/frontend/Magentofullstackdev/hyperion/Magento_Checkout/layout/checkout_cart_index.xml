@@ -1,0 +1,139 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Hyperion cart page layout - theme layer.
+
+    Replaces the Luma/KO cart block sub-tree with a plain server-rendered
+    HTML cart driven by Magentofullstackdev\HyperionCheckout\Block\Cart\Items and HTMX for
+    qty-update and remove-item interactions.
+
+    Removal rationale:
+
+    checkout.cart
+        Root KO block. Its cart.phtml uses x-magento-init data-bind
+        scope="cart" and Knockout observable bindings for qty/totals.
+        Incompatible with the Hyperion no-KO constraint.
+
+    checkout.cart.container
+        htmlTag=div wrapper inside checkout.cart.items container. Declared
+        inside the checkout.cart block tree. Removing checkout.cart
+        implicitly orphans it, but we remove it explicitly for safety in
+        case another module references it directly.
+
+    checkout.cart.totals.container
+        KO-driven totals sidebar (subtotal, shipping estimator, grand
+        total). Hyperion renders totals inside cart/items.phtml as static
+        server HTML.
+
+    checkout.cart.form
+        Magento\Checkout\Block\Cart\Grid. Its form.phtml renders per-item
+        qty inputs via KO bindings.
+
+    checkout.cart.methods
+        Container for checkout/PayPal shortcut buttons rendered inside
+        checkout.cart.methods.bottom. The Hyperion cart template handles
+        the proceed-to-checkout CTA inline.
+
+    page.main.title
+        Removes the default "Shopping Cart" H1. Hyperion cart/items.phtml
+        renders its own accessible heading.
+
+    NOT removed - checkout.cart.extra_actions:
+        This name does not appear in the Magento 2.4.7 core
+        vendor/magento/module-checkout/view/frontend/layout/checkout_cart_index.xml.
+        Adding a referenceBlock remove for a non-existent name emits a
+        layout processing warning in developer mode; skipped intentionally.
+-->
+<page layout="1column"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <title>Shopping Cart</title>
+    </head>
+    <body>
+        <!-- Remove legacy Luma/KO-dependent block sub-tree. -->
+        <referenceBlock name="page.main.title" remove="true"/>
+        <referenceBlock name="checkout.cart" remove="true"/>
+        <referenceBlock name="checkout.cart.form" remove="true"/>
+        <referenceContainer name="checkout.cart.container" remove="true"/>
+        <referenceContainer name="checkout.cart.totals.container" remove="true"/>
+        <referenceContainer name="checkout.cart.methods" remove="true"/>
+        <!--
+            checkout.cart.extra_actions: SKIPPED. This block name does not
+            exist in the Magento 2.4.7 core checkout_cart_index.xml tree.
+            A referenceBlock remove for a non-existent name emits a layout
+            processing warning in developer mode.
+        -->
+
+        <!-- Mount Hyperion's server-rendered cart items block. `before="-"` places
+             it at the top of the content container before any other content blocks
+             (e.g. cart messages) that Magento appends to `content`.
+             `cacheable="false"` is mandatory: the core `checkout.cart` block that
+             carried this flag is removed above, and without at least one
+             non-cacheable block the layout is treated as cacheable, so the
+             Magento_Checkout DepersonalizePlugin clears the checkout session
+             before rendering and the page always shows an empty cart.
+             Two children are mounted:
+               `coupon` -> the HTMX-driven coupon form (#hyperion-coupon-form)
+               `totals` -> the OOB-swappable totals card (#hyperion-cart-totals)
+               `gift_message` -> the gift message editor template, rendered once per
+                                 eligible item and once for the order by items.phtml -->
+        <referenceContainer name="content">
+            <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Items"
+                   name="hyperion.cart.items"
+                   template="Magento_Checkout::cart/items.phtml"
+                   before="-"
+                   cacheable="false">
+                <arguments>
+                    <argument name="cart_data_view_model"
+                              xsi:type="object">Magentofullstackdev\HyperionCheckout\ViewModel\CartData</argument>
+                </arguments>
+
+                <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Coupon"
+                       name="hyperion.cart.coupon"
+                       as="coupon"
+                       template="Magento_Checkout::cart/coupon.phtml"/>
+
+                <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Totals"
+                       name="hyperion.cart.totals"
+                       as="totals"
+                       template="Magento_Checkout::cart/totals.phtml">
+                    <block class="Magento\Framework\View\Element\Template"
+                           name="hyperion.cart.estimate"
+                           as="estimate"
+                           template="Magento_Checkout::cart/estimate.phtml"/>
+                </block>
+
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.cart.gift_message"
+                       as="gift_message"
+                       template="Magentofullstackdev_HyperionCheckout::cart/gift-message.phtml"/>
+            </block>
+
+            <!--
+                Cross-sell carousel. Stock Magento parks this block deep
+                inside `checkout.cart.container`, which the theme
+                removes above (KO-driven block tree), so the carousel
+                disappeared with it. Re-mount as a sibling of
+                `hyperion.cart.items` and point at the theme's own
+                `cart/crosssell.phtml` which wraps the items in a
+                `<hyperion-carousel>`. `ifconfig` keeps the block
+                hidden when the admin disables crosssells. `after="-"`
+                parks it at the bottom of the content container, below
+                items + totals + coupon.
+            -->
+            <block class="Magento\Checkout\Block\Cart\Crosssell"
+                   name="hyperion.cart.crosssell"
+                   template="Magento_Checkout::cart/crosssell.phtml"
+                   after="-"
+                   ifconfig="checkout/cart/crosssell_enabled">
+                <arguments>
+                    <argument name="type" xsi:type="string">crosssell</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The mega menu is a source of the Hyperion navigation: the Topmenu block
+    asks the pool for the first source that applies (website, device) and
+    falls back to the category tree when none does. Nothing else of
+    HyperionNavigation knows this module exists.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magentofullstackdev\HyperionNavigation\Model\Menu\SourcePool">
+        <arguments>
+            <argument name="sources" xsi:type="array">
+                <item name="hyperion_megamenu" xsi:type="object">Magentofullstackdev\HyperionMegaMenu\Model\Menu\Source</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

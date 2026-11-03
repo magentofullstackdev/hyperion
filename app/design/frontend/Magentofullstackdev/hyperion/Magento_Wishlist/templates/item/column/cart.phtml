@@ -1,0 +1,67 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Hyperion wishlist card: quantity + "Add to Cart".
+ *
+ * The button is a submit of the outer `#wishlist-view-form` with its own
+ * `formaction` (`wishlist/index/cart/item/<id>`): the controller picks
+ * `qty[<id>]` out of the posted quantities, so the typed value is used
+ * without any script. The native redirects (back to the wish list, to
+ * the cart, or to the configure page when options are missing) are plain
+ * navigations and the result message arrives through <hyperion-messages>.
+ *
+ * @var \Magento\Wishlist\Block\Customer\Wishlist\Item\Column\Cart $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$item = $block->getItem();
+$product = $item->getProduct();
+$itemId = (int) $item->getWishlistItemId();
+$isSaleable = (bool) $product->isSaleable() && $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+/** @var \Magento\Wishlist\ViewModel\AllowedQuantity $allowedQuantity */
+$allowedQuantity = $block->getData('allowedQuantityViewModel');
+$allowedQty = $allowedQuantity->setItem($item)->getMinMaxQty();
+?>
+<?php foreach ($block->getChildNames() as $childName): ?>
+    <?= /* @noEscape */ $block->getLayout()->renderElement($childName, false) ?>
+<?php endforeach; ?>
+<div class="flex items-center gap-2">
+    <?php if ($item->canHaveQty() && $product->isVisibleInSiteVisibility()): ?>
+        <input type="number"
+               name="qty[<?= (int) $itemId ?>]"
+               id="qty[<?= (int) $itemId ?>]"
+               value="<?= $escaper->escapeHtmlAttr((string) ($block->getAddToCartQty($item) * 1)) ?>"
+               min="<?= $escaper->escapeHtmlAttr((string) $allowedQty['minAllowed']) ?>"
+               max="<?= $escaper->escapeHtmlAttr((string) $allowedQty['maxAllowed']) ?>"
+               step="any"
+               inputmode="decimal"
+               <?= $isSaleable ? '' : 'disabled' ?>
+               aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $product->getName())) ?>"
+               class="w-16 px-2 py-1.5 text-sm rounded-md border border-subtle
+                      bg-surface text-secondary
+                      focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary">
+    <?php endif; ?>
+
+    <?php if ($isSaleable): ?>
+        <button type="submit"
+                formaction="<?= $escaper->escapeUrl($block->getUrl('wishlist/index/cart', ['item' => $itemId])) ?>"
+                data-hyperion-wishlist-tocart
+                class="inline-flex flex-1 items-center justify-center gap-2 px-3 py-2
+                       rounded-lg bg-primary text-on-primary text-sm font-semibold
+                       hover:bg-primary-hover hover:shadow-md transition-all
+                       focus:outline-none focus:ring-2 focus:ring-primary">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
+                 viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+        </button>
+    <?php else: ?>
+        <p class="flex-1 text-sm font-medium text-error text-right">
+            <?= $escaper->escapeHtml(__('Out of stock')) ?>
+        </p>
+    <?php endif; ?>
+</div>

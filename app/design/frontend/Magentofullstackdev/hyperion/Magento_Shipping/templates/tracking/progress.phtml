@@ -1,0 +1,45 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Tracking history of one tracking number (child of
+ * Magento_Shipping::tracking/popup.phtml, data `track`).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magento\Shipping\Block\Tracking\Popup $parentBlock */
+$parentBlock = $block->getParentBlock();
+$track = $block->getData('track');
+?>
+<div class="overflow-x-auto">
+    <table class="hyperion-order-table" aria-label="<?= $escaper->escapeHtmlAttr(__('Track history')) ?>">
+        <thead>
+            <tr>
+                <th scope="col" class="col location"><?= $escaper->escapeHtml(__('Location')) ?></th>
+                <th scope="col" class="col date"><?= $escaper->escapeHtml(__('Date')) ?></th>
+                <th scope="col" class="col time"><?= $escaper->escapeHtml(__('Local Time')) ?></th>
+                <th scope="col" class="col description"><?= $escaper->escapeHtml(__('Description')) ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($track->getProgressdetail() as $detail): ?>
+                <tr>
+                    <td class="col location"><?= $escaper->escapeHtml((string) ($detail['deliverylocation'] ?? '')) ?></td>
+                    <td class="col date">
+                        <?= !empty($detail['deliverydate'])
+                            ? $escaper->escapeHtml($parentBlock->formatDeliveryDate($detail['deliverydate'] . ' ' . ($detail['deliverytime'] ?? '')))
+                            : '' ?>
+                    </td>
+                    <td class="col time">
+                        <?= !empty($detail['deliverytime'])
+                            ? $escaper->escapeHtml($parentBlock->formatDeliveryTime($detail['deliverytime'], $detail['deliverydate'] ?? null))
+                            : '' ?>
+                    </td>
+                    <td class="col description"><?= $escaper->escapeHtml((string) ($detail['activity'] ?? '')) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>

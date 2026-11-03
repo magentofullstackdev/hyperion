@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Admin configuration UI for Magentofullstackdev_HyperionCheckout.
+
+    Surfaces the feature flag `hyperion_checkout/general/enabled` under:
+        Stores -> Configuration -> Hyperion -> Checkout -> General
+            -> Enable Lit Checkout
+
+    Per Q3: flag defaults to `0` so every new environment opts in
+    explicitly; switching to `1` flips the /checkout page from stock
+    Knockout to the Lit mount shell via CheckoutHandlePlugin. One-flag
+    rollback - cache flush is all that's needed after toggling.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="hyperion" translate="label" sortOrder="400">
+            <label>Hyperion Theme</label>
+        </tab>
+        <section id="hyperion_checkout"
+                 translate="label"
+                 type="text"
+                 sortOrder="10"
+                 showInDefault="1"
+                 showInWebsite="1"
+                 showInStore="1">
+            <label>Checkout</label>
+            <tab>hyperion</tab>
+            <resource>Magentofullstackdev_HyperionCheckout::config</resource>
+            <group id="general"
+                   translate="label"
+                   type="text"
+                   sortOrder="10"
+                   showInDefault="1"
+                   showInWebsite="1"
+                   showInStore="1">
+                <label>General</label>
+                <field id="enabled"
+                       translate="label comment"
+                       type="select"
+                       sortOrder="10"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Enable Lit Checkout</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[
+                        When enabled, the /checkout page renders the Hyperion Lit one-step
+                        checkout. When disabled, stock Magento Knockout checkout is served.
+                        Flush cache after changing this setting.
+                    ]]></comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

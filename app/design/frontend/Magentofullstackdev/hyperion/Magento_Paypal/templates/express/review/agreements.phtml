@@ -1,0 +1,55 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Terms and conditions on the PayPal review page, inside the Place Order
+ * form. A manual agreement is a required checkbox (`agreement[<id>]`,
+ * what paypal/express/placeOrder validates); an automatic one is shown
+ * for information. The text opens in a <details> element.
+ *
+ * @var \Magento\CheckoutAgreements\Block\Agreements $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$agreements = $block->getAgreements();
+if (!$agreements) {
+    return;
+}
+?>
+<ul role="list" class="space-y-3 text-sm text-secondary" data-review-agreements>
+    <?php foreach ($agreements as $agreement): ?>
+        <?php if (!$agreement->getIsActive()) {
+            continue;
+        } ?>
+        <?php $agreementId = (int) $agreement->getAgreementId(); ?>
+        <?php $isManual = (int) $agreement->getMode() === 1; ?>
+        <li>
+            <?php if ($isManual): ?>
+                <label class="flex items-start gap-2">
+                    <input type="checkbox"
+                           name="agreement[<?= $escaper->escapeHtmlAttr((string) $agreementId) ?>]"
+                           value="1"
+                           required
+                           data-review-agreement
+                           class="mt-0.5 h-4 w-4 rounded border-subtle text-primary focus:ring-primary">
+                    <span><?= $escaper->escapeHtml($agreement->getCheckboxText()) ?></span>
+                </label>
+            <?php else: ?>
+                <p><?= $escaper->escapeHtml($agreement->getCheckboxText()) ?></p>
+            <?php endif; ?>
+            <details class="mt-1 text-xs text-muted">
+                <summary class="cursor-pointer text-primary hover:underline">
+                    <?= $escaper->escapeHtml($agreement->getName()) ?>
+                </summary>
+                <div class="mt-2 max-h-48 overflow-y-auto rounded-lg border border-subtle p-3">
+                    <?php if ($agreement->getIsHtml()): ?>
+                        <?= /* @noEscape */ $agreement->getContent() ?>
+                    <?php else: ?>
+                        <?= /* @noEscape */ nl2br($escaper->escapeHtml($agreement->getContent())) ?>
+                    <?php endif; ?>
+                </div>
+            </details>
+        </li>
+    <?php endforeach; ?>
+</ul>

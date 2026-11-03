@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Wishlist and compare sidebars (see Magento_Theme/layout/default.xml): the listing
+             pages carry them in the additional rail (under the filters on 2 / 3 column layouts,
+             under the inline filters on 1column). -->
+        <referenceContainer name="sidebar.additional">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.wishlist.sidebar"
+                   template="Magento_Wishlist::sidebar.phtml"
+                   ifconfig="wishlist/general/show_in_sidebar"
+                   before="-"/>
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.compare.sidebar"
+                   template="Magento_Catalog::product/compare/sidebar.phtml"
+                   after="hyperion.wishlist.sidebar"/>
+        </referenceContainer>
+        <!-- Remove Luma sidebar blocks -->
+        <referenceBlock name="search.search_terms_log" remove="true"/>
+
+        <!-- Reuse Hyperion category header look + product grid templates.
+             The Hyperion product list.phtml + toolbar + pager templates are already
+             resolved via the theme fallback chain for Magento_Catalog::product/list.phtml -->
+        <referenceBlock name="search.result" template="Magento_CatalogSearch::result.phtml"/>
+        <!-- list.phtml calls the Hyperion ProductList / Pricing / ImageConfig
+             ViewModels; the category handle injects them via
+             Magentofullstackdev_HyperionCatalog/layout/catalog_category_view.xml
+             and the theme catalog_category_view.xml, so the search handle
+             must inject the same set or list.phtml fails with
+             "isWishlistEnabled() on null". -->
+        <referenceBlock name="search_result_list" template="Magento_Catalog::product/list.phtml">
+            <arguments>
+                <argument name="product_list_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\ProductList</argument>
+                <argument name="pricing_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionCatalog\ViewModel\Pricing</argument>
+                <argument name="image_config_view_model"
+                          xsi:type="object">Magentofullstackdev\HyperionImage\ViewModel\ImageConfig</argument>
+                <argument name="formKeyViewModel" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\FormKey</argument>
+                <argument name="swatchesViewModel" xsi:type="object">Magentofullstackdev\HyperionCore\ViewModel\Product\Swatches</argument>
+            </arguments>
+            <!-- Infinite loading foot of the grid, see the category layout. -->
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.search.load_more" as="load_more" template="Magento_Catalog::product/list/load-more.phtml"/>
+        </referenceBlock>
+        <referenceBlock name="product_list_toolbar" template="Magento_Catalog::product/list/toolbar.phtml"/>
+        <referenceBlock name="product_list_toolbar_pager" template="Magento_Theme::html/pager.phtml"/>
+
+        <!-- Remove default page title (we render our own in search result.phtml) -->
+        <referenceBlock name="page.main.title" remove="true"/>
+    </body>
+</page>

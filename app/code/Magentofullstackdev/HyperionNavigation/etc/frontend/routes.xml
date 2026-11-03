@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <!-- /hyperion/navigation/menu: the public top menu fragment served
+             to Varnish (ESI include) or to HTMX (fallback). -->
+        <route id="hyperion" frontName="hyperion">
+            <module name="Magentofullstackdev_HyperionNavigation"/>
+        </route>
+    </router>
+</config>
