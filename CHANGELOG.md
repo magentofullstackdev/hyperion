@@ -6,6 +6,9 @@ All notable changes to Hyperion are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Development toolchain: Vitest 4.1 and glob 14 (Dependabot advisories on `@vitest/mocker` and `minimatch`); no change to the shipped assets. `vi.fn()` mocks assigned to typed callbacks declare their signature, and tests that spy on `window.confirm` stub it first (happy-dom defines none).
+
 ## [0.9.0-beta.2] - 2026-11-03
 
 ### Added

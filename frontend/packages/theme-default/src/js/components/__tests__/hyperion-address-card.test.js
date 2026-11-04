@@ -42,9 +42,10 @@ async function dialog() {
 describe('<hyperion-address-card> delete confirmation', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        // happy-dom defines no window.confirm: a stub stands in so a call would be seen.
+        vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
     });
-    afterEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
     test('the first submit is held and the themed dialog carries the card text, no window.confirm', async () => {
         const form = mountCard();

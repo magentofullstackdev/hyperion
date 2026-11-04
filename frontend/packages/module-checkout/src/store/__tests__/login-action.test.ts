@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 
 vi.mock('../../api/cart.js', () => ({
     loginOnStorefront: vi.fn(),
@@ -19,7 +19,7 @@ const api = vi.mocked(cartApi);
 
 describe('inline login', () => {
     let store: Store;
-    let reload: ReturnType<typeof vi.fn>;
+    let reload: Mock<() => void>;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -27,7 +27,7 @@ describe('inline login', () => {
         setStoreForTests(store);
         store.email.set('roni_cost@example.com');
         store.password.set('secret');
-        reload = vi.fn();
+        reload = vi.fn<() => void>();
     });
 
     it('signs in through the storefront AJAX login and reloads the checkout', async () => {
