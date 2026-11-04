@@ -27,6 +27,9 @@ use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
  */
 class HtmlImageRewriter
 {
+    /** The first content image of the request already carries the priority hint. */
+    private bool $priorityHinted = false;
+
     public function __construct(
         private readonly ImageConfig $imageConfig
     ) {
@@ -38,6 +41,7 @@ class HtmlImageRewriter
             return $html;
         }
         $html = $this->addIntrinsicSizes($html);
+        $html = $this->addPriorityHint($html);
         if (!$this->imageConfig->isWebpEnabled() && !$this->imageConfig->isAvifEnabled()) {
             return $html;
         }
@@ -89,6 +93,34 @@ class HtmlImageRewriter
         }
 
         return str_replace(' data-hyperion-skip-picture', '', $rewritten);
+    }
+
+    /**
+     * `fetchpriority="high"` on the first content image of the request: the
+     * CMS blocks render in document order, so on a landing page it is the
+     * hero banner, the usual largest contentful paint. Without the hint the
+     * browser queues it behind the stylesheet and the module preloads. An
+     * image that opts out (`loading="lazy"`, its own `fetchpriority`) is
+     * skipped and the hint goes to no other image of the request.
+     */
+    private function addPriorityHint(string $html): string
+    {
+        if ($this->priorityHinted) {
+            return $html;
+        }
+        if (!preg_match('/<img\b([^>]*)>/i', $html, $match, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $this->priorityHinted = true;
+        $attrs = $match[1][0];
+        if (preg_match('/\b(fetchpriority\s*=|loading\s*=\s*(["\']?)lazy\2)/i', $attrs)) {
+            return $html;
+        }
+        $end = str_ends_with($attrs, '/') ? ' /' : '';
+        $attrs = $end === '' ? $attrs : rtrim(substr($attrs, 0, -1));
+        $tag = '<img' . rtrim($attrs) . ' fetchpriority="high"' . $end . '>';
+
+        return substr_replace($html, $tag, $match[0][1], strlen($match[0][0]));
     }
 
     /**

@@ -6,6 +6,10 @@ All notable changes to Hyperion are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Images: the first content image of a request (the hero banner of a landing page, the usual largest contentful paint) gets `fetchpriority="high"` from the CMS image rewriter, so the browser no longer queues it behind the stylesheet and the module preloads. An image with `loading="lazy"` or its own `fetchpriority` opts out.
+- Sample data: `setup:upgrade` removes the Luma `<link>` to `{{MEDIA_URL}}styles.css` from `design/head/includes` at every scope (`LumaStylesheetLinkRemover`), one render blocking request less; other includes of the scope are kept.
+
 ### Changed
 - Development toolchain: Vitest 4.1 and glob 14 (Dependabot advisories on `@vitest/mocker` and `minimatch`); no change to the shipped assets. `vi.fn()` mocks assigned to typed callbacks declare their signature, and tests that spy on `window.confirm` stub it first (happy-dom defines none).
 

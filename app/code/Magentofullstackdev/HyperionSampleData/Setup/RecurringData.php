@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionSampleData\Setup;
 
+use Magentofullstackdev\HyperionSampleData\Model\LumaStylesheetLinkRemover;
 use Magentofullstackdev\HyperionSampleData\Model\LumaStylesheetReplacer;
 use Magentofullstackdev\HyperionSampleData\Model\WidgetThemeRebinder;
 use Magento\Framework\Setup\InstallDataInterface;
@@ -27,6 +28,7 @@ class RecurringData implements InstallDataInterface
     public function __construct(
         private readonly WidgetThemeRebinder $rebinder,
         private readonly LumaStylesheetReplacer $stylesheetReplacer,
+        private readonly LumaStylesheetLinkRemover $stylesheetLinkRemover,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -45,6 +47,15 @@ class RecurringData implements InstallDataInterface
             }
         } catch (\Throwable $e) {
             $this->logger->error('HyperionSampleData: styles.css not replaced -- ' . $e->getMessage());
+        }
+        try {
+            // The link to that file in design/head/includes is a render blocking request for nothing.
+            $rows = $this->stylesheetLinkRemover->remove();
+            if ($rows > 0) {
+                $this->logger->info('HyperionSampleData: removed the Luma styles.css link from design/head/includes (' . $rows . ' scope rows).');
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('HyperionSampleData: styles.css link not removed -- ' . $e->getMessage());
         }
     }
 }

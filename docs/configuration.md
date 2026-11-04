@@ -155,6 +155,13 @@ converts and the theme emits `<picture>` elements with the new sources; the
 JPG / PNG stays the fallback (a `<source>` is only emitted when the companion
 file exists, browsers do not fall back from a 404 inside `<picture>`).
 
+Local images inside CMS blocks and pages get the same `<picture>` wrap,
+`width` / `height` from the file when they carry neither, and the first
+content image of the page (the hero banner of a landing page, usually the
+largest contentful paint) gets `fetchpriority="high"` so the browser
+requests it before the stylesheet and the module preloads; an image with
+`loading="lazy"` or its own `fetchpriority` is left alone.
+
 A conversion is triggered in three places, all honouring the conversion mode
 below: when Magento's image helper writes a cache file on demand
 (`Product\Image::saveFile`, the Luma style resize), when core's resize service

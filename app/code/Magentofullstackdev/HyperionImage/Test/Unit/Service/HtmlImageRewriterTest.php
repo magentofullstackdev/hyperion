@@ -42,7 +42,11 @@ class HtmlImageRewriterTest extends TestCase
         $this->imageConfig->method('isAvifEnabled')->willReturn(false);
 
         $html = '<img src="https://example.com/media/wysiwyg/banner.jpg" alt="">';
-        self::assertSame($html, $this->rewriter->rewrite($html));
+        self::assertSame(
+            '<img src="https://example.com/media/wysiwyg/banner.jpg" alt="" fetchpriority="high">',
+            $this->rewriter->rewrite($html),
+            'no picture wrap, only the priority hint of the first image'
+        );
     }
 
     public function testWrapsImgWithWebpSourceWhenCompanionExists(): void
@@ -97,7 +101,7 @@ class HtmlImageRewriterTest extends TestCase
 
         // No companions exist -> don't wrap (no point in <picture> with no <source>).
         self::assertStringNotContainsString('<picture>', $result);
-        self::assertSame($html, $result);
+        self::assertSame('<img src="https://x.test/missing.jpg" fetchpriority="high">', $result);
     }
 
     public function testDoesNotDoubleWrapImgAlreadyInsidePicture(): void
@@ -154,6 +158,55 @@ class HtmlImageRewriterTest extends TestCase
         self::assertStringContainsString('b.jpg.webp', $result);
     }
 
+    public function testTheFirstContentImageOfTheRequestGetsThePriorityHint(): void
+    {
+        $this->imageConfig->method('isWebpEnabled')->willReturn(false);
+        $this->imageConfig->method('isAvifEnabled')->willReturn(false);
+        $this->imageConfig->method('getIntrinsicSize')->willReturn(null);
+
+        $first = $this->rewriter->rewrite('<p><img src="/media/a.jpg" alt="" width="10" height="5" /><img src="/media/b.jpg"></p>');
+        self::assertSame(
+            '<p><img src="/media/a.jpg" alt="" width="10" height="5" fetchpriority="high" /><img src="/media/b.jpg"></p>',
+            $first,
+            'the first image of the first block gets the hint, the second image does not'
+        );
+        self::assertSame(
+            '<img src="/media/c.jpg">',
+            $this->rewriter->rewrite('<img src="/media/c.jpg">'),
+            'a later block of the same request renders unchanged'
+        );
+    }
+
+    public function testAnImageThatOptsOutKeepsTheHintFromEveryOtherImage(): void
+    {
+        $this->imageConfig->method('isWebpEnabled')->willReturn(false);
+        $this->imageConfig->method('isAvifEnabled')->willReturn(false);
+        $this->imageConfig->method('getIntrinsicSize')->willReturn(null);
+
+        $html = '<img src="/media/a.jpg" loading="lazy"><img src="/media/b.jpg">';
+        self::assertSame($html, $this->rewriter->rewrite($html), 'lazy first image: no hint anywhere');
+
+        $rewriter = new HtmlImageRewriter($this->imageConfig);
+        $html = '<img src="/media/a.jpg" fetchpriority="low">';
+        self::assertSame($html, $rewriter->rewrite($html), 'an explicit priority is kept');
+    }
+
+    public function testThePriorityHintAndThePictureWrapTogether(): void
+    {
+        $this->imageConfig->method('isWebpEnabled')->willReturn(true);
+        $this->imageConfig->method('isAvifEnabled')->willReturn(false);
+        $this->imageConfig->method('hasWebpCompanion')->willReturn(true);
+        $this->imageConfig->method('hasAvifCompanion')->willReturn(false);
+        $this->imageConfig->method('getWebpUrl')->willReturn('/media/hero.jpg.webp');
+        $this->imageConfig->method('getIntrinsicSize')->willReturn([1280, 460]);
+
+        self::assertSame(
+            '<picture><source type="image/webp" srcset="/media/hero.jpg.webp">'
+            . '<img src="/media/hero.jpg" alt="" width="1280" height="460" fetchpriority="high"></picture>',
+            $this->rewriter->rewrite('<img src="/media/hero.jpg" alt="">')
+        );
+    }
+
     public function testAddsIntrinsicSizeToLocalImagesWithoutDimensions(): void
     {
         $this->imageConfig->method('isWebpEnabled')->willReturn(false);
@@ -164,7 +217,7 @@ class HtmlImageRewriterTest extends TestCase
         $html = '<p><img src="https://shop.test/media/wysiwyg/a.jpg" alt="" /> <img src="https://cdn.other/b.jpg" alt="b"></p>';
 
         self::assertSame(
-            '<p><img src="https://shop.test/media/wysiwyg/a.jpg" alt="" width="640" height="480" /> <img src="https://cdn.other/b.jpg" alt="b"></p>',
+            '<p><img src="https://shop.test/media/wysiwyg/a.jpg" alt="" width="640" height="480" fetchpriority="high" /> <img src="https://cdn.other/b.jpg" alt="b"></p>',
             $this->rewriter->rewrite($html)
         );
     }
@@ -177,7 +230,10 @@ class HtmlImageRewriterTest extends TestCase
         $imageConfig->expects(self::never())->method('getIntrinsicSize');
         $html = '<img src="https://shop.test/media/wysiwyg/a.jpg" width="100"><img height="20" src="https://shop.test/media/wysiwyg/b.jpg">';
 
-        self::assertSame($html, (new HtmlImageRewriter($imageConfig))->rewrite($html));
+        self::assertSame(
+            '<img src="https://shop.test/media/wysiwyg/a.jpg" width="100" fetchpriority="high"><img height="20" src="https://shop.test/media/wysiwyg/b.jpg">',
+            (new HtmlImageRewriter($imageConfig))->rewrite($html)
+        );
     }
 
     public function testSizesAndPictureWrapTogether(): void
@@ -189,7 +245,7 @@ class HtmlImageRewriterTest extends TestCase
         $this->imageConfig->method('getWebpUrl')->willReturn('https://shop.test/media/wysiwyg/a.jpg.webp');
 
         self::assertSame(
-            '<picture><source type="image/webp" srcset="https://shop.test/media/wysiwyg/a.jpg.webp"><img src="https://shop.test/media/wysiwyg/a.jpg" width="10" height="20"></picture>',
+            '<picture><source type="image/webp" srcset="https://shop.test/media/wysiwyg/a.jpg.webp"><img src="https://shop.test/media/wysiwyg/a.jpg" width="10" height="20" fetchpriority="high"></picture>',
             $this->rewriter->rewrite('<img src="https://shop.test/media/wysiwyg/a.jpg">')
         );
     }
