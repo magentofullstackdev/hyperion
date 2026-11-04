@@ -11,6 +11,7 @@ use Magento\Framework\App\State;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magentofullstackdev\HyperionImage\Cache\BatchInvalidator;
 use Magentofullstackdev\HyperionImage\Model\PathResolver;
+use Magentofullstackdev\HyperionImage\Model\Variants;
 use Magentofullstackdev\HyperionImage\Service\ConversionService;
 use Psr\Log\LoggerInterface;
 use RecursiveDirectoryIterator;
@@ -60,6 +61,7 @@ class ConvertCommand extends Command
         private readonly DirectoryList $directoryList,
         private readonly ConversionService $service,
         private readonly PathResolver $pathResolver,
+        private readonly Variants $variants,
         private readonly BatchInvalidator $batchInvalidator,
         private readonly LoggerInterface $logger,
         ?string $name = null
@@ -150,7 +152,7 @@ class ConvertCommand extends Command
                 if ($force) {
                     // --force: blow away every companion so the Converter
                     // re-encodes from scratch.
-                    foreach ($this->pathResolver->getCompanionPaths($path) as $companion) {
+                    foreach ($this->companionsOf($path) as $companion) {
                         $this->safeUnlink($companion);
                     }
                 } elseif ($this->deleteStaleCompanions($path)) {
@@ -214,7 +216,7 @@ class ConvertCommand extends Command
             return false;
         }
         $removed = false;
-        foreach ($this->pathResolver->getCompanionPaths($sourcePath) as $companion) {
+        foreach ($this->companionsOf($sourcePath) as $companion) {
             if (!file_exists($companion)) {
                 continue;
             }
@@ -225,6 +227,19 @@ class ConvertCommand extends Command
             }
         }
         return $removed;
+    }
+
+    /**
+     * The full size companions plus every resized variant the source may have.
+     *
+     * @return string[]
+     */
+    private function companionsOf(string $sourcePath): array
+    {
+        return array_merge(
+            $this->pathResolver->getCompanionPaths($sourcePath),
+            $this->variants->allPossiblePaths($sourcePath)
+        );
     }
 
     private function safeMtime(string $path): ?int

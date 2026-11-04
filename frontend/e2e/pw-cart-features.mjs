@@ -14,6 +14,7 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -21,6 +22,7 @@ const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-res
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith('http')) ?? '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> <slotDir> ...');
     process.exit(2);
@@ -97,7 +99,7 @@ try {
     {
         const j = await newJourney();
         const { page } = j;
-        await addToCart(page, '/joust-duffle-bag.html');
+        await addToCart(page, u('/joust-duffle-bag.html'));
         await page.goto(base + '/checkout/cart/', { waitUntil: 'networkidle' });
         const estimator = page.locator('[data-hyperion-cart-estimate]');
         check('estimator: panel rendered in the summary card', await estimator.count() === 1);
@@ -204,7 +206,7 @@ try {
         // A previous run leaves the moved product on the wishlist; the counter must start from a clean one.
         sql(`delete wi from wishlist_item wi join wishlist w on w.wishlist_id = wi.wishlist_id join customer_entity c on c.entity_id = w.customer_id where c.email = '${CUSTOMER.email}'`);
         check('customer: login', await login(page), page.url().replace(base, ''));
-        await addToCart(page, '/fusion-backpack.html');
+        await addToCart(page, u('/fusion-backpack.html'));
         await page.goto(base + '/checkout/cart/', { waitUntil: 'networkidle' });
         const linesBefore = await page.locator('[data-hyperion-cart-item]').count();
         const wishBefore = await page.evaluate(() => Number(document.querySelector('#hyperion-wishlist-count')?.textContent?.replace(/\D/g, '') || 0));
@@ -248,7 +250,7 @@ try {
         sql(`delete from customer_address_entity where street like '22 Spec Street%'`);
 
         // Gift message + shipping policy inside the checkout
-        await addToCart(page, '/fusion-backpack.html');
+        await addToCart(page, u('/fusion-backpack.html'));
         await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
         await page.waitForSelector('shipping-method-row', { timeout: 40000 }).catch(() => {});
         const policyBtn = page.locator('[data-hyperion-shipping-policy-open]');
@@ -286,7 +288,7 @@ try {
         check('gift: item-level form rendered for the physical item', itemForms >= 1, `forms ${itemForms}`);
         }
         if (withFpt) {
-            await addToCart(page, '/joust-duffle-bag.html');
+            await addToCart(page, u('/joust-duffle-bag.html'));
             await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
             await page.waitForSelector('summary-item', { timeout: 30000 }).catch(() => {});
             check('fpt: checkout summary item shows the FPT line', await page.locator('summary-item [data-hyperion-fpt]').count() > 0);

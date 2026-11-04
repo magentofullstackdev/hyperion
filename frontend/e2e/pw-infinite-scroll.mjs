@@ -13,10 +13,12 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -52,8 +54,8 @@ const get = async (ctx, p) => {
     }
     return { status: 599, headers: {}, text: '' };
 };
-const WOMEN = '/women/tops-women.html';
-const MEN = '/men/tops-men.html';
+const WOMEN = u('/women/tops-women.html');
+const MEN = u('/men/tops-men.html');
 const TILES = '#hyperion-product-grid [data-hyperion-tiles] > li';
 const FOOT = '[data-hyperion-load-more]';
 const BUTTON = '[data-hyperion-load-more-button]';

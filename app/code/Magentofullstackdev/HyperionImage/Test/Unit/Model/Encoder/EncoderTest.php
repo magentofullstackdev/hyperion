@@ -236,6 +236,27 @@ class EncoderTest extends TestCase
         self::assertFileExists($target . '/keep');
     }
 
+    /**
+     * @dataProvider encoders
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
+    public function testAMaxWidthScalesTheImageDownKeepingTheRatio(string $kind): void
+    {
+        $encoder = $this->webpEncoder($kind);
+        $image = imagecreatetruecolor(40, 20);
+        imagefill($image, 0, 0, (int) imagecolorallocate($image, 20, 120, 200));
+        $source = $this->path('wide.png');
+        imagepng($image, $source);
+
+        self::assertTrue($encoder->encode($source, $this->path('wide.png.w20.webp'), $this->webp, 80, 20));
+        self::assertTrue($encoder->encode($source, $this->path('wide.png.webp'), $this->webp, 80, 400));
+
+        $variant = getimagesize($this->path('wide.png.w20.webp'));
+        $full = getimagesize($this->path('wide.png.webp'));
+        self::assertSame([20, 10], [$variant[0], $variant[1]], 'half the width, the ratio kept');
+        self::assertSame([40, 20], [$full[0], $full[1]], 'a larger max width leaves the size alone');
+    }
+
     private function encoder(string $kind): EncoderInterface
     {
         if (!extension_loaded($kind)) {

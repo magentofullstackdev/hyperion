@@ -1,6 +1,6 @@
 {
     "name": "@magentofullstackdev/hyperion-theme",
-    "version": "0.9.0-beta.2",
+    "version": "0.9.0-beta.3",
     "description": "Hyperion default Magento 2 theme: TypeScript/Lit/Tailwind source. Replaces the Luma RequireJS/Knockout/jQuery stack with HTMX, Lit Web Components, and Tailwind.",
     "license": "MIT",
     "author": "Sergiu Ro <sergiu.ro@magentofullstack.dev>",

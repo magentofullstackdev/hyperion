@@ -11,12 +11,14 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -66,13 +68,13 @@ try {
     const { page } = j;
 
     // ---- Open Graph (server markup)
-    const pdpHtml = await (await page.context().request.get(base + '/joust-duffle-bag.html')).text();
+    const pdpHtml = await (await page.context().request.get(base + u('/joust-duffle-bag.html'))).text();
     const og = Object.fromEntries([...pdpHtml.matchAll(/<meta property="([^"]+)" content="([^"]*)"\/>/g)].map((m) => [m[1], m[2]]));
     check('open graph: title, type, url, image, description, price, currency, availability', og['og:type'] === 'product' && og['og:title'] === 'Joust Duffle Bag' && /joust-duffle-bag/.test(og['og:url']) && /\.jpg/.test(og['og:image'] || '') && (og['og:description'] || '').length > 10 && /^\d+\.\d\d$/.test(og['product:price:amount'] || '') && /^[A-Z]{3}$/.test(og['product:price:currency'] || '') && og['product:availability'] === 'instock', JSON.stringify(og).slice(0, 220));
-    check('open graph: not emitted on a category page', !/<meta property="og:type"/.test(await (await page.context().request.get(base + '/gear/bags.html')).text()));
+    check('open graph: not emitted on a category page', !/<meta property="og:type"/.test(await (await page.context().request.get(base + u('/gear/bags.html'))).text()));
 
     // ---- stock notices, qty rules, video, breakdown on the PDP
-    await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
     const pdp = await page.evaluate(() => ({
         low: document.querySelector('[data-hyperion-low-stock]')?.textContent.trim() || '',
         increments: document.querySelector('[data-hyperion-qty-increments]')?.textContent.trim() || '',
@@ -124,7 +126,7 @@ try {
     }
 
     // ---- bundle running total
-    await page.goto(base + '/hyperion-travel-kit.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/hyperion-travel-kit.html'), { waitUntil: 'networkidle' });
     const bundle = await page.evaluate(async () => {
         const el = document.querySelector('hyperion-bundle-options');
         const total = () => el.querySelector('[data-hyperion-bundle-total]').textContent.trim();
@@ -141,7 +143,7 @@ try {
     check('bundle: "Price as configured" follows selections and quantities, with a summary list', bundle.label && bundle.linesBefore >= 1 && bundle.linesAfter === bundle.linesBefore + 1 && num(bundle.afterCheck) > num(bundle.before) && num(bundle.afterQty) > num(bundle.afterCheck), JSON.stringify(bundle));
 
     // ---- swatch filters in the layered navigation
-    await page.goto(base + '/women/tops-women.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/women/tops-women.html'), { waitUntil: 'networkidle' });
     const readSwatchFilter = (code) => {
         const list = document.querySelector(`[data-hyperion-swatch-filter="${code}"]`);
         if (!list) return null;
@@ -192,7 +194,7 @@ try {
     // The fragment swaps the layered navigation out of band with the state of the new URL: like the server
     // render of that URL, the Size pills stay and the applied Color facet leaves the list, its chip is in the state block.
     check('swatch filters: the swapped navigation keeps the Size pills, drops the applied Color facet and shows its chip', afterChip.sizeChips > 0 && !afterChip.colorFacet && afterChip.colorChip, JSON.stringify({ sizeChips: afterChip.sizeChips, colorFacet: afterChip.colorFacet, colorChip: afterChip.colorChip }));
-    await page.goto(base + '/women/tops-women.html' + afterChip.url, { waitUntil: 'networkidle' });
+    await page.goto(base + u('/women/tops-women.html') + afterChip.url, { waitUntil: 'networkidle' });
     const reloaded = await page.evaluate(`(${readSwatchFilter.toString()})('size')`);
     check('swatch filters: the server render with an active colour keeps the Size pills and drops the Color chips', !!reloaded && reloaded.kind === 'text' && reloaded.chips > 0 && reloaded.htmx && await page.evaluate(() => !document.querySelector('[data-hyperion-swatch-filter="color"]') && (document.querySelector('#hyperion-active-filters')?.innerText || '').includes('Color')), JSON.stringify(reloaded).slice(0, 200));
     const searchHtml = await (await page.context().request.get(base + '/catalogsearch/result/?q=jacket')).text();
@@ -200,7 +202,7 @@ try {
     check(searchFilterLinks.length ? 'swatch filters: search result filters target the search fragment endpoint' : 'swatch filters: search for "jacket" has no category filter (fragment endpoint check skipped)', searchFilterLinks.every((u) => u.includes('/hyperion/catalog/search/?q=jacket')), searchFilterLinks.slice(0, 2).join(' | '));
 
     // ---- grid / list switch and the limiter
-    await page.goto(base + '/women/tops-women.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/women/tops-women.html'), { waitUntil: 'networkidle' });
     check('listing: grid mode with a grid / list switch', await page.evaluate(() => document.querySelector('[data-hyperion-list-mode]')?.getAttribute('data-hyperion-list-mode') === 'grid' && document.querySelectorAll('[data-hyperion-view-mode-link]').length === 2));
     await Promise.all([page.waitForResponse((r) => r.url().includes('/hyperion/category/filter') && r.url().includes('product_list_mode=list')), page.click('[data-hyperion-view-mode-link="list"]')]);
     await page.waitForTimeout(800);

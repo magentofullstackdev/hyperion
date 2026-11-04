@@ -11,6 +11,7 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -18,6 +19,7 @@ const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-res
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith('http')) ?? '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> <slotDir>');
     process.exit(2);
@@ -25,7 +27,7 @@ if (!/^https?:\/\//.test(base)) {
 const slot = args.find((a) => !a.startsWith('http') && !a.startsWith('--')) ?? '.';
 const slotDir = path.resolve(slot);
 const CONFIGURABLE_SKU = 'MH01';
-const BUNDLE_PATHS = ['/sprite-yoga-companion-kit.html', '/hyperion-travel-kit.html'];
+const BUNDLE_PATHS = [u('/sprite-yoga-companion-kit.html'), u('/hyperion-travel-kit.html')];
 
 const results = [];
 const check = (name, ok, detail = '') => {

@@ -11,6 +11,10 @@ use Magento\Framework\UrlInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use Magentofullstackdev\HyperionImage\Model\Config;
+use Magentofullstackdev\HyperionImage\Model\Format\AvifFormat;
+use Magentofullstackdev\HyperionImage\Model\Format\WebpFormat;
+use Magentofullstackdev\HyperionImage\Model\PathResolver;
+use Magentofullstackdev\HyperionImage\Model\Variants;
 use Magentofullstackdev\HyperionImage\Service\CompanionScheduler;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -46,10 +50,13 @@ class ImageConfigTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach ([$this->source . '.webp', $this->source] as $file) {
+        foreach (array_merge([$this->source . '.webp', $this->source], glob($this->root . '/wysiwyg/*') ?: []) as $file) {
             if (is_file($file)) {
                 unlink($file);
             }
+        }
+        if (is_dir($this->root . '/wysiwyg')) {
+            rmdir($this->root . '/wysiwyg');
         }
         $dir = dirname($this->source);
         while ($dir !== $this->root && is_dir($dir)) {
@@ -82,7 +89,8 @@ class ImageConfigTest extends TestCase
             $filesystem,
             $storeManager,
             $this->createStub(LoggerInterface::class),
-            $scheduler
+            $scheduler,
+            new Variants($this->config, new PathResolver(), new WebpFormat(), new AvifFormat())
         );
     }
 
@@ -119,6 +127,63 @@ class ImageConfigTest extends TestCase
     public function testDisabledFormatNeverSchedules(): void
     {
         self::assertFalse($this->makeViewModel($this->scheduledTimes(0))->hasAvifCompanion(self::MEDIA_URL . self::RELATIVE));
+    }
+
+    /** A real 1280 x 460 PNG under wysiwyg, the shape of a landing page banner. */
+    private function writeBanner(): string
+    {
+        mkdir($this->root . '/wysiwyg', 0777, true);
+        $path = $this->root . '/wysiwyg/hero.png';
+        $image = imagecreatetruecolor(1280, 460);
+        imagepng($image, $path);
+
+        return $path;
+    }
+
+    public function testSrcsetListsTheVariantsThatExistAndTheFullSizeCompanion(): void
+    {
+        $this->config->method('isVariantsEnabled')->willReturn(true);
+        $this->config->method('getVariantWidths')->willReturn([640, 960, 2000]);
+        $banner = $this->writeBanner();
+        file_put_contents($banner . '.w640.webp', 'webp');
+        file_put_contents($banner . '.w960.webp', 'webp');
+        $viewModel = $this->makeViewModel($this->scheduledTimes(0));
+        $url = self::MEDIA_URL . 'wysiwyg/hero.png';
+
+        self::assertSame(
+            $url . '.w640.webp 640w, ' . $url . '.w960.webp 960w, ' . $url . '.webp 1280w',
+            $viewModel->getSrcset($url, new WebpFormat()),
+            'the 2000 px width is wider than the source and never listed'
+        );
+        self::assertSame('(min-width: 1280px) 1280px, 100vw', $viewModel->getSizes($url));
+    }
+
+    public function testAMissingVariantIsScheduledAndTheOthersStillServe(): void
+    {
+        $this->config->method('isVariantsEnabled')->willReturn(true);
+        $this->config->method('getVariantWidths')->willReturn([640, 960]);
+        $banner = $this->writeBanner();
+        file_put_contents($banner . '.w640.webp', 'webp');
+        $scheduler = $this->createMock(CompanionScheduler::class);
+        $scheduler->expects(self::once())->method('scheduleOnceIfMissing')->with($banner);
+        $url = self::MEDIA_URL . 'wysiwyg/hero.png';
+
+        self::assertSame(
+            $url . '.w640.webp 640w, ' . $url . '.webp 1280w',
+            $this->makeViewModel($scheduler)->getSrcset($url, new WebpFormat())
+        );
+    }
+
+    public function testNoSrcsetWhileNoVariantExistsOrForACatalogImage(): void
+    {
+        $this->config->method('isVariantsEnabled')->willReturn(true);
+        $this->config->method('getVariantWidths')->willReturn([640]);
+        $banner = $this->writeBanner();
+        $viewModel = $this->makeViewModel($this->createStub(CompanionScheduler::class));
+
+        self::assertSame('', $viewModel->getSrcset(self::MEDIA_URL . 'wysiwyg/hero.png', new WebpFormat()));
+        self::assertSame('', $viewModel->getSrcset(self::MEDIA_URL . self::RELATIVE, new WebpFormat()));
+        self::assertFileExists($banner);
     }
 
     public function testUrlOutsideTheMediaRootIsNotOurs(): void

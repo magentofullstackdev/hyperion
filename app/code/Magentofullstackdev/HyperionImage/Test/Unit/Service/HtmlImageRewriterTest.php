@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionImage\Test\Unit\Service;
 
+use Magentofullstackdev\HyperionImage\Model\Format\AvifFormat;
+use Magentofullstackdev\HyperionImage\Model\Format\WebpFormat;
 use Magentofullstackdev\HyperionImage\Service\HtmlImageRewriter;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
 use PHPUnit\Framework\MockObject\Stub;
@@ -22,7 +24,7 @@ class HtmlImageRewriterTest extends TestCase
     protected function setUp(): void
     {
         $this->imageConfig = $this->createStub(ImageConfig::class);
-        $this->rewriter = new HtmlImageRewriter($this->imageConfig);
+        $this->rewriter = new HtmlImageRewriter($this->imageConfig, new WebpFormat(), new AvifFormat());
     }
 
     public function testEmptyHtmlReturnsUnchanged(): void
@@ -186,7 +188,7 @@ class HtmlImageRewriterTest extends TestCase
         $html = '<img src="/media/a.jpg" loading="lazy"><img src="/media/b.jpg">';
         self::assertSame($html, $this->rewriter->rewrite($html), 'lazy first image: no hint anywhere');
 
-        $rewriter = new HtmlImageRewriter($this->imageConfig);
+        $rewriter = new HtmlImageRewriter($this->imageConfig, new WebpFormat(), new AvifFormat());
         $html = '<img src="/media/a.jpg" fetchpriority="low">';
         self::assertSame($html, $rewriter->rewrite($html), 'an explicit priority is kept');
     }
@@ -204,6 +206,28 @@ class HtmlImageRewriterTest extends TestCase
             '<picture><source type="image/webp" srcset="/media/hero.jpg.webp">'
             . '<img src="/media/hero.jpg" alt="" width="1280" height="460" fetchpriority="high"></picture>',
             $this->rewriter->rewrite('<img src="/media/hero.jpg" alt="">')
+        );
+    }
+
+    public function testTheSourceCarriesTheVariantsAsSrcsetWithSizesWhenTheyExist(): void
+    {
+        $this->imageConfig->method('isWebpEnabled')->willReturn(true);
+        $this->imageConfig->method('isAvifEnabled')->willReturn(false);
+        $this->imageConfig->method('hasWebpCompanion')->willReturn(true);
+        $this->imageConfig->method('hasAvifCompanion')->willReturn(false);
+        $this->imageConfig->method('getWebpUrl')->willReturn('/media/wysiwyg/hero.jpg.webp');
+        $this->imageConfig->method('getSrcset')->willReturn(
+            '/media/wysiwyg/hero.jpg.w640.webp 640w, /media/wysiwyg/hero.jpg.w960.webp 960w, /media/wysiwyg/hero.jpg.webp 1280w'
+        );
+        $this->imageConfig->method('getSizes')->willReturn('(min-width: 1280px) 1280px, 100vw');
+        $this->imageConfig->method('getIntrinsicSize')->willReturn([1280, 460]);
+
+        self::assertSame(
+            '<picture><source type="image/webp" srcset="/media/wysiwyg/hero.jpg.w640.webp 640w, '
+            . '/media/wysiwyg/hero.jpg.w960.webp 960w, /media/wysiwyg/hero.jpg.webp 1280w" '
+            . 'sizes="(min-width: 1280px) 1280px, 100vw">'
+            . '<img src="/media/wysiwyg/hero.jpg" alt="" width="1280" height="460" fetchpriority="high"></picture>',
+            $this->rewriter->rewrite('<img src="/media/wysiwyg/hero.jpg" alt="">')
         );
     }
 
@@ -232,7 +256,7 @@ class HtmlImageRewriterTest extends TestCase
 
         self::assertSame(
             '<img src="https://shop.test/media/wysiwyg/a.jpg" width="100" fetchpriority="high"><img height="20" src="https://shop.test/media/wysiwyg/b.jpg">',
-            (new HtmlImageRewriter($imageConfig))->rewrite($html)
+            (new HtmlImageRewriter($imageConfig, new WebpFormat(), new AvifFormat()))->rewrite($html)
         );
     }
 

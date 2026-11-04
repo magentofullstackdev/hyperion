@@ -18,7 +18,7 @@ Built and maintained by [Sergiu Ro](https://magentofullstack.dev).
 
 | | |
 |---|---|
-| Release | 0.9.0-beta.2, public beta |
+| Release | 0.9.0-beta.3, public beta |
 | Website | [hyperionfront.dev](https://hyperionfront.dev) |
 | Live demo | [demo.hyperionfront.dev](https://demo.hyperionfront.dev) |
 | License | [MIT](./LICENSE) |
@@ -77,8 +77,8 @@ The verified procedure, run from the Magento root (details and every option in
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta      # beta release; prefer-stable keeps everything else stable
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.2
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.2   # optional, Luma sample data stores only
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.3
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.3   # optional, Luma sample data stores only
 bin/magento setup:upgrade
 bin/magento setup:di:compile
 bin/magento setup:static-content:deploy -f

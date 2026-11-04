@@ -3,7 +3,7 @@
     "description": "Hyperion Catalog Mode: restrict purchasing to selected customer groups (hides every Add to Cart affordance and the mini-cart, blocks the cart and checkout routes)",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.2",
+    "version": "0.9.0-beta.3",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

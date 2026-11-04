@@ -1,6 +1,6 @@
 # Known limitations
 
-State of 0.9.0-beta.2: 187 native storefront features of Magento Open
+State of 0.9.0-beta.3: 187 native storefront features of Magento Open
 Source were checked one by one against the theme, and the list below is
 what is left.
 Every default-configuration flow exercised by the end-to-end suite works
@@ -42,12 +42,6 @@ tested with this checkout.
 6. Google Analytics: only GA4 / Google Ads through `google/gtag/*` are
    emitted; the legacy Universal Analytics module (`Magento_GoogleAnalytics`)
    and Google Tag Manager containers are not.
-7. SEO fallbacks: a category, product or CMS page whose meta description
-   (or meta title) is empty renders no `<meta name="description">` when
-   `design/head/default_description` is empty too, which Lighthouse
-   reports. A generated fallback (description or short description trimmed
-   to about 160 characters, the entity name as the title) behind a
-   configuration option is planned.
 
 ## Nice-to-have gaps
 

@@ -13,6 +13,7 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -22,6 +23,7 @@ const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-res
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith('http')) ?? '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> <slotDir> ...');
     process.exit(2);
@@ -66,7 +68,7 @@ const requests = [];
 page.on('request', (r) => { if (r.method() === 'POST') requests.push(r.url().replace(base, '')); });
 
 try {
-    await page.goto(base + '/fusion-backpack.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
     await page.click('#product_addtocart_form button[type="submit"]');
     await page.waitForFunction(() => {
         const n = document.querySelector('#hyperion-notification');

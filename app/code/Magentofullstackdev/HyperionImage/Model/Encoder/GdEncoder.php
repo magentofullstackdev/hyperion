@@ -55,8 +55,13 @@ class GdEncoder implements EncoderInterface
         };
     }
 
-    public function encode(string $sourcePath, string $targetPath, FormatInterface $format, int $quality): bool
-    {
+    public function encode(
+        string $sourcePath,
+        string $targetPath,
+        FormatInterface $format,
+        int $quality,
+        int $maxWidth = 0
+    ): bool {
         if (!file_exists($sourcePath)) {
             throw new EncoderException('Source file not found: ' . $sourcePath);
         }
@@ -93,6 +98,18 @@ class GdEncoder implements EncoderInterface
                 imagepalettetotruecolor($image);
                 imagealphablending($image, true);
                 imagesavealpha($image, true);
+            }
+
+            if ($maxWidth > 0 && (int) $info[0] > $maxWidth) {
+                $scaled = imagescale($image, $maxWidth, -1, IMG_BICUBIC);
+                if (!$scaled instanceof GdImage) {
+                    throw new EncoderException('GD resize failed for ' . $sourcePath);
+                }
+                $image = $scaled;
+                if ($info[2] === IMAGETYPE_PNG) {
+                    imagealphablending($image, true);
+                    imagesavealpha($image, true);
+                }
             }
 
             $ok = match (true) {

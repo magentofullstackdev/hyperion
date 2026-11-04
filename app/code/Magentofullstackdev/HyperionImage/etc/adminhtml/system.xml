@@ -77,6 +77,20 @@
                 </field>
             </group>
 
+            <group id="variants" translate="label" sortOrder="35" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Responsive variants</label>
+                <field id="enabled" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Resized variants of content images</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Writes a WebP / AVIF file at each width below next to the full size companion of every image under media/wysiwyg (CMS pages, blocks, PageBuilder) and emits srcset and sizes on the picture sources, so phones download a banner cut to their width.</comment>
+                </field>
+                <field id="widths" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Variant widths (pixels)</label>
+                    <comment>Comma separated, for example 640,960. A width is only generated when the source is wider.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+
             <group id="encoder" translate="label" sortOrder="40" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Encoder</label>
                 <field id="preference" type="select" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">

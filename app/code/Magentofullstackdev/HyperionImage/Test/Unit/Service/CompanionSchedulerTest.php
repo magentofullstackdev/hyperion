@@ -7,7 +7,10 @@ namespace Magentofullstackdev\HyperionImage\Test\Unit\Service;
 
 use Magento\Framework\App\CacheInterface;
 use Magentofullstackdev\HyperionImage\Model\Config;
+use Magentofullstackdev\HyperionImage\Model\Format\AvifFormat;
+use Magentofullstackdev\HyperionImage\Model\Format\WebpFormat;
 use Magentofullstackdev\HyperionImage\Model\PathResolver;
+use Magentofullstackdev\HyperionImage\Model\Variants;
 use Magentofullstackdev\HyperionImage\Service\CompanionScheduler;
 use Magentofullstackdev\HyperionImage\Service\ConversionService;
 use PHPUnit\Framework\MockObject\Stub;
@@ -65,7 +68,8 @@ class CompanionSchedulerTest extends TestCase
             new PathResolver(),
             $service ?? $this->createStub(ConversionService::class),
             $cache ?? $this->createStub(CacheInterface::class),
-            $logger ?? $this->createStub(LoggerInterface::class)
+            $logger ?? $this->createStub(LoggerInterface::class),
+            new Variants($this->config, new PathResolver(), new WebpFormat(), new AvifFormat())
         );
     }
 
@@ -101,6 +105,28 @@ class CompanionSchedulerTest extends TestCase
         file_put_contents($this->source . '.webp', 'webp');
 
         self::assertSame([$this->source . '.avif'], $this->makeScheduler()->getMissingCompanions($this->source));
+    }
+
+    public function testAContentImageMissesItsVariantsToo(): void
+    {
+        $this->config->method('isVariantsEnabled')->willReturn(true);
+        $this->config->method('getVariantWidths')->willReturn([640, 960]);
+        mkdir($this->root . '/wysiwyg', 0777, true);
+        $banner = $this->root . '/wysiwyg/hero.png';
+        $image = imagecreatetruecolor(800, 300);
+        imagepng($image, $banner);
+        file_put_contents($banner . '.webp', 'webp');
+        try {
+            self::assertSame(
+                [$banner . '.w640.webp'],
+                $this->makeScheduler()->getMissingCompanions($banner),
+                'the companion exists, the 640 variant is missing, 960 is wider than the source'
+            );
+        } finally {
+            unlink($banner . '.webp');
+            unlink($banner);
+            rmdir($this->root . '/wysiwyg');
+        }
     }
 
     public function testMissingSourceHasNoMissingCompanions(): void

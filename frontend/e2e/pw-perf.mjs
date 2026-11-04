@@ -6,6 +6,7 @@
 // Prints per page: cache status, TTFB, DOMContentLoaded, load, LCP (+ element), CLS, request count,
 // transfer size by type and how many requests went to third parties.
 import { createRequire } from 'node:module';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 // PW_HOST_RESOLVER="MAP shop.example 10.0.0.4" resolves an install's host
@@ -13,7 +14,8 @@ const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 
 const [base, ...paths] = process.argv.slice(2);
-const pages = paths.length ? paths : ['/', '/women/tops-women.html', '/juno-jacket.html', '/checkout/cart/'];
+const u = makeUrl(await resolveUrlSuffix(base));
+const pages = paths.length ? paths : ['/', u('/women/tops-women.html'), u('/juno-jacket.html'), '/checkout/cart/'];
 const browser = await chromium.launch({ headless: true, ...launchOptions() });
 const out = {};
 for (const path of pages) {

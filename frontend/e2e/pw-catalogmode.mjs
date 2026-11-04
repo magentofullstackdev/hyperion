@@ -11,6 +11,7 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 // PW_HOST_RESOLVER="MAP shop.example 10.0.0.4" resolves an install's host
@@ -18,14 +19,15 @@ const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 
 const [base = '', slot = '.'] = process.argv.slice(2).map((a) => a.replace(/\/$/, ''));
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> <slotDir> ...');
     process.exit(2);
 }
 const slotDir = path.resolve(slot);
 const CUSTOMER = { email: 'roni_cost@example.com', password: 'roni_cost3@example.com' };
-const CATEGORY = '/gear/bags.html';
-const PDP = '/joust-duffle-bag.html';
+const CATEGORY = u('/gear/bags.html');
+const PDP = u('/joust-duffle-bag.html');
 
 const results = [];
 const check = (name, ok, detail = '') => {

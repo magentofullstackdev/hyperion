@@ -52,6 +52,23 @@ class PathResolver
     }
 
     /**
+     * The resized companion of a source: `banner.jpg.w640.webp` next to `banner.jpg.webp`.
+     */
+    public function resolveVariant(string $sourcePath, FormatInterface $format, int $width): string
+    {
+        return $sourcePath . '.w' . $width . '.' . $format->getExtension();
+    }
+
+    /**
+     * Resized variants exist for content images only: the catalog caches are
+     * already cut to the size each template asks for.
+     */
+    public function supportsVariants(string $path): bool
+    {
+        return $this->isConvertibleSource($path) && str_contains($path, '/wysiwyg/');
+    }
+
+    /**
      * True when the path looks like a media image we should convert.
      * Two checks:
      *   - lives under one of the allowlisted media subdirectories

@@ -3,7 +3,7 @@
     "description": "Hyperion Checkout: Lit + Tailwind one-step checkout, cart page, and header minicart fragment endpoints. Ships the JS/CSS bundle built from the frontend/ workspace of the repository (view/frontend/web/.vite + view/frontend/web/assets/).",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.2",
+    "version": "0.9.0-beta.3",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

@@ -12,6 +12,8 @@ use Magento\Framework\View\Element\Block\ArgumentInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use Magentofullstackdev\HyperionImage\Model\Config;
+use Magentofullstackdev\HyperionImage\Model\Format\FormatInterface;
+use Magentofullstackdev\HyperionImage\Model\Variants;
 use Magentofullstackdev\HyperionImage\Service\CompanionScheduler;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -55,7 +57,8 @@ class ImageConfig implements ArgumentInterface
         private readonly Filesystem $filesystem,
         private readonly StoreManagerInterface $storeManager,
         private readonly LoggerInterface $logger,
-        private readonly CompanionScheduler $companionScheduler
+        private readonly CompanionScheduler $companionScheduler,
+        private readonly Variants $variants
     ) {
     }
 
@@ -159,6 +162,67 @@ class ImageConfig implements ArgumentInterface
      *
      * @return array{int, int}|null
      */
+    /**
+     * The `srcset` of a content image's companion in one format: every
+     * resized variant that exists on disk plus the full size companion, each
+     * with its width descriptor. Empty while no variant exists yet (the
+     * plain companion is then the only source) or when the width of the
+     * source is unknown; a missing variant is scheduled like a missing
+     * companion.
+     */
+    public function getSrcset(string $sourceUrl, FormatInterface $format): string
+    {
+        $sourcePath = $this->urlToAbsolutePath($sourceUrl);
+        if ($sourcePath === null) {
+            return '';
+        }
+        $widths = $this->variants->widthsFor($sourcePath);
+        if ($widths === []) {
+            return '';
+        }
+        $size = $this->getIntrinsicSize($sourceUrl);
+        if ($size === null) {
+            return '';
+        }
+        $candidates = [];
+        $missing = false;
+        foreach ($widths as $width) {
+            $suffix = '.w' . $width . '.' . $format->getExtension();
+            if (is_file($sourcePath . $suffix)) {
+                $candidates[] = $sourceUrl . $suffix . ' ' . $width . 'w';
+            } else {
+                $missing = true;
+            }
+        }
+        if ($missing) {
+            try {
+                $this->companionScheduler->scheduleOnceIfMissing($sourcePath);
+            } catch (Throwable $e) {
+                $this->logger->error('ImageConfig::getSrcset could not schedule ' . $sourcePath, ['exception' => $e]);
+            }
+        }
+        if ($candidates === []) {
+            return '';
+        }
+        $candidates[] = $sourceUrl . '.' . $format->getExtension() . ' ' . $size[0] . 'w';
+
+        return implode(', ', $candidates);
+    }
+
+    /**
+     * The `sizes` that goes with `getSrcset()`: a content image fills the
+     * viewport up to its own width, never beyond it.
+     */
+    public function getSizes(string $sourceUrl): string
+    {
+        $size = $this->getIntrinsicSize($sourceUrl);
+        if ($size === null) {
+            return '100vw';
+        }
+
+        return '(min-width: ' . $size[0] . 'px) ' . $size[0] . 'px, 100vw';
+    }
+
     public function getIntrinsicSize(string $url): ?array
     {
         if (isset($this->sizeCache[$url]) || array_key_exists($url, $this->sizeCache)) {

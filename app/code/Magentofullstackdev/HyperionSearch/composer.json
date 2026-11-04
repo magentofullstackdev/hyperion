@@ -3,7 +3,7 @@
     "description": "Hyperion Search: search engine powered autocomplete (products, categories, popular terms) cached at the edge, typo tolerance, SKU and promoted product boosting, stop words and a zero-results fallback",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.2",
+    "version": "0.9.0-beta.3",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

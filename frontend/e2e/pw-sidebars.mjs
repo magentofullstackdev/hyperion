@@ -19,7 +19,9 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 import path from 'node:path';
 import fs from 'node:fs';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -33,7 +35,7 @@ const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--pr
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (q) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(q)} 2>/dev/null`);
 const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* none */ } };
-const categoryPath = '/men/tops-men.html';
+const categoryPath = u('/men/tops-men.html');
 const attrId = sql("SELECT attribute_id FROM eav_attribute WHERE attribute_code='page_layout' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')").trim();
 const catId = sql("SELECT entity_id FROM catalog_category_entity WHERE entity_id IN (SELECT entity_id FROM catalog_category_entity_varchar WHERE attribute_id=(SELECT attribute_id FROM eav_attribute WHERE attribute_code='url_key' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')) AND value='tops-men') LIMIT 1").trim();
 const setLayout = (layout) => { sql(`DELETE FROM catalog_category_entity_varchar WHERE attribute_id=${attrId} AND entity_id=${catId}`); if (layout) sql(`INSERT INTO catalog_category_entity_varchar (attribute_id, store_id, entity_id, value) VALUES (${attrId}, 0, ${catId}, '${layout}')`); flush(); };

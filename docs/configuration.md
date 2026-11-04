@@ -17,6 +17,7 @@ website, store view.
 | Catalog | Maximum Active Filters per Request | `hyperion/catalog/max_active_filters` | 5 | Category pages, the layered navigation fragment and search results refuse a request that activates more filter attributes than this (HTTP 400, `noindex`): combinatorial filter URLs are a bot pattern, not a shopper's. Query parameters that are neither a filterable attribute, `cat`, `price`, nor a toolbar / tracking parameter (`p`, `q`, `product_list_*`, `utm_*`, `gclid`, `fbclid`, ...) are always dropped from the request before the layer runs. A category page with two or more filters is served with `X-Robots-Tag: noindex, nofollow` and the matching robots meta tag; the grid fragment hands the directive of the pushed URL to the page as an HTMX trigger (`hyperion:listing-robots`), so the meta follows the filters applied in place. 0 disables the limit. |
 | Catalog | Infinite Scroll | `hyperion/catalog/infinite_scroll` | `disabled` | How category listings and search results load the next pages. `disabled`: the pager. `button`: a "Load more" link under the products appends the next page in place (a real link to `?p=N+1`, so crawlers and visitors without JavaScript still paginate), with a status line "Showing X of Y products" announced to screen readers; the keyboard focus moves to the new link. `scroll`: the next page loads by itself when the visitor reaches the end of the products. Every category can override the value in its Display Settings (attribute `hyperion_infinite_scroll`, store view scope, "Please select" = follow the configuration); the search results page follows the configuration only. The URL does not change while loading more. Flush the page cache after changing it. |
 | Catalog | Automatic Loads Before the Button | `hyperion/catalog/infinite_scroll_auto_pages` | 3 | In the `scroll` mode, after this many pages loaded on scroll the "Load more" link stops loading by itself and waits for a click, so the footer stays reachable. 0 loads every page automatically. |
+| SEO | Generate a missing meta description | `hyperion/seo/meta_description_fallback` | 1 | A category, product or CMS page (home included) whose meta description is empty, with no store default in Content > Design > Configuration > HTML Head, gets one made from its own text: the category description, the product short description (or description), the CMS content; tags, scripts and `{{...}}` directives removed, entities decoded, cut at a word boundary within 160 characters. A value typed in the admin or the store default is never replaced. The `<title>` needs no fallback: core already builds it from the entity name when the meta title is empty. |
 | Anti-Abuse Shield | Rate Limit Search and Filter Requests | `hyperion/security/rate_limit_enabled` | 1 | Counts the requests that reach PHP (a Varnish HIT is free) per client address in 10 second windows and answers HTTP 429 with `Retry-After: 10` above the limits below. |
 | Anti-Abuse Shield | Search Requests per 10 Seconds | `hyperion/security/search_suggest_limit` | 30 | Budget of one client for `hyperion/search/suggest` and, counted separately, for the search results page. 0 disables the limit. |
 | Anti-Abuse Shield | Filter Requests per 10 Seconds | `hyperion/security/catalog_filter_limit` | 25 | Budget of one client for `hyperion/category/filter` and for category pages that carry filter or unknown parameters. 0 disables the limit. |
@@ -162,6 +163,16 @@ largest contentful paint) gets `fetchpriority="high"` so the browser
 requests it before the stylesheet and the module preloads; an image with
 `loading="lazy"` or its own `fetchpriority` is left alone.
 
+Content images also get resized variants: for every width of the
+"Responsive variants" setting that is smaller than the source, a WebP (and
+AVIF when enabled) file is written next to the full size companion
+(`banner.jpg.w640.webp`), and the `<source>` carries them as `srcset` with
+width descriptors plus `sizes="(min-width: <width>px) <width>px, 100vw"`,
+so a phone downloads a banner cut to its own width. The variants follow the
+companions everywhere: the conversion modes, the render time safety net,
+`hyperion:image:convert` (also `--force` and the stale check). Catalog
+images are not involved, their caches are already cut per template.
+
 A conversion is triggered in three places, all honouring the conversion mode
 below: when Magento's image helper writes a cache file on demand
 (`Product\Image::saveFile`, the Luma style resize), when core's resize service
@@ -185,6 +196,8 @@ application cache, tag `HYPERION_IMAGE`) so the next render carries the
 | AVIF | Enable AVIF | `hyperion_image/avif/enabled` | 0 | default, website | About 30 % smaller than WebP, but encoding is 3-10x slower (CPU). Recommended for static catalogs only. |
 | AVIF | AVIF quality (1-100) | `hyperion_image/avif/quality` | 75 | default, website | |
 | AVIF | Skip if larger than original | `hyperion_image/avif/skip_if_larger` | 1 | default, website | |
+| Responsive variants | Resized variants of content images | `hyperion_image/variants/enabled` | 1 | default, website | Writes the resized WebP / AVIF variants of the images under `media/wysiwyg` and emits `srcset` / `sizes` on the `<picture>` sources. |
+| Responsive variants | Variant widths (pixels) | `hyperion_image/variants/widths` | `640,960` | default, website | Comma separated; a width is only generated when the source is wider. |
 | Encoder | Encoder preference | `hyperion_image/encoder/preference` | `auto` | default | `auto` uses Imagick when installed and falls back to GD; `imagick` and `gd` force one encoder (diagnostics). |
 
 Bulk conversion of existing media:

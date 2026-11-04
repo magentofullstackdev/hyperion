@@ -141,4 +141,10 @@
             </argument>
         </arguments>
     </type>
+    <!-- A generated meta description for the pages that have none, set right before the head renders. -->
+    <type name="Magento\Framework\View\Page\Config\Renderer">
+        <plugin name="hyperion_core_meta_description_fallback"
+                type="Magentofullstackdev\HyperionCore\Plugin\Seo\MetaDescriptionFallbackPlugin"
+                sortOrder="5"/>
+    </type>
 </config>

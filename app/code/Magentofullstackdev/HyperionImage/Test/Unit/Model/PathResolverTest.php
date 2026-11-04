@@ -112,6 +112,22 @@ class PathResolverTest extends TestCase
         );
     }
 
+    public function testResolveVariantNamesTheWidthBetweenSourceAndFormat(): void
+    {
+        self::assertSame(
+            '/media/wysiwyg/hero.jpg.w640.webp',
+            $this->resolver->resolveVariant('/media/wysiwyg/hero.jpg', new WebpFormat(), 640)
+        );
+    }
+
+    public function testVariantsAreForContentImagesOnly(): void
+    {
+        self::assertTrue($this->resolver->supportsVariants('/media/wysiwyg/home/hero.jpg'));
+        self::assertFalse($this->resolver->supportsVariants('/media/catalog/product/cache/0a/m/b/mb01.jpg'));
+        self::assertFalse($this->resolver->supportsVariants('/media/catalog/category/banner.jpg'));
+        self::assertFalse($this->resolver->supportsVariants('/media/wysiwyg/vector.svg'));
+    }
+
     public function testGetCompanionPathsReturnsBothFormats(): void
     {
         $source = '/var/www/html/pub/media/catalog/product/cache/x/y/foo.jpg';

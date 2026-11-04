@@ -32,6 +32,14 @@
                     <comment>CMS page identifier for the Privacy Policy link in the footer.</comment>
                 </field>
             </group>
+            <group id="seo" translate="label" sortOrder="15" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>SEO</label>
+                <field id="meta_description_fallback" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Generate a missing meta description</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>A category, product or CMS page without a meta description (and no store default) gets one made from its own description, short description or content: tags removed, cut at a word boundary within 160 characters. A value typed in the admin is never replaced.</comment>
+                </field>
+            </group>
             <group id="security" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
                 <label>Anti-Abuse Shield</label>
                 <field id="rate_limit_enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">

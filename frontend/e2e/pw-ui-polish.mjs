@@ -10,11 +10,13 @@
 // categories.
 // node e2e/pw-ui-polish.mjs <baseUrl>   (URL only, nothing is changed on the store)
 import { createRequire } from 'node:module';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -37,11 +39,11 @@ const toast = () => page.waitForFunction(() => { const n = document.querySelecto
 
 try {
     // ---- header: icons in the cached markup, no shift when the state arrives
-    const ssr = await (await ctx.request.get(base + '/joust-duffle-bag.html')).text();
+    const ssr = await (await ctx.request.get(base + u('/joust-duffle-bag.html'))).text();
     const ssrWishlist = ssr.match(/<a id="hyperion-wishlist-count"[\s\S]*?<\/a>/)?.[0] || '';
     check('header: wishlist and compare icons are in the server markup', /<svg/.test(ssrWishlist) && /<a id="hyperion-compare-count"[\s\S]*?<svg/.test(ssr), ssrWishlist.length + ' chars');
     const stateResponse = page.waitForResponse((r) => r.url().includes('/hyperion/header/state'), { timeout: 20000 });
-    await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'domcontentloaded' });
+    await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'domcontentloaded' });
     const before = await page.evaluate(() => {
         const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
         return { wish: r('#hyperion-wishlist-count')?.x, account: r('hyperion-dropdown[placement="bottom-end"]')?.x, cart: r('hyperion-mini-cart')?.x, menu: r('hyperion-dropdown[placement="drawer"]')?.x };
@@ -66,7 +68,7 @@ try {
     const upgraded = round(await page.evaluate(footprint));
     const noScript = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 }, javaScriptEnabled: false });
     const plain = await noScript.newPage();
-    await plain.goto(base + '/joust-duffle-bag.html', { waitUntil: 'load' });
+    await plain.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'load' });
     const beforeUpgrade = round(await plain.evaluate(footprint));
     await noScript.close();
     check('header: same footprint before the components upgrade (scripting off) and after', JSON.stringify(upgraded) === JSON.stringify(beforeUpgrade), JSON.stringify({ upgraded, beforeUpgrade }));
@@ -112,7 +114,7 @@ try {
     check('toast: success auto-close is 3.5 s', await page.evaluate(() => document.querySelector('#hyperion-notification')?.getAttribute('auto-close')) === '3500');
 
     // ---- category landings
-    for (const path of ['/men.html', '/women.html', '/gear.html']) {
+    for (const path of [u('/men.html'), u('/women.html'), u('/gear.html')]) {
         await page.goto(base + path, { waitUntil: 'networkidle' });
         const facts = await page.evaluate(() => ({
             hotSellers: document.body.innerHTML.split('Hot Sellers').length - 1,

@@ -12,12 +12,14 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -91,11 +93,11 @@ try {
     {
         const j = await newJourney();
         const { page } = j;
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         check('gtag: element mounted with the test measurement id', await page.evaluate(() => document.querySelector('hyperion-gtag')?.getAttribute('measurement-id')) === 'G-TEST12345');
         let events = await dataLayerEvents(page);
         check('gtag: view_item on the product page', events.some(([n, p]) => n === 'view_item' && p.items?.[0]?.item_id === '24-MB01'), JSON.stringify(events[0]).slice(0, 160));
-        check('gtag: no gtag.js in the server markup (lazy load)', !/googletagmanager\.com\/gtag\/js/.test(await (await page.context().request.get(base + '/joust-duffle-bag.html')).text()));
+        check('gtag: no gtag.js in the server markup (lazy load)', !/googletagmanager\.com\/gtag\/js/.test(await (await page.context().request.get(base + u('/joust-duffle-bag.html'))).text()));
         await page.mouse.click(5, 5);
         await page.waitForTimeout(300);
         check('gtag: gtag.js requested after idle / the first interaction', await page.evaluate(() => !!document.querySelector('script[data-hyperion-gtag-script]')));
@@ -108,12 +110,12 @@ try {
         events = await dataLayerEvents(page);
         check('gtag: add_to_cart after the HTMX add', events.some(([n, p]) => n === 'add_to_cart' && p.items?.[0]?.item_id === '24-MB01' && p.value > 0), JSON.stringify(events.find(([n]) => n === 'add_to_cart') || events.map((e) => e[0])).slice(0, 160));
 
-        await page.goto(base + '/fusion-backpack.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
         viewed = await history(page, 'hyperion_recently_viewed');
         check('history: second product first in the list, first one kept', viewed[scope]?.[0]?.sku === '24-MB02' && viewed[scope]?.[1]?.sku === '24-MB01', (viewed[scope] || []).map((i) => i.sku).join(','));
         check('history: current product excluded from its own widget', await page.evaluate(() => document.querySelectorAll('hyperion-recently-viewed article').length) === 0 || true);
 
-        await page.goto(base + '/gear/bags.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
         events = await dataLayerEvents(page);
         check('gtag: view_item_list on the category page', events.some(([n, p]) => n === 'view_item_list' && p.items?.length > 0 && String(p.item_list_id).startsWith('category_')), JSON.stringify(events.find(([n]) => n === 'view_item_list') || events.map((e) => e[0])).slice(0, 120));
         check('compare sidebar: hidden while nothing is compared', await page.evaluate(() => document.querySelector('hyperion-compare-sidebar')?.hidden === true));
@@ -150,12 +152,12 @@ try {
         const { page } = j;
         sql(`delete wi from wishlist_item wi join wishlist w on w.wishlist_id = wi.wishlist_id join customer_entity c on c.entity_id = w.customer_id where c.email = '${CUSTOMER.email}'`);
         check('customer: login', await login(page), page.url().replace(base, ''));
-        await page.goto(base + '/fusion-backpack.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
         await waitHeaderState(page);
         await page.click('hyperion-list-toggle[kind="wishlist"] button[type="submit"]');
         const w = await toast(page);
         check('customer: product added to the wishlist', w?.tone === 'success', JSON.stringify(w));
-        await page.goto(base + '/gear/bags.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
         await waitHeaderState(page);
         await page.waitForTimeout(600);
         const wishRows = await page.evaluate(() => Array.from(document.querySelectorAll('hyperion-wishlist-sidebar li[data-hyperion-product-id]')).map((li) => li.textContent.replace(/\s+/g, ' ').trim().slice(0, 60)));
@@ -170,7 +172,7 @@ try {
         await page.waitForTimeout(800);
         check('wishlist sidebar: hidden after Remove', await page.evaluate(() => document.querySelector('hyperion-wishlist-sidebar')?.hidden === true));
 
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         await page.click('#product_addtocart_form button[type="submit"]');
         await toast(page);
         await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });

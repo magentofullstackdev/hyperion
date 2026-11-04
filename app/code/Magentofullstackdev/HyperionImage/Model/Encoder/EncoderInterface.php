@@ -31,7 +31,18 @@ interface EncoderInterface
      *         the target can't be written, or the format isn't
      *         supported on the current PHP installation.
      */
-    public function encode(string $sourcePath, string $targetPath, FormatInterface $format, int $quality): bool;
+    /**
+     * Encodes the source into the target format; a positive `$maxWidth`
+     * smaller than the source width scales the image down to it, keeping
+     * the aspect ratio (a larger value leaves the size alone).
+     */
+    public function encode(
+        string $sourcePath,
+        string $targetPath,
+        FormatInterface $format,
+        int $quality,
+        int $maxWidth = 0
+    ): bool;
 
     /**
      * True if this encoder can handle the given format on the

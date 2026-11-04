@@ -30,6 +30,10 @@ class Config
     public const XML_PATH_ENCODER_PREFERENCE = 'hyperion_image/encoder/preference';
     public const XML_PATH_INVALIDATE_ON_BATCH_END = 'hyperion_image/general/invalidate_on_batch_end';
     public const XML_PATH_MAX_PIXELS = 'hyperion_image/general/max_pixels';
+    public const XML_PATH_VARIANTS_ENABLED = 'hyperion_image/variants/enabled';
+    public const XML_PATH_VARIANTS_WIDTHS = 'hyperion_image/variants/widths';
+
+    public const DEFAULT_VARIANT_WIDTHS = [640, 960];
 
     /** Decoding budget in pixels (width x height) when the config row is missing: 40 MP. */
     public const DEFAULT_MAX_PIXELS = 40000000;
@@ -134,6 +138,39 @@ class Config
      * of the affected products at the end of a CLI run or a queue
      * consumer run. Defaults ON.
      */
+    public function isVariantsEnabled(): bool
+    {
+        $value = $this->scopeConfig->getValue(self::XML_PATH_VARIANTS_ENABLED, ScopeInterface::SCOPE_STORE);
+        if ($value === null) {
+            return true;
+        }
+        return $this->scopeConfig->isSetFlag(self::XML_PATH_VARIANTS_ENABLED, ScopeInterface::SCOPE_STORE);
+    }
+
+    /**
+     * The widths (pixels) of the resized variants, ascending, duplicates and
+     * nonsense dropped; the defaults when the field is empty.
+     *
+     * @return int[]
+     */
+    public function getVariantWidths(): array
+    {
+        $raw = (string) $this->scopeConfig->getValue(self::XML_PATH_VARIANTS_WIDTHS, ScopeInterface::SCOPE_STORE);
+        if (trim($raw) === '') {
+            return self::DEFAULT_VARIANT_WIDTHS;
+        }
+        $widths = [];
+        foreach (explode(',', $raw) as $item) {
+            $width = (int) trim($item);
+            if ($width >= 16 && $width <= 8192) {
+                $widths[$width] = $width;
+            }
+        }
+        sort($widths);
+
+        return array_values($widths);
+    }
+
     public function isInvalidateOnBatchEndEnabled(): bool
     {
         $value = $this->scopeConfig->getValue(self::XML_PATH_INVALIDATE_ON_BATCH_END);

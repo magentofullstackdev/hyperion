@@ -15,12 +15,14 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -124,7 +126,7 @@ try {
         });
         check('mobile menu: Escape closes and returns the focus to the opener', afterEscape.inert && afterEscape.focusOnTrigger, JSON.stringify(afterEscape));
 
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         const carousel = await page.evaluate(() => {
             const el = document.querySelector('hyperion-carousel');
             const prev = el?.shadowRoot?.querySelector('[part="prev-button"]');
@@ -147,7 +149,7 @@ try {
         check('mini-cart: panel inert when closed, reachable when open', miniCart.closedInert && !miniCart.openInert && miniCart.closedAgain, JSON.stringify(miniCart));
 
         await page.setViewportSize({ width: 1366, height: 1000 });
-        await page.goto(base + '/gear/bags.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
         await Promise.all([page.waitForResponse((r) => r.url().includes('/catalog/product_compare/add')), page.click('[data-hyperion-tile] hyperion-list-toggle[kind="compare"] button')]);
         await page.goto(base + '/catalog/product_compare/', { waitUntil: 'networkidle' });
         check('compare page: a single h1', (await pageFacts(page)).h1 === 1, String((await pageFacts(page)).h1));
@@ -177,7 +179,7 @@ try {
         const j = await newJourney();
         const { page } = j;
         check('customer: login', await login(page), page.url().replace(base, ''));
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         await page.click('#product_addtocart_form button[type="submit"]');
         await toast(page);
         await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
@@ -265,13 +267,13 @@ try {
 
         magento('config:set sendfriend/email/enabled 0');
         magento('cache:flush');
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         check('email a friend: no link on the product page while the feature is off', await page.locator('[data-hyperion-sendfriend-link]').count() === 0);
 
         magento('config:set sendfriend/email/enabled 1');
         magento('config:set sendfriend/email/allow_guest 1');
         magento('cache:flush');
-        await page.goto(base + '/joust-duffle-bag.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         const link = page.locator('[data-hyperion-sendfriend-link]');
         const sendUrl = (await link.count()) ? await link.getAttribute('href') : '';
         check('email a friend: the product page links to sendfriend/product/send once the feature is on', /\/sendfriend\/product\/send\/id\/\d+\//.test(sendUrl), sendUrl.replace(base, ''));

@@ -113,6 +113,12 @@ pnpm e2e:check https://your-store.example/     # one page: status, htmx, defined
 pnpm e2e:perf https://your-store.example       # TTFB / LCP / CLS / request counts
 ```
 
+The scripts name the sample data pages with the stock `.html` suffix and
+resolve the store's real category / product URL suffix once at start (a
+probe of `/women/tops-women`, `e2e/lib/url-suffix.mjs`), so a store whose
+`catalog/seo/*_url_suffix` is empty works unchanged; `HYPERION_URL_SUFFIX`
+(the empty string allowed) skips the probe.
+
 `pw-suite.mjs`, `pw-check.mjs`, `pw-perf.mjs`, `pw-cls.mjs`,
 `pw-ui-polish.mjs` and `pw-a11y.mjs` need only the URL and change nothing on
 the store. Every
@@ -313,7 +319,7 @@ page cache key (customer group, store, currency).
    green, `pnpm -r publish --dry-run`, `composer validate` in every
    package, install from the tag in a clean Magento 2.4.8 and Mage-OS, run
    the end-to-end suite.
-3. Tag `v<version>` (for this release `v0.9.0-beta.2`) and push.
+3. Tag `v<version>` (for this release `v0.9.0-beta.3`) and push.
 4. Publish npm first or together with the tag: the child theme scaffold
    depends on the three packages at `^<version>`.
    `pnpm -r publish --access public` from `frontend/` (pnpm rewrites

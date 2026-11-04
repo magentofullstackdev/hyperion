@@ -14,6 +14,9 @@
             <catalog>
                 <add_to_cart_from_listing>1</add_to_cart_from_listing>
             </catalog>
+            <seo>
+                <meta_description_fallback>1</meta_description_fallback>
+            </seo>
             <security>
                 <rate_limit_enabled>1</rate_limit_enabled>
                 <search_suggest_limit>30</search_suggest_limit>

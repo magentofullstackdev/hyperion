@@ -20,11 +20,13 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-resolver-rules=${process.env.PW_HOST_RESOLVER}`] } : {});
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -192,7 +194,7 @@ try {
     check('zero results: nonsense still gets the popular categories, never a dead end', tileSkus(zero.text).length === 0 && /data-hyperion-zero-results-popular/.test(zero.text) && /Popular categories/.test(zero.text));
 
     // ---- Varnish query sorting
-    const categoryPath = '/men/tops-men.html';
+    const categoryPath = u('/men/tops-men.html');
     const a = await get(categoryPath + '?product_list_order=name&p=1');
     const b = await get(categoryPath + '?p=1&product_list_order=name');
     check('varnish: the parameter order does not matter (second order is a HIT)', a.headers['x-magento-cache-debug'] === 'MISS' && b.headers['x-magento-cache-debug'] === 'HIT', `${a.headers['x-magento-cache-debug']} then ${b.headers['x-magento-cache-debug']}`);

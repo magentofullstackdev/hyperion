@@ -12,10 +12,12 @@
 // PW_HOST_RESOLVER="MAP shop.example 10.0.0.4" resolves an install's host that is
 // not in /etc/hosts.
 import { createRequire } from 'node:module';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl>');
     process.exit(2);
@@ -31,8 +33,8 @@ try {
 
 const PAGES = [
     ['home', '/'],
-    ['category', '/women.html'],
-    ['product', '/joust-duffle-bag.html'],
+    ['category', u('/women.html')],
+    ['product', u('/joust-duffle-bag.html')],
     ['login', '/customer/account/login/'],
     ['register', '/customer/account/create/'],
     ['contact', '/contact/'],

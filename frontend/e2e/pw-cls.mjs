@@ -10,10 +10,12 @@
 // in place and a grid swap goes through them.
 // node e2e/pw-cls.mjs <baseUrl> [--pages n]
 import { createRequire } from 'node:module';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 const base = (process.argv[2] || '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> ...');
     process.exit(2);
@@ -25,9 +27,9 @@ const check = (name, ok, detail = '') => {
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + String(detail).slice(0, 260) : ''}`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PAGES = ['/', '/women/tops-women.html', '/women/tops-women.html?product_list_mode=list', '/radiant-tee.html', '/push-it-messenger-bag.html', '/catalogsearch/result/?q=jacket', '/women.html', '/checkout/cart/', '/contact/'];
-const CATEGORY = '/women/tops-women.html';
-const PDP = '/radiant-tee.html';
+const PAGES = ['/', u('/women/tops-women.html'), u('/women/tops-women.html?product_list_mode=list'), u('/radiant-tee.html'), u('/push-it-messenger-bag.html'), '/catalogsearch/result/?q=jacket', u('/women.html'), '/checkout/cart/', '/contact/'];
+const CATEGORY = u('/women/tops-women.html');
+const PDP = u('/radiant-tee.html');
 
 const browser = await chromium.launch({ headless: true });
 const context = (mobile) => browser.newContext({ ignoreHTTPSErrors: true, viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile });

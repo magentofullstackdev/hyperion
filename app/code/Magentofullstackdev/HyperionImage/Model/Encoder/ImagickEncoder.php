@@ -55,8 +55,13 @@ class ImagickEncoder implements EncoderInterface
         return !empty(Imagick::queryFormats($magickFormat));
     }
 
-    public function encode(string $sourcePath, string $targetPath, FormatInterface $format, int $quality): bool
-    {
+    public function encode(
+        string $sourcePath,
+        string $targetPath,
+        FormatInterface $format,
+        int $quality,
+        int $maxWidth = 0
+    ): bool {
         if (!file_exists($sourcePath)) {
             throw new EncoderException('Source file not found: ' . $sourcePath);
         }
@@ -73,6 +78,9 @@ class ImagickEncoder implements EncoderInterface
             $image->clear();
 
             $image->readImage($sourcePath);
+            if ($maxWidth > 0 && $image->getImageWidth() > $maxWidth) {
+                $image->resizeImage($maxWidth, 0, Imagick::FILTER_LANCZOS, 1);
+            }
             $image->setImageFormat($format->getImagickFormat());
             $image->setImageCompressionQuality($quality);
 

@@ -5,6 +5,9 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionImage\Service;
 
+use Magentofullstackdev\HyperionImage\Model\Format\AvifFormat;
+use Magentofullstackdev\HyperionImage\Model\Format\FormatInterface;
+use Magentofullstackdev\HyperionImage\Model\Format\WebpFormat;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
 
 /**
@@ -31,7 +34,9 @@ class HtmlImageRewriter
     private bool $priorityHinted = false;
 
     public function __construct(
-        private readonly ImageConfig $imageConfig
+        private readonly ImageConfig $imageConfig,
+        private readonly WebpFormat $webpFormat,
+        private readonly AvifFormat $avifFormat
     ) {
     }
 
@@ -72,14 +77,10 @@ class HtmlImageRewriter
 
                 $sources = '';
                 if ($this->imageConfig->hasAvifCompanion($src)) {
-                    $sources .= '<source type="image/avif" srcset="'
-                        . htmlspecialchars($this->imageConfig->getAvifUrl($src), ENT_QUOTES, 'UTF-8')
-                        . '">';
+                    $sources .= $this->source($src, $this->avifFormat, $this->imageConfig->getAvifUrl($src));
                 }
                 if ($this->imageConfig->hasWebpCompanion($src)) {
-                    $sources .= '<source type="image/webp" srcset="'
-                        . htmlspecialchars($this->imageConfig->getWebpUrl($src), ENT_QUOTES, 'UTF-8')
-                        . '">';
+                    $sources .= $this->source($src, $this->webpFormat, $this->imageConfig->getWebpUrl($src));
                 }
                 if ($sources === '') {
                     return $match[0];
@@ -93,6 +94,23 @@ class HtmlImageRewriter
         }
 
         return str_replace(' data-hyperion-skip-picture', '', $rewritten);
+    }
+
+    /**
+     * One `<source>`: the resized variants with `sizes` when they exist, the
+     * full size companion alone otherwise.
+     */
+    private function source(string $src, FormatInterface $format, string $companionUrl): string
+    {
+        $srcset = $this->imageConfig->getSrcset($src, $format);
+        if ($srcset === '') {
+            return '<source type="' . $format->getMimeType() . '" srcset="'
+                . htmlspecialchars($companionUrl, ENT_QUOTES, 'UTF-8') . '">';
+        }
+
+        return '<source type="' . $format->getMimeType() . '" srcset="'
+            . htmlspecialchars($srcset, ENT_QUOTES, 'UTF-8') . '" sizes="'
+            . htmlspecialchars($this->imageConfig->getSizes($src), ENT_QUOTES, 'UTF-8') . '">';
     }
 
     /**

@@ -8,6 +8,7 @@ namespace Magentofullstackdev\HyperionImage\Service;
 use Magento\Framework\App\CacheInterface;
 use Magentofullstackdev\HyperionImage\Model\Config;
 use Magentofullstackdev\HyperionImage\Model\PathResolver;
+use Magentofullstackdev\HyperionImage\Model\Variants;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -51,7 +52,8 @@ class CompanionScheduler
         private readonly PathResolver $pathResolver,
         private readonly ConversionService $conversionService,
         private readonly CacheInterface $cache,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly Variants $variants
     ) {
     }
 
@@ -78,6 +80,11 @@ class CompanionScheduler
         }
         if ($this->config->isAvifEnabled() && !is_file($sourcePath . '.avif')) {
             $missing[] = $sourcePath . '.avif';
+        }
+        foreach ($this->variants->pathsFor($sourcePath) as $variant) {
+            if (!is_file($variant)) {
+                $missing[] = $variant;
+            }
         }
 
         return $missing;

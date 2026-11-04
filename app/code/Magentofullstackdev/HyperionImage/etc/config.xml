@@ -26,6 +26,10 @@
             <encoder>
                 <preference>auto</preference><!-- auto | imagick | gd -->
             </encoder>
+            <variants>
+                <enabled>1</enabled>
+                <widths>640,960</widths><!-- pixels, comma separated -->
+            </variants>
         </hyperion_image>
     </default>
 </config>

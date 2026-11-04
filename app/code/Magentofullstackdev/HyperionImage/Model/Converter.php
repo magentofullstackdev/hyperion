@@ -37,7 +37,8 @@ class Converter
         private readonly EncoderFactory $encoderFactory,
         private readonly WebpFormat $webpFormat,
         private readonly AvifFormat $avifFormat,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly Variants $variants
     ) {
     }
 
@@ -77,6 +78,7 @@ class Converter
         if ($this->config->isWebpEnabled()) {
             $results['webp'] = $this->convertSingle(
                 $sourcePath,
+                $this->pathResolver->resolve($sourcePath, $this->webpFormat),
                 $this->webpFormat,
                 $this->config->getWebpQuality(),
                 $sourceSize,
@@ -87,6 +89,7 @@ class Converter
         if ($this->config->isAvifEnabled()) {
             $results['avif'] = $this->convertSingle(
                 $sourcePath,
+                $this->pathResolver->resolve($sourcePath, $this->avifFormat),
                 $this->avifFormat,
                 $this->config->getAvifQuality(),
                 $sourceSize,
@@ -94,17 +97,35 @@ class Converter
             );
         }
 
+        // Resized variants of content images (`banner.jpg.w640.webp`), one per
+        // configured width below the source width and per enabled format.
+        foreach ($this->variants->widthsFor($sourcePath) as $width) {
+            foreach ($this->variants->enabledFormats() as $format) {
+                $webp = $format instanceof WebpFormat;
+                $results[$format->getName() . '@' . $width] = $this->convertSingle(
+                    $sourcePath,
+                    $this->pathResolver->resolveVariant($sourcePath, $format, $width),
+                    $format,
+                    $webp ? $this->config->getWebpQuality() : $this->config->getAvifQuality(),
+                    $sourceSize,
+                    $webp ? $this->config->shouldSkipWebpIfLarger() : $this->config->shouldSkipAvifIfLarger(),
+                    $width
+                );
+            }
+        }
+
         return $results;
     }
 
     private function convertSingle(
         string $sourcePath,
+        string $targetPath,
         FormatInterface $format,
         int $quality,
         int $sourceSize,
-        bool $skipIfLarger
+        bool $skipIfLarger,
+        int $maxWidth = 0
     ): bool {
-        $targetPath = $this->pathResolver->resolve($sourcePath, $format);
 
         // Idempotency: a previous run already produced the target --
         // return false so the caller's "newly converted" tally
@@ -138,7 +159,7 @@ class Converter
 
         try {
             $encoder = $this->encoderFactory->get($format);
-            $encoder->encode($sourcePath, $targetPath, $format, $quality);
+            $encoder->encode($sourcePath, $targetPath, $format, $quality, $maxWidth);
 
             if ($skipIfLarger && filesize($targetPath) >= $sourceSize) {
                 $this->safeUnlink($targetPath);

@@ -9,6 +9,7 @@
 // summary. Exit code 1 when a check fails. Page errors and HTTP >= 500
 // responses are collected per journey and count as failures.
 import { createRequire } from 'node:module';
+import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 // PW_HOST_RESOLVER="MAP shop.example 10.0.0.4" resolves an install's host
@@ -17,6 +18,7 @@ const launchOptions = () => (process.env.PW_HOST_RESOLVER ? { args: [`--host-res
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith('http')) ?? '').replace(/\/$/, '');
+const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
     console.error('usage: node ' + process.argv[1].split('/').pop() + ' <baseUrl> [--shots dir] [--skip-order]');
     process.exit(2);
@@ -104,12 +106,12 @@ async function selectSwatches(page) {
 
     await pageBasics(page, '/', 'home');
     await shot(page, 'home');
-    const plp = await pageBasics(page, '/women/tops-women.html', 'category');
+    const plp = await pageBasics(page, u('/women/tops-women.html'), 'category');
     check('category: product cards rendered', await page.locator('[data-product-id], article').count() > 0);
     await shot(page, 'category');
     await pageBasics(page, '/catalogsearch/result/?q=jacket', 'search');
     await pageBasics(page, '/catalogsearch/advanced/result/?name=bag', 'advanced search result');
-    await pageBasics(page, '/juno-jacket.html', 'configurable PDP');
+    await pageBasics(page, u('/juno-jacket.html'), 'configurable PDP');
     await shot(page, 'pdp-configurable');
     await pageBasics(page, '/customer/account/login/', 'login page');
     await pageBasics(page, '/customer/account/create/', 'register page');
@@ -117,21 +119,21 @@ async function selectSwatches(page) {
     await pageBasics(page, '/sales/guest/form/', 'guest order form');
     void plp;
 
-    await addToCartFromPdp(page, '/fusion-backpack.html', 'simple product');
-    await addToCartFromPdp(page, '/juno-jacket.html', 'configurable product', selectSwatches);
-    await addToCartFromPdp(page, '/set-of-sprite-yoga-straps.html', 'grouped product', async (p) => {
+    await addToCartFromPdp(page, u('/fusion-backpack.html'), 'simple product');
+    await addToCartFromPdp(page, u('/juno-jacket.html'), 'configurable product', selectSwatches);
+    await addToCartFromPdp(page, u('/set-of-sprite-yoga-straps.html'), 'grouped product', async (p) => {
         const inputs = await p.$$('input[name^="super_group"]');
         if (inputs[0]) await inputs[0].fill('1');
     });
-    await addToCartFromPdp(page, '/hyperion-travel-kit.html', 'bundle product');
-    await addToCartFromPdp(page, '/hyperion-engraved-bottle.html', 'custom options product', async (p) => {
+    await addToCartFromPdp(page, u('/hyperion-travel-kit.html'), 'bundle product');
+    await addToCartFromPdp(page, u('/hyperion-engraved-bottle.html'), 'custom options product', async (p) => {
         await p.fill('input[name^="options["][type="text"]', 'SUITE');
         const sel = await p.$('select[name^="options["]');
         if (sel) await sel.selectOption({ index: 1 });
     });
 
     // compare + wishlist toggles (guest wishlist redirects to login: only compare is asserted)
-    await page.goto(base + '/fusion-backpack.html', { waitUntil: 'networkidle' });
+    await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
     await page.click('hyperion-list-toggle[kind="compare"] button[type="submit"]');
     const cmp = await toast(page);
     check('compare: add from PDP', cmp?.tone === 'success', JSON.stringify(cmp));
@@ -246,12 +248,12 @@ async function selectSwatches(page) {
         }
 
         // wishlist toggle from the PDP, header counter follows
-        await page.goto(base + '/fusion-backpack.html', { waitUntil: 'networkidle' });
+        await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
         await page.click('hyperion-list-toggle[kind="wishlist"] button[type="submit"]');
         const w = await toast(page);
         check('customer: wishlist toggle', !!w && w.tone !== 'error', JSON.stringify(w));
 
-        await addToCartFromPdp(page, '/fusion-backpack.html', 'customer: simple product');
+        await addToCartFromPdp(page, u('/fusion-backpack.html'), 'customer: simple product');
         await pageBasics(page, '/checkout/cart/', 'customer cart');
         check('customer cart: not empty (depersonalisation guard)', !/no items in your shopping cart/i.test(await page.evaluate(() => document.body.innerText)));
 
