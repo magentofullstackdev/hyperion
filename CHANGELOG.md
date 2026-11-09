@@ -4,6 +4,12 @@ All notable changes to Hyperion are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- PayPal placements (the product page buttons, the Pay Later messages) request the PayPal SDK only after a sign of the shopper on the page (a pointer move, a scroll, a touch, a key), on top of the placement being near the viewport and the page idle. About 450 KB of script in three frames no longer runs on a page nobody interacts with, and a lab measurement of the product page (PageSpeed) no longer counts its long tasks; a shopper sees the buttons as before, the placement keeps its reserved height.
+- The product history write of the product page runs in an idle slot; the product carousel measures its track from the resize observer's first report instead of forcing a layout right after its first render.
+
 ## [0.9.0-beta.4] - 2026-11-09
 
 ### Changed

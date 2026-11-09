@@ -8,6 +8,7 @@ import {
     loadPaypalSdk,
     resetPaypalSdk,
     whenWanted,
+    whenEngaged,
     whenPageIdle,
     notify,
     drainMessages,
@@ -124,6 +125,37 @@ describe('paypal-sdk scheduling', () => {
         await Promise.resolve();
         expect(wanted).toBe(false);
         expect(observers.instances[0].disconnected).toBe(true);
+    });
+
+    test('whenEngaged waits for the first sign of the shopper on the document', async () => {
+        const win = { scrollY: 0 };
+        let engaged = false;
+        whenEngaged(document, win).then(() => { engaged = true; });
+        await Promise.resolve();
+        expect(engaged).toBe(false);
+        document.body.dispatchEvent(new Event('pointermove', { bubbles: true }));
+        await Promise.resolve();
+        expect(engaged).toBe(true);
+    });
+
+    test('whenEngaged resolves at once on a page that is already scrolled', async () => {
+        let engaged = false;
+        whenEngaged(document, { scrollY: 120 }).then(() => { engaged = true; });
+        await Promise.resolve();
+        expect(engaged).toBe(true);
+    });
+
+    test('whenEngaged listens once: a second event finds no listener', async () => {
+        const win = { scrollY: 0 };
+        const add = vi.spyOn(document, 'addEventListener');
+        const remove = vi.spyOn(document, 'removeEventListener');
+        const ready = whenEngaged(document, win);
+        document.dispatchEvent(new Event('scroll'));
+        await ready;
+        expect(add).toHaveBeenCalledTimes(6);
+        expect(remove).toHaveBeenCalledTimes(6);
+        add.mockRestore();
+        remove.mockRestore();
     });
 
     test('whenPageIdle waits for the load event, then for an idle slot', async () => {

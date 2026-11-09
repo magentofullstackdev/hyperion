@@ -59,6 +59,7 @@ function resolveSameOriginUrl(value) {
 import {
     loadPaypalSdk,
     whenWanted,
+    whenEngaged,
     whenPageIdle,
     readCookie,
     notify,
@@ -129,6 +130,7 @@ export class HyperionPaypalButtons extends HyperionLightElement {
         const connection = ++this._connection;
         this._waiting = whenWanted(this);
         this._waiting
+            .then(() => whenEngaged())
             .then(() => whenPageIdle())
             .then(() => (connection === this._connection
                 ? loadPaypalSdk(this._settings.sdkUrl, this._settings.dataAttributes)

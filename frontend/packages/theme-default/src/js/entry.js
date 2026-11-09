@@ -378,7 +378,10 @@ function init() {
     bootPageBuilder();
     bootSendFriend();
     bootLazyComponents();
-    recordCurrentProductView();
+    // The history write parses the product record and touches localStorage:
+    // nothing the first paint or the first interaction needs, so it runs in an
+    // idle slot instead of adding to the long task of the page's own scripts.
+    (window.requestIdleCallback || ((fn) => setTimeout(fn, 1)))(() => recordCurrentProductView());
     initSearchHistory();
     document.body.addEventListener('htmx:responseError', onHtmxResponseError);
     document.body.addEventListener('htmx:sendError', onHtmxSendError);

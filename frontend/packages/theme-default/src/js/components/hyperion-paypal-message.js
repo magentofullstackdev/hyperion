@@ -30,7 +30,7 @@
 
 import { nothing } from 'lit';
 import { HyperionLightElement } from '@magentofullstackdev/hyperion-shared/lit';
-import { loadPaypalSdk, whenWanted, whenPageIdle } from '../lib/paypal-sdk.js';
+import { loadPaypalSdk, whenWanted, whenEngaged, whenPageIdle } from '../lib/paypal-sdk.js';
 
 const DEFAULT_PRICE_TARGET = '#hyperion-product-price';
 const DEFAULT_QTY_SELECTOR = '#product_addtocart_form [name="qty"]';
@@ -111,6 +111,7 @@ export class HyperionPaypalMessage extends HyperionLightElement {
         const connection = ++this._connection;
         this._waiting = whenWanted(this);
         this._waiting
+            .then(() => whenEngaged())
             .then(() => whenPageIdle())
             .then(() => (connection === this._connection
                 ? loadPaypalSdk(this.sdkUrl, parseJson(this.sdkAttributes))

@@ -11,10 +11,14 @@
  * later callers share its promise.
  *
  * The script is never part of the page load. `whenWanted()` resolves once
- * the placement is near the viewport (or the shopper touches it), and
- * `whenPageIdle()` then waits for the window `load` event plus an idle
- * slot, so a message at the top of the page cannot compete with the
- * page's own resources.
+ * the placement is near the viewport (or the shopper touches it),
+ * `whenEngaged()` once somebody is actually using the page (a pointer
+ * move, a scroll, a touch, a key), and `whenPageIdle()` then waits for the
+ * window `load` event plus an idle slot, so a message at the top of the
+ * page cannot compete with the page's own resources. The engagement step
+ * is what keeps the SDK (about 450 KB of script in three frames, a long
+ * task on a slow CPU) out of a page nobody interacts with: a product page
+ * opened and closed, a prerender, a lab measurement.
  */
 
 import { htmlToText } from '@magentofullstackdev/hyperion-shared/html';
@@ -22,6 +26,7 @@ import { htmlToText } from '@magentofullstackdev/hyperion-shared/html';
 const IDLE_TIMEOUT_MS = 2000;
 const PROXIMITY_MARGIN = '200px';
 const INTERACTION_EVENTS = ['pointerenter', 'pointerdown', 'focusin'];
+const ENGAGEMENT_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'wheel', 'scroll'];
 const MESSAGES_COOKIE = 'mage-messages';
 const NOTIFICATION_SELECTOR = '[data-hyperion-notification]';
 const NOTIFICATION_AUTO_CLOSE_MS = '15000';
@@ -116,6 +121,29 @@ export function whenWanted(element) {
     });
     promise.cancel = cancel;
     return promise;
+}
+
+/**
+ * Resolve once the shopper has shown up: the first pointer move, scroll,
+ * touch or key on the document, or at once when the page is already
+ * scrolled (the interaction happened before this code was loaded). A page
+ * nobody touches never resolves, which is the point.
+ *
+ * @param {Document} [doc]
+ * @param {Window} [win]
+ * @returns {Promise<void>}
+ */
+export function whenEngaged(doc = document, win = window) {
+    if ((win.scrollY || 0) > 0) return Promise.resolve();
+    return new Promise((resolve) => {
+        const done = () => {
+            for (const type of ENGAGEMENT_EVENTS) doc.removeEventListener(type, done, { capture: true });
+            resolve();
+        };
+        for (const type of ENGAGEMENT_EVENTS) {
+            doc.addEventListener(type, done, { capture: true, passive: true });
+        }
+    });
 }
 
 /**

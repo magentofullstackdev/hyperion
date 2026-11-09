@@ -27,6 +27,14 @@ export function installIntersectionObserver() {
         trigger(isIntersecting = true) {
             if (this.disconnected) return;
             this.callback(this.targets.map((target) => ({ target, isIntersecting })), this);
+            // A placement in view stands for a shopper in front of it: the SDK
+            // also waits for a sign of the shopper on the document, and listens
+            // for it only once the placement is wanted (two microtasks later).
+            if (isIntersecting) {
+                Promise.resolve().then(() => Promise.resolve()).then(() => {
+                    document.body.dispatchEvent(new Event('pointermove', { bubbles: true }));
+                });
+            }
         }
     }
     globalThis.IntersectionObserver = FakeIntersectionObserver;

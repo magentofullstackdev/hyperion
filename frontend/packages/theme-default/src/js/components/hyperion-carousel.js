@@ -221,8 +221,13 @@ export class HyperionCarousel extends LitElement {
 
     firstUpdated() {
         if (typeof ResizeObserver === 'function' && this._track) {
+            // The observer reports the track once right after it is observed,
+            // after the browser's own layout: that first report is the initial
+            // measure. Reading the track here, straight after the first render,
+            // would force a synchronous layout instead.
             this._resizeObserver = new ResizeObserver(() => this._measure());
             this._resizeObserver.observe(this._track);
+            return;
         }
         this._measure();
     }
