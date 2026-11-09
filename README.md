@@ -35,7 +35,7 @@ plan a migration.
 Every row was verified with the same end-to-end suite (guest and
 logged-in customer journeys, every product type, orders placed; 71 checks
 when the first three rows ran, 74 since the success page offer joined it)
-and the feature checks; the 2.4.9, Mage-OS 3.6.0 and PHP 8.5 rows also ran
+and the feature checks; the 2.4.9, Mage-OS 3.6.0, Mage-OS 4.0.0 and PHP 8.5 rows also ran
 the axe-core accessibility scan of the common chrome and forms
 (`pw-a11y.mjs`, see [Development](./docs/development.md)). The suite is
 rerun on every row before a tag; dates and counts per row are in
@@ -45,10 +45,11 @@ rerun on every row before a tag; dates and counts per row are in
 |---|---|---|---|---|
 | Magento Open Source 2.4.7-p10 | 8.3 | 7.4 | developer | 71 / 71 |
 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data) | 8.3 | 7.6 | developer and production | 71 / 71 |
-| Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 74 / 74 |
+| Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer and production | 74 / 74 |
 | Mage-OS 2.3.0 | 8.4 | 7.7 | developer | 71 / 71 |
-| Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey) | 8.4 | 7.7 | developer | 74 / 74 |
-| Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | developer | 74 / 74 |
+| Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey) | 8.4 | 7.7 | developer and production | 74 / 74 |
+| Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | developer and production | 74 / 74 |
+| Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 74 / 74 |
 
 Details, what was not tested and the PHPUnit notes: [Compatibility](./docs/compatibility.md).
 

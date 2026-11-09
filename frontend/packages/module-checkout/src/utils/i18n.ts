@@ -74,7 +74,6 @@ export async function loadLocale(options: I18nOptions | string): Promise<void> {
     const catalogLocale = resolveCatalogLocale(activeLocale);
     if (catalogLocale === null) {
         if (runtimeTranslations === EMPTY) {
-            // eslint-disable-next-line no-console
             console.warn(
                 `[hyperion-checkout] no i18n catalog for locale "${activeLocale}", falling back to en_US`
             );
@@ -92,8 +91,8 @@ export async function loadLocale(options: I18nOptions | string): Promise<void> {
  */
 export function resolveLocale(options: Pick<I18nOptions, 'locale' | 'storeCode'>): string {
     for (const candidate of [options.locale, options.storeCode]) {
-        const normalised = normaliseLocale(candidate);
-        if (normalised !== null) return normalised;
+        const normalized = normalizeLocale(candidate);
+        if (normalized !== null) return normalized;
     }
     return DEFAULT_LOCALE;
 }
@@ -119,7 +118,6 @@ export function t(
 ): string {
     let template = runtimeLookup(key) ?? activeCatalog[key] ?? fallbackCatalog[key];
     if (template === undefined) {
-        // eslint-disable-next-line no-console
         if (typeof console !== 'undefined' && console.warn) {
             console.warn(`[hyperion-checkout] missing translation for key "${key}"`);
         }
@@ -156,7 +154,7 @@ function runtimeLookup(key: string): string | undefined {
     return typeof bySource === 'string' && bySource !== '' ? bySource : undefined;
 }
 
-function normaliseLocale(value: string | null | undefined): string | null {
+function normalizeLocale(value: string | null | undefined): string | null {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim().replace('-', '_');
     if (/^[a-z]{2,3}_[A-Za-z]{2,4}$/.test(trimmed)) {

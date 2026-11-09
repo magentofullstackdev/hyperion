@@ -6,8 +6,8 @@ so small, focused pull requests are the ones that get merged fastest.
 ## Ground rules
 
 - One topic per pull request, with a short description of the user-visible
-  behaviour it changes.
-- No RequireJS, jQuery or Knockout. Storefront behaviour is Lit light-DOM
+  behavior it changes.
+- No RequireJS, jQuery or Knockout. Storefront behavior is Lit light-DOM
   components (`hyperion-*`), HTMX or a few lines of vanilla JavaScript.
 - Templates escape with the engine-provided `$escaper`; every `catch` block
   logs; theme layout files reference core blocks instead of re-declaring them.
@@ -15,6 +15,11 @@ so small, focused pull requests are the ones that get merged fastest.
   header used by the existing files.
 - Committed build assets (`web/assets`, the manifests) are part of the change:
   rebuild before you commit, CI fails when they are stale.
+- US English in every text: comments, docblocks, docs, the changelog, commit
+  messages, UI strings (`behavior`, `color`, `initialize`, `normalize`,
+  `center`, `license`). Older files may still carry British spellings: fix
+  the ones in a file you touch as part of your change, and do not open a
+  spelling-only pull request.
 
 ## Development setup
 

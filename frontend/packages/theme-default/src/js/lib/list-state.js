@@ -86,7 +86,6 @@ function notify() {
         try {
             fn(state);
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion] list-state subscriber failed', err);
         }
     }

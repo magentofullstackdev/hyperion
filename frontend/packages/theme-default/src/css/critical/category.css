@@ -1,0 +1,31 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Critical sheet of the category and search results pages
+ * (`critical_css_type` = category).
+ *
+ * Inlined into every HTML response of the type, so the theme stylesheet can
+ * load without blocking the first paint: the fold must look exactly as it
+ * does with the full sheet (e2e/pw-critical.mjs compares the pixels).
+ * Same partials in the same order as entry.css, reduced to what the fold
+ * uses: the toolbar, the tiles with their swatch skeletons, the layered
+ * navigation, the prices, and the landing block or description a category
+ * shows above its grid (CMS content: the PageBuilder and widget rules).
+ * Utilities come from the templates listed in tailwind.ts.
+ */
+@import '../source/_theme.css';
+@import '../source/_motion.css';
+@import '../source/_topmenu.css';
+@import '../source/_pricing.css';
+@import '../source/_layered-nav.css';
+@import '../source/_pagebuilder.css';
+@import '../source/_widgets.css';
+@import '../source/_components.css';
+
+/* After the imports: postcss-import drops an @import that follows another at-rule. */
+@config "./tailwind.category.ts";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

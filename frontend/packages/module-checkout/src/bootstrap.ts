@@ -100,7 +100,7 @@ function readCheckoutConfig(): CheckoutConfig {
     try {
         return normaliseCheckoutConfig(JSON.parse(text) as CheckoutConfig);
     } catch (err) {
-        throw new Error(`#${CONFIG_ELEMENT_ID} is not valid JSON: ${String(err)}`);
+        throw new Error(`#${CONFIG_ELEMENT_ID} is not valid JSON: ${String(err)}`, { cause: err });
     }
 }
 

@@ -2,14 +2,14 @@
 
 This is the procedure that was verified on a clean Magento Open Source
 2.4.8-p5 with the Luma sample data (2,040 products), then repeated on Magento
-2.4.7-p10, 2.4.9, Mage-OS 2.3.0 and Mage-OS 3.6.0. See [Compatibility](./compatibility.md).
+2.4.7-p10, 2.4.9, Mage-OS 2.3.0, 3.6.0 and 4.0.0. See [Compatibility](./compatibility.md).
 
 ## Prerequisites
 
 | Requirement | Value |
 |---|---|
 | PHP | 8.3, 8.4 or 8.5, with `ext-gd` (`ext-imagick` recommended for catalogs with 1000+ products) |
-| Magento | Open Source 2.4.6+ or Mage-OS 2.x / 3.x (`magento/framework ^103.0.6`); tested on 2.4.7, 2.4.8, 2.4.9, Mage-OS 2.3.0 and 3.6.0 |
+| Magento | Open Source 2.4.6+ or Mage-OS 2.x / 3.x / 4.0 (`magento/framework ^103.0.6`); tested on 2.4.7, 2.4.8, 2.4.9, Mage-OS 2.3.0, 3.6.0 and 4.0.0 |
 | Core modules | `Magento_PageBuilder`, `Magento_ReCaptchaUi`, `Magento_Swatches`, `Magento_Review`, `Magento_Wishlist`, `Magento_MessageQueue`, `Magento_Elasticsearch`, `Magento_AdvancedSearch`, `Magento_Backend`, `Magento_Ui`, `Magento_Widget` must be present (they are in every Open Source and Mage-OS install) |
 | Search engine | Elasticsearch or OpenSearch (the only engines Magento 2.4 supports): the search module queries the engine for the autocomplete and the relevance tuning |
 | Full page cache | Varnish 6 or 7 recommended (all test runs used Varnish); without it the ESI fragments render inline |
@@ -34,13 +34,13 @@ the Magento root:
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.3
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.3   # optional, see below
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.4
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.4   # optional, see below
 ```
 
 `minimum-stability beta` is needed while the release is a beta: the theme
-requires its modules at the exact version `0.9.0-beta.3`, and a stability
-flag on the root constraint (`^0.9.0-beta.3`) does not reach those
+requires its modules at the exact version `0.9.0-beta.4`, and a stability
+flag on the root constraint (`^0.9.0-beta.4`) does not reach those
 transitive requirements. `prefer-stable` keeps every other package on its
 stable release, and Magento projects already ship with it set. The step
 disappears with the first stable release.
@@ -102,15 +102,19 @@ install the id was 4; it depends on how many themes the store already had.
 `config:set` writes the default scope; add `--scope=stores --scope-code=<code>`
 for one store view.
 
-## 3b. Generate the product image cache
+## 3b. Warm the product image cache (optional)
 
-Hyperion builds every product image URL through Magento's `UrlBuilder` service
-and expects the resized files to exist under `pub/media/catalog/product/cache/`.
-Luma's templates resize on the fly through the image helper, which hides this;
-since Magento 2.4.9 `get.php` no longer resizes a missing cache file either (it
-only serves media storage copies), so a missing file is a plain 404. After the
-install, after a media import or after a change of the image sizes in
-`etc/view.xml`, run once:
+Every product image of the theme is served from `pub/media/catalog/product/cache/`
+through Magento's image helper: a size that does not exist yet is resized
+during the render of the first page that needs it, exactly as in Luma, so a
+fresh install, a media import or a change of the image sizes in `etc/view.xml`
+never show a broken image. (Magento's own `get.php` resizes a missing cache
+file on demand as well, when the web server routes `/media/` misses to it the
+way `nginx.conf.sample` does; the theme does not rely on that routing.)
+
+The first visitor of a product still pays for its gallery sizes (1200 x 1800
+and 800 x 1280 per image, a few hundred milliseconds each), so before opening a
+store with a large catalog warm the cache once:
 
 ```bash
 bin/magento catalog:images:resize

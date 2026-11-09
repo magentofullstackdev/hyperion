@@ -42,7 +42,6 @@ export function loadPaypalSdk(url, attributes = {}) {
     }
     if (sdkPromise) {
         if (url !== sdkUrl) {
-            // eslint-disable-next-line no-console
             console.warn('[hyperion] PayPal SDK already requested with another URL, reusing it.');
         }
         return sdkPromise;
@@ -62,7 +61,7 @@ export function loadPaypalSdk(url, attributes = {}) {
             if (window.paypal) {
                 resolve(window.paypal);
             } else {
-                reject(new Error('PayPal SDK did not initialise'));
+                reject(new Error('PayPal SDK did not initialize'));
             }
         };
         script.onerror = () => {

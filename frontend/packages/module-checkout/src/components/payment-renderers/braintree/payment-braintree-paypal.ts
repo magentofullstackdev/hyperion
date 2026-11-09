@@ -5,7 +5,7 @@
  * <payment-braintree-paypal> -- PayPal through Braintree (`braintree_paypal`).
  *
  * Flow with the checkout's own Place Order button:
- *   1. the shopper authorises the payment with the PayPal button rendered
+ *   1. the shopper authorizes the payment with the PayPal button rendered
  *      here (PayPal popup, amount / currency / shipping address from the
  *      quote at click time);
  *   2. the approval (nonce + payer email) is kept, the buttons give way to a
@@ -64,7 +64,7 @@ type Funding = 'paypal' | 'credit' | 'paylater';
 export interface PayPalApproval {
     nonce: string;
     email: string;
-    /** Base grand total the shopper authorised. */
+    /** Base grand total the shopper authorized. */
     amount: string;
     savedForLater: boolean;
 }
@@ -217,7 +217,7 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
     }
 
     /**
-     * The PayPal SDK is only needed while there is nothing authorised: on the
+     * The PayPal SDK is only needed while there is nothing authorized: on the
      * first render, or once an approval is gone (changed by the shopper,
      * amount change, failed order).
      */
@@ -280,8 +280,7 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
             this._status = 'ready';
         } catch (err) {
             if (stale()) return;
-            // eslint-disable-next-line no-console
-            console.error('[hyperion-checkout] Braintree PayPal could not be initialised', err);
+            console.error('[hyperion-checkout] Braintree PayPal could not be initialized', err);
             this._status = 'error';
             this._message = t('Hyperion_Checkout::braintree_paypal_init_failed');
         }
@@ -316,7 +315,6 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
                 });
             },
             onError: (err) => {
-                // eslint-disable-next-line no-console
                 console.error('[hyperion-checkout] PayPal button error', err);
                 this._message = t('Hyperion_Checkout::braintree_paypal_failed');
             },
@@ -348,7 +346,6 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
             try {
                 await checkout.teardown();
             } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error('[hyperion-checkout] Braintree PayPal teardown failed', err);
             }
         }

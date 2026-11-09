@@ -105,8 +105,7 @@ export async function verifyThreeDSecure(request: ThreeDSecureRequest): Promise<
         ]);
         instance = await threeDSecure.create({ client, version: 2 });
     } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('[hyperion-checkout] 3D Secure could not be initialised', err);
+        console.error('[hyperion-checkout] 3D Secure could not be initialized', err);
         throw failure;
     }
 
@@ -150,11 +149,10 @@ export async function verifyThreeDSecure(request: ThreeDSecureRequest): Promise<
         throw failure;
     } catch (err) {
         if (err === failure) throw err;
-        // eslint-disable-next-line no-console
         console.error('[hyperion-checkout] 3D Secure verification failed', err);
         if ((err as BraintreeError)?.code === 'THREEDS_LOOKUP_VALIDATION_ERROR'
             && (hasOverlongLine(billing) || hasOverlongLine(shipping))) {
-            throw new Error(t('Hyperion_Checkout::braintree_3ds_address_too_long'));
+            throw new Error(t('Hyperion_Checkout::braintree_3ds_address_too_long'), { cause: err });
         }
         throw failure;
     } finally {

@@ -158,8 +158,7 @@ export class PaymentBraintreeVault extends LitElement {
             this._status = 'ready';
         } catch (err) {
             if (stale()) return;
-            // eslint-disable-next-line no-console
-            console.error('[hyperion-checkout] Braintree CVV field could not be initialised', err);
+            console.error('[hyperion-checkout] Braintree CVV field could not be initialized', err);
             this._status = 'error';
         }
     }
@@ -171,7 +170,6 @@ export class PaymentBraintreeVault extends LitElement {
         try {
             await instance.teardown();
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Braintree CVV field teardown failed', err);
         }
     }
@@ -186,10 +184,9 @@ export class PaymentBraintreeVault extends LitElement {
         try {
             cvvNonce = (await instance.tokenize({})).nonce;
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Braintree CVV tokenization failed', err);
             this._cvvInvalid = true;
-            throw new Error(t('Hyperion_Checkout::braintree_card_cvv_invalid'));
+            throw new Error(t('Hyperion_Checkout::braintree_card_cvv_invalid'), { cause: err });
         }
         const failure = new Error(t('Hyperion_Checkout::braintree_card_cvv_failed'));
         const url = new URL(token.nonceUrl.replace(/\/getnonce/i, '/updatepaymentmethod'), window.location.href);

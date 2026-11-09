@@ -38,7 +38,7 @@ const check = (name, ok, detail = '') => {
 const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'exec', '-T', ...(user ? ['-u', user] : []), service, 'bash', '-c', cmd], { encoding: 'utf8' });
 const fixture = (action) => compose('php-fpm', `cd /var/www/html && php /tmp/megamenu-fixture.php /var/www/html ${action}`, 'www-data').trim();
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
-const ban = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* no varnish */ } };
+const ban = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* no varnish */ } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The backend answers 5xx for a moment after a flush: retry. X-Magento-Debug
 // asks the VCL for the debug exchange: the cache verdict (x-magento-cache-debug)
@@ -60,7 +60,7 @@ const page = await ctx.newPage();
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message.slice(0, 120)}`));
 page.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 80)}`); });
-let summary = null;
+let summary;
 try {
     // ---- no group: the category tree
     fixture('remove');

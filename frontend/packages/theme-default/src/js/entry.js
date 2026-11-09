@@ -7,7 +7,7 @@
 //   1. Attach a global HTMX response-error listener so that network or 4xx/5xx
 //      responses surface a user-visible notification instead of leaving the
 //      page in a broken state.
-//   2. Provide a single initialisation hook -- Lit components are loaded on
+//   2. Provide a single initialization hook -- Lit components are loaded on
 //      demand as separate chunks, not from this entry bundle, so pages that
 //      do not use a component pay no cost for it.
 //
@@ -16,46 +16,57 @@
 
 import '../css/source/entry.css';
 
-// Lit components.
-//
-// Importing each component module from the entry bundle forces the browser
-// to load (and therefore register) every custom element we ship. Because
-// each component is also declared as a separate input in vite.config.js,
-// Vite still emits one chunk per component -- the entry bundle simply
-// `import`s them, which triggers the browser to fetch the chunk. Net result:
-// ~40 KB of compressed JS on any Hyperion page, every hyperion-* element
-// upgrades as soon as the entry runs.
-//
-// This is the canonical place to add or remove components from the runtime.
-import './components/hyperion-dropdown.js';
 import { installMegaHover } from './lib/mega-hover.js';
 import { installLoadMoreFocus } from './lib/listing-load-more.js';
 import { installListingFilters } from './lib/listing-filters.js';
 import { installCollapsibleNav } from './lib/collapsible-nav.js';
-import './components/hyperion-mini-cart.js';
-import './components/hyperion-slider.js';
-import './components/hyperion-carousel.js';
-import './components/hyperion-image-zoom.js';
-import './components/hyperion-gallery.js';
-import './components/hyperion-tabs.js';
-import './components/hyperion-accordion.js';
-import './components/hyperion-rating.js';
-import './components/hyperion-swatches.js';
-import './components/hyperion-checkout.js';
-import './components/hyperion-filter-accordion.js';
-import './components/hyperion-coupon-form.js';
-import './components/hyperion-notification.js';
-import './components/hyperion-account-nav.js';
-import './components/hyperion-address-card.js';
-import './components/hyperion-list-toggle.js';
-import './components/hyperion-recaptcha.js';
-import './components/hyperion-messages.js';
-import './components/hyperion-order-cancel.js';
-import './components/hyperion-bundle-options.js';
-import './components/hyperion-custom-options.js';
-import './components/hyperion-region-select.js';
+import { whenThemeStylesheetReady } from './lib/theme-stylesheet.js';
+// The confirmation dialog answers `hx-confirm` from the first htmx event on,
+// so it is the one component the entry carries itself.
 import { HyperionConfirm } from './components/hyperion-confirm.js';
-import './components/hyperion-msrp-popup.js';
+
+// Lit components.
+//
+// Every component is a separate input in vite.config.ts, so Vite emits one
+// chunk per component and the entry fetches them here. Net result: ~40 KB of
+// compressed JS on any Hyperion page, every hyperion-* element upgrades once
+// its chunk is in. The fetch starts when the theme stylesheet applies
+// (lib/theme-stylesheet.js): on the page types that paint their fold from
+// an inline critical sheet the stylesheet loads without blocking, and
+// chunks requested at module time would share the connection with the
+// images of the fold and upgrade elements before their styles are in. A
+// page that links the stylesheet synchronously starts them at once, as a
+// static import would.
+//
+// This is the canonical place to add or remove components from the runtime.
+const COMPONENTS = [
+    () => import('./components/hyperion-dropdown.js'),
+    () => import('./components/hyperion-mini-cart.js'),
+    () => import('./components/hyperion-slider.js'),
+    () => import('./components/hyperion-carousel.js'),
+    () => import('./components/hyperion-image-zoom.js'),
+    () => import('./components/hyperion-gallery.js'),
+    () => import('./components/hyperion-tabs.js'),
+    () => import('./components/hyperion-accordion.js'),
+    () => import('./components/hyperion-rating.js'),
+    () => import('./components/hyperion-swatches.js'),
+    () => import('./components/hyperion-checkout.js'),
+    () => import('./components/hyperion-filter-accordion.js'),
+    () => import('./components/hyperion-coupon-form.js'),
+    () => import('./components/hyperion-notification.js'),
+    () => import('./components/hyperion-account-nav.js'),
+    () => import('./components/hyperion-address-card.js'),
+    () => import('./components/hyperion-list-toggle.js'),
+    () => import('./components/hyperion-recaptcha.js'),
+    () => import('./components/hyperion-messages.js'),
+    () => import('./components/hyperion-order-cancel.js'),
+    () => import('./components/hyperion-bundle-options.js'),
+    () => import('./components/hyperion-custom-options.js'),
+    () => import('./components/hyperion-region-select.js'),
+    () => import('./components/hyperion-msrp-popup.js'),
+];
+const styled = whenThemeStylesheetReady();
+styled.then(() => COMPONENTS.forEach((load) => load()));
 
 // Form-key provider, `data-post` controls and the cookie notice live in
 // `lib/`, so they can be unit tested; see the header of each file for
@@ -179,7 +190,7 @@ function onHtmxBeforeSwap(event) {
     // links enhanced by hyperion-account-nav.js, which set
     // hx-select="#hyperion-account-content"), the response is *expected*
     // to be a full HTML document -- HTMX will narrow it to the selected
-    // fragment before swapping. Cancelling here would surface a bogus
+    // fragment before swapping. Canceling here would surface a bogus
     // error toast on every such call.
     //
     // Note: at htmx:beforeSwap, `event.detail.elt` is the swap *target*
@@ -196,7 +207,6 @@ function onHtmxBeforeSwap(event) {
 
     event.preventDefault();
     const url = xhr.responseURL || event?.detail?.requestConfig?.path || 'unknown';
-    // eslint-disable-next-line no-console
     console.warn(
         `[hyperion] Blocked full-page HTMX swap from ${url} (status ${xhr.status}). ` +
         'The server returned an HTML document instead of a fragment -- check that ' +
@@ -322,24 +332,25 @@ function onDocumentKeydown(event) {
     }
 }
 
-// PageBuilder behaviour (tabs, hover overlays, video backgrounds, maps) is a
+// PageBuilder behavior (tabs, hover overlays, video backgrounds, maps) is a
 // separate chunk, requested only by pages that hold PageBuilder content.
 function bootPageBuilder(event) {
     const root = event?.detail?.elt ?? document;
     if (!document.querySelector('[data-content-type]')) return;
-    import('./lib/pagebuilder.js').then((module) => module.bootPageBuilder(root.isConnected ? root : document));
+    styled.then(() => import('./lib/pagebuilder.js')).then((module) => module.bootPageBuilder(root.isConnected ? root : document));
 }
 
 // The Email a Friend form (recipient rows) is a chunk only that page requests.
 function bootSendFriend() {
     if (!document.querySelector('[data-hyperion-sendfriend]')) return;
-    import('./lib/sendfriend.js').then((module) => module.installSendFriend(document));
+    styled.then(() => import('./lib/sendfriend.js')).then((module) => module.installSendFriend(document));
 }
 
 // Components requested only by pages (or swapped fragments, the mini-cart
 // drawer) that contain one of their elements: a store without PayPal, a
 // page without a sidebar or a history widget, a store without GA4 never
-// downloads them. Custom elements upgrade when defined later.
+// downloads them. Custom elements upgrade when defined later. Like the
+// components above they wait for the theme stylesheet.
 const LAZY_COMPONENTS = {
     'hyperion-paypal-buttons': () => import('./components/hyperion-paypal-buttons.js'),
     'hyperion-paypal-message': () => import('./components/hyperion-paypal-message.js'),
@@ -355,7 +366,7 @@ function bootLazyComponents(event) {
     for (const [tag, load] of Object.entries(LAZY_COMPONENTS)) {
         if (customElements.get(tag)) continue;
         if (document.querySelector(tag) || swapped?.querySelector?.(tag) || swapped?.matches?.(tag)) {
-            load();
+            styled.then(load);
         }
     }
 }

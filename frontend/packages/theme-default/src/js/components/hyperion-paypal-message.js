@@ -117,7 +117,6 @@ export class HyperionPaypalMessage extends HyperionLightElement {
                 : null))
             .then((paypal) => (paypal && connection === this._connection ? this._renderMessage(paypal) : null))
             .catch((error) => {
-                // eslint-disable-next-line no-console
                 console.error('[hyperion-paypal-message]', error);
             });
     }

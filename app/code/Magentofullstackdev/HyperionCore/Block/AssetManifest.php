@@ -51,8 +51,8 @@ class AssetManifest extends Template implements ArgumentInterface
     /** @var array<string, mixed>|null decoded manifest; values are entry arrays unless the file is malformed */
     private ?array $manifestCache = null;
 
-    /** @var string|null cached critical CSS content for the request */
-    private ?string $criticalCssCache = null;
+    /** @var array<string, string> critical CSS content per manifest entry name, cached for the request */
+    private array $criticalCssCache = [];
 
     public function __construct(
         Context $context,
@@ -85,30 +85,37 @@ class AssetManifest extends Template implements ArgumentInterface
             ['entry' => $entryName]
         );
 
-        return $this->toPublicUrl(self::ASSETS_SUBDIR . '/' . $this->normaliseFallbackName($entryName));
+        return $this->toPublicUrl(self::ASSETS_SUBDIR . '/' . $this->normalizeFallbackName($entryName));
     }
 
     /**
-     * Read the handcrafted critical CSS off disk so head/scripts.phtml
-     * can inline it inside a `<style>` tag. Cached per-request to avoid
-     * a re-read when the head template is rendered after a layout-pass
-     * change.
+     * Read a critical CSS file off disk so head/scripts.phtml can inline
+     * it inside a `<style>` tag. Without a type this is the `critical`
+     * entry (tokens and reset, the pages that link the theme stylesheet
+     * synchronously); with a type it is `critical-<type>`, the sheet that
+     * paints the fold of that page type on its own (built from
+     * frontend/packages/theme-default/src/css/critical/). Cached per
+     * request and per entry, so a head rendered twice reads once.
      *
-     * Returns an empty string when the manifest doesn't include a
-     * `critical` entry or the file can't be read -- the caller should
-     * skip emitting the inline `<style>` tag rather than render an
-     * empty one (a noop `<style></style>` is still a parse cost).
+     * Returns an empty string when the manifest has no such entry or the
+     * file can't be read: the caller skips the inline `<style>` (a noop
+     * `<style></style>` is still a parse cost) and, for a typed page,
+     * falls back to the synchronous stylesheet link.
      */
-    public function getCriticalCss(): string
+    public function getCriticalCss(string $type = ''): string
     {
-        if ($this->criticalCssCache !== null) {
-            return $this->criticalCssCache;
+        $entryName = $type === '' ? 'critical' : 'critical-' . $type;
+        if (isset($this->criticalCssCache[$entryName])) {
+            return $this->criticalCssCache[$entryName];
         }
 
         $manifest = $this->getManifest();
-        $entry = $this->lookupEntry($manifest, 'critical');
+        $entry = $this->lookupEntry($manifest, $entryName);
         if ($entry === null || empty($entry['file'])) {
-            return $this->criticalCssCache = '';
+            if ($type !== '') {
+                $this->logger->warning('Hyperion critical CSS entry missing from the manifest.', ['entry' => $entryName]);
+            }
+            return $this->criticalCssCache[$entryName] = '';
         }
 
         $themePath = $this->componentRegistrar->getPath(
@@ -116,19 +123,19 @@ class AssetManifest extends Template implements ArgumentInterface
             self::THEME_FULL_PATH
         );
         if ($themePath === null) {
-            return $this->criticalCssCache = '';
+            return $this->criticalCssCache[$entryName] = '';
         }
 
         $absolute = $themePath . '/web/' . ltrim((string) $entry['file'], '/');
         try {
             if (!$this->fileDriver->isExists($absolute)) {
                 $this->logger->warning('Hyperion critical CSS missing on disk.', ['path' => $absolute]);
-                return $this->criticalCssCache = '';
+                return $this->criticalCssCache[$entryName] = '';
             }
-            return $this->criticalCssCache = (string) $this->fileDriver->fileGetContents($absolute);
+            return $this->criticalCssCache[$entryName] = (string) $this->fileDriver->fileGetContents($absolute);
         } catch (FileSystemException $e) {
             $this->logger->warning('Hyperion critical CSS read failed.', ['error' => $e->getMessage()]);
-            return $this->criticalCssCache = '';
+            return $this->criticalCssCache[$entryName] = '';
         }
     }
 
@@ -214,7 +221,7 @@ class AssetManifest extends Template implements ArgumentInterface
                 return $candidate;
             }
         }
-        // Normalised filename match -- "hyperion-slider.js" maps to source ".../hyperion-slider.js".
+        // Normalized filename match -- "hyperion-slider.js" maps to source ".../hyperion-slider.js".
         $needle = '/' . ltrim($entryName, '/');
         foreach ($manifest as $sourcePath => $candidate) {
             if (is_array($candidate) && str_ends_with('/' . $sourcePath, $needle)) {
@@ -226,6 +233,14 @@ class AssetManifest extends Template implements ArgumentInterface
         // above misses them; this fallback makes them addressable by their file stem.
         foreach ($manifest as $sourcePath => $candidate) {
             if (is_array($candidate) && pathinfo((string) $sourcePath, PATHINFO_FILENAME) === $entryName) {
+                return $candidate;
+            }
+        }
+        // Output-stem match -- "critical-category" matches the file "assets/critical-category.<hash>.css"
+        // of the input `critical-category` (src/css/critical/category.css): a CSS-only input is
+        // keyed by its source path and named after the input only in the emitted file.
+        foreach ($manifest as $candidate) {
+            if (is_array($candidate) && str_starts_with(basename((string) ($candidate['file'] ?? '')), $entryName . '.')) {
                 return $candidate;
             }
         }
@@ -258,7 +273,7 @@ class AssetManifest extends Template implements ArgumentInterface
         return $baseUrl . self::THEME_STATIC_PATH . '/' . $locale . '/' . $relative;
     }
 
-    private function normaliseFallbackName(string $entryName): string
+    private function normalizeFallbackName(string $entryName): string
     {
         $base = basename($entryName);
         if (!str_contains($base, '.')) {

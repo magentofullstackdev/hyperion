@@ -9,19 +9,45 @@
  *   1. Resource hints (preconnect, dns-prefetch, modulepreload) so the
  *      browser opens TCP/TLS to the media host while it parses the
  *      rest of <head>.
- *   2. Inline critical CSS -- handcrafted ~2 KB stylesheet that paints
- *      the header, container, and base typography before any network
- *      request completes. Avoids the FOUC the entry-CSS preload would
- *      otherwise produce.
- *   3. Load the main entry CSS via `<link rel="stylesheet">`. Synchronous
- *      so the parser blocks until it applies -- combined with the inlined
- *      critical CSS the FCP is already painted, so the block here is
- *      brief. We deliberately avoid the `rel="preload" + onload` swap
- *      pattern: browser-cached responses can fire `load` before the
- *      onload handler is bound, leaving the link stuck on `preload`
- *      and the page rendering with critical CSS only -- symptom was
- *      widgets and navigation looking unstyled because Tailwind never
- *      applied.
+ *   2. Inline critical CSS inside <style data-hyperion-critical>, read
+ *      off disk by AssetManifest::getCriticalCss().
+ *   3. The theme stylesheet, in one of two modes decided by the layout
+ *      argument `critical_css_type` on this block:
+ *
+ *      * A page type with its own critical sheet (`cms`, `category`,
+ *        `product`; each built from
+ *        frontend/packages/theme-default/src/css/critical/) inlines that
+ *        sheet, which paints the whole fold on its own, and loads the
+ *        theme stylesheet WITHOUT blocking: a preload, the stylesheet
+ *        link with `media="print"`, and an inline script right after it
+ *        that flips `media` to `all` once the sheet is in. The script is
+ *        synchronous and runs before anything else can happen to the
+ *        link, so a sheet that is already loaded (browser cache) is
+ *        flipped on the spot and one still loading is flipped on its
+ *        `load` event; a handler bound later from the deferred entry
+ *        module missed cached loads and left pages on the critical sheet
+ *        only. `<noscript>` links the sheet synchronously.
+ *
+ *        Two companions of this mode: Plugin\Framework\View\Page\Config\
+ *        RenderBlockingMarkerPlugin puts `<link rel="expect"
+ *        href="#hyperion-footer" blocking="render">` in the head (this
+ *        block renders in the body, where the link is ignored), so a
+ *        document still streaming in is never painted half built; and the
+ *        entry module fetches the component chunks only once the sheet
+ *        applies (theme lib/theme-stylesheet.js), otherwise they would
+ *        share the connection with the images of the fold a second earlier
+ *        than they used to and the largest image painted later on a slow
+ *        link.
+ *
+ *      * Every other page (and a typed page whose sheet is missing on
+ *        disk) inlines the small tokens and reset sheet and links the
+ *        theme stylesheet synchronously: the parser blocks until it
+ *        applies, nothing renders unstyled. The `preload` + `onload`
+ *        swap pattern is deliberately not used here (see above).
+ *
+ *      The stylesheet link carries `data-hyperion-theme-css` in both
+ *      modes: the mini-cart fetches that href and adopts the sheet into
+ *      its shadow root.
  *   4. HTMX configuration (meta tag, read by htmx when it starts), then
  *      HTMX (defer) and the entry module (`type=module` is implicitly
  *      deferred) -- load after the parser is past this block.
@@ -31,11 +57,15 @@
  * manifest is missing the block falls back to un-hashed paths and logs
  * a warning so the page still loads in dev.
  *
- * Layout-XML hook: pass `preconnect_origins` as an array argument to
- * add additional origins (CDNs, font hosts, analytics endpoints).
+ * Layout-XML hooks: `preconnect_origins` (array) adds origins (CDNs,
+ * font hosts, analytics endpoints); `critical_css_type` (string) maps
+ * the page to one of the critical sheets above, an empty string keeps
+ * the synchronous mode; `critical_css_marker` (string, an element id,
+ * the footer by default) is where the render blocking marker of
+ * RenderBlockingMarkerPlugin points.
  *
- * The inline style and the inline script go through $secureRenderer->renderTag() so Magento CSP
- * adds its nonce to both when a merchant tightens style-src / script-src (the attributes and the
+ * The inline styles and scripts go through $secureRenderer->renderTag() so Magento CSP
+ * adds its nonce to them when a merchant tightens style-src / script-src (the attributes and the
  * content are rendered as given; nothing is escaped).
  *
  * @var \Magento\Framework\View\Element\Template $block
@@ -52,7 +82,11 @@ $assetManifest = $block->getData('asset_manifest');
 $htmxScriptUrl = $htmxConfig->getScriptUrl();
 $entryJsUrl = $assetManifest->getAssetUrl('entry');
 $entryCssUrls = $assetManifest->getEntryCssUrls('entry');
-$criticalCss = $assetManifest->getCriticalCss();
+
+$criticalType = (string) $block->getData('critical_css_type');
+$pageCriticalCss = $criticalType !== '' ? $assetManifest->getCriticalCss($criticalType) : '';
+$deferTheme = $pageCriticalCss !== '';
+$criticalCss = $deferTheme ? $pageCriticalCss : $assetManifest->getCriticalCss();
 
 // Preconnect to the media host when it's served from a different origin
 // than the storefront (typical CDN setup). Same-origin media gets no
@@ -77,7 +111,7 @@ $preconnectOrigins = (array) $block->getData('preconnect_origins');
 <?php endforeach; ?>
 <link rel="modulepreload" href="<?= $escaper->escapeUrl($entryJsUrl) ?>">
 <?php if ($criticalCss !== ''): ?>
-<?= /* @noEscape */ $secureRenderer->renderTag('style', ['data-hyperion-critical' => ''], $criticalCss, false) ?>
+<?= /* @noEscape */ $secureRenderer->renderTag('style', ['data-hyperion-critical' => $deferTheme ? $criticalType : ''], $criticalCss, false) ?>
 <?php endif; ?>
 <?php /* Cross-document view transitions (theme _motion.css). A navigation that goes
          through a POST (the forms) and a redirect makes Chrome abort the transition it started and
@@ -111,9 +145,35 @@ $viewTransitionJs = <<<'JS'
 JS;
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $viewTransitionJs, false) ?>
+<meta name="htmx-config" content="<?= $escaper->escapeHtmlAttr($htmxConfig->getConfigJson()) ?>">
+<?php if ($deferTheme): ?>
+<?php foreach ($entryCssUrls as $cssUrl): ?>
+<link rel="preload" href="<?= $escaper->escapeUrl($cssUrl) ?>" as="style">
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($cssUrl) ?>" media="print" data-hyperion-theme-css>
+<?php endforeach; ?>
+<?php
+$applyThemeCssJs = <<<'JS'
+(function () {
+    var links = document.querySelectorAll('link[data-hyperion-theme-css][media="print"]');
+    for (var i = 0; i < links.length; i++) {
+        (function (link) {
+            var apply = function () { link.media = 'all'; };
+            if (link.sheet) { apply(); } else { link.addEventListener('load', apply, { once: true }); }
+        })(links[i]);
+    }
+})();
+JS;
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $applyThemeCssJs, false) ?>
+<noscript>
+<?php foreach ($entryCssUrls as $cssUrl): ?>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($cssUrl) ?>" media="all">
+<?php endforeach; ?>
+</noscript>
+<?php else: ?>
 <?php foreach ($entryCssUrls as $cssUrl): ?>
 <link rel="stylesheet" href="<?= $escaper->escapeUrl($cssUrl) ?>" media="all" data-hyperion-theme-css>
 <?php endforeach; ?>
-<meta name="htmx-config" content="<?= $escaper->escapeHtmlAttr($htmxConfig->getConfigJson()) ?>">
+<?php endif; ?>
 <script type="text/javascript" src="<?= $escaper->escapeUrl($htmxScriptUrl) ?>" defer></script>
 <script type="module" src="<?= $escaper->escapeUrl($entryJsUrl) ?>"></script>

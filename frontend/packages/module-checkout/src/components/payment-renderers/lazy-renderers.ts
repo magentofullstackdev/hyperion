@@ -40,7 +40,6 @@ export function ensureRenderersFor(codes: readonly string[]): void {
             .catch((err: unknown) => {
                 // The method stays on the "not yet supported" path; a reload retries.
                 requested.delete(code);
-                // eslint-disable-next-line no-console
                 console.error(`[hyperion-checkout] payment renderer for "${code}" failed to load`, err);
             });
     }

@@ -124,7 +124,14 @@ export class HyperionDropdown extends LitElement {
             box-shadow: var(--drawer-shadow);
             padding: 0;
             transform: translateX(100%);
-            transition: transform var(--transition-duration) ease;
+            /* Hidden while closed: the panel sits just past the right edge and
+               its shadow would otherwise shade the page along that edge.
+               visibility flips at the end of the closing slide (this rule's
+               transition) and at once when opening (the open rule's 0s
+               transition): the first control is focused in the same frame
+               the drawer opens, and a hidden element cannot take the focus. */
+            visibility: hidden;
+            transition: transform var(--transition-duration) ease, visibility var(--transition-duration) ease;
             z-index: 9999;
             overflow-y: auto;
         }
@@ -135,6 +142,8 @@ export class HyperionDropdown extends LitElement {
 
         :host([placement="drawer"][open]) [part="panel"] {
             transform: translateX(0);
+            visibility: visible;
+            transition: transform var(--transition-duration) ease, visibility 0s;
         }
 
         /* Anchor the panel to the right edge of the trigger for bottom-end. */

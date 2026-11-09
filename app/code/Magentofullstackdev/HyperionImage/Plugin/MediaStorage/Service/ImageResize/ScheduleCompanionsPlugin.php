@@ -19,15 +19,13 @@ use Throwable;
  * `Magento\MediaStorage\Service\ImageResize` writes.
  *
  * `ScheduleConversionPlugin` only sees `Product\Image::saveFile()`, the
- * on-demand resize of the Luma-style image helper. Hyperion builds its
- * image URLs through `UrlBuilder`, which never resizes, so the gallery
- * and tile sizes of a Hyperion store come from this service instead:
+ * resize the image helper performs while a page renders. Most cache files
+ * of a store are written by this service instead, without `saveFile()`:
  * `bin/magento catalog:images:resize` (`resizeFromThemes`), the product
  * save observer and the `media.storage.catalog.image.resize` consumer
  * (`resizeFromImageName`), and `get.php` for a missing cache file (same
  * method). The service writes through the image adapter, so none of
- * those files would ever reach the conversion pipeline (the PDP
- * gallery image would never get a companion).
+ * those files would ever reach the conversion pipeline.
  *
  * The service exposes no list of the files it wrote: `resizeFromImageName`
  * returns nothing and `resizeFromThemes` yields the original image name

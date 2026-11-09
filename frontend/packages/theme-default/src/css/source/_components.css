@@ -518,11 +518,22 @@ hyperion-paypal-buttons [data-hyperion-paypal-container] {
     flex-direction: column;
 }
 
+/* The SDK positions its button iframe at z-index 100 and the funding menu at
+   300 against the nearest stacking context. In the page flow that is the
+   root, so they painted over the sticky header (z-index 30) and over the
+   drawers it contains: the product page buttons showed through the open
+   mini-cart. An isolated host keeps them inside its own box. */
+hyperion-paypal-buttons,
+hyperion-paypal-message {
+    display: block;
+    isolation: isolate;
+}
+
 /* --- reCAPTCHA v3 legal note (A06, contrast) ---------------------- */
 /* `Magento_ReCaptchaFrontendUi::recaptcha.phtml` prints the Google
    attribution at 12px wherever a protected form renders: on light surfaces
    (login, register, contact, checkout) and inside the dark footer newsletter
-   block. `text-muted` is 3.67:1 on the inverted surface, so the colour is
+   block. `text-muted` is 3.67:1 on the inverted surface, so the color is
    chosen by the surface: muted (4.83:1 on surface, 4.63:1 on surface-raised)
    or on-inverted-muted (6.99:1 on surface-inverted). The links inherit it
    (`a { color: inherit }`) and stay underlined. */

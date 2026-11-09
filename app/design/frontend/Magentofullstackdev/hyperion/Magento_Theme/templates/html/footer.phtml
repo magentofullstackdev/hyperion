@@ -12,7 +12,10 @@ $logoUrl = $block->getLogoUrl();
 $homeLabel = __('%1 Home', $block->getStoreName());
 $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
 ?>
-<footer role="contentinfo" class="bg-inverted text-on-inverted-muted mt-auto">
+<?php /* The id is the render blocking marker of the pages with an inline critical sheet
+         (HyperionCore RenderBlockingMarkerPlugin, `<link rel="expect">`): the first paint waits
+         until the parser has reached the footer. */ ?>
+<footer id="hyperion-footer" role="contentinfo" class="bg-inverted text-on-inverted-muted mt-auto">
 
     <?php /* -- Main grid --------------------------------------- */ ?>
     <div class="container mx-auto px-4 py-12">

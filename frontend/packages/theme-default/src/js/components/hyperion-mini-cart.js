@@ -154,12 +154,21 @@ export class HyperionMiniCart extends LitElement {
             display: flex;
             flex-direction: column;
             transform: translateX(100%);
-            transition: transform var(--transition-duration) ease;
+            /* Hidden while closed: the panel sits just past the right edge and
+               its 40px shadow would otherwise shade the page along that edge.
+               visibility flips at the end of the closing slide (this rule's
+               transition) and at once when opening (the open rule's 0s
+               transition), so the focus can move into the panel in the same
+               frame. */
+            visibility: hidden;
+            transition: transform var(--transition-duration) ease, visibility var(--transition-duration) ease;
             z-index: 9999;
         }
 
         :host([open]) [part="panel"] {
             transform: translateX(0);
+            visibility: visible;
+            transition: transform var(--transition-duration) ease, visibility 0s;
         }
 
         header[part="header"] {
@@ -519,7 +528,7 @@ export class HyperionMiniCart extends LitElement {
             }
             this._bodyHtml = await res.text();
             this._stale = false;
-        } catch (err) {
+        } catch {
             this.dispatchEvent(new CustomEvent('hyperion-mini-cart-error', {
                 bubbles: true,
                 composed: true,

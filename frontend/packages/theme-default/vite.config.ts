@@ -46,11 +46,17 @@ const componentInputs = Object.fromEntries(
 
 const input = {
     entry: resolve(packageDir, 'src/js/entry.js'),
-    // Handcrafted critical CSS: Vite emits a fingerprinted file under
-    // assets/critical-<hash>.css so head/scripts.phtml can read it off
-    // disk and inline it inside <style data-hyperion-critical>. Looked
-    // up via `AssetManifest::getEntryCssUrls('critical')`.
+    // Inline critical CSS, read off disk by head/scripts.phtml through
+    // `AssetManifest::getCriticalCss()` and printed inside
+    // <style data-hyperion-critical>. `critical` is the tokens and reset
+    // sheet of the pages that link the theme stylesheet synchronously;
+    // `critical-<type>` paints the fold of one page type on its own, so
+    // that type loads the theme stylesheet without blocking
+    // (src/css/critical/tailwind.ts explains the extraction).
     critical: resolve(packageDir, 'src/css/source/critical.css'),
+    'critical-cms': resolve(packageDir, 'src/css/critical/cms.css'),
+    'critical-category': resolve(packageDir, 'src/css/critical/category.css'),
+    'critical-product': resolve(packageDir, 'src/css/critical/product.css'),
     ...componentInputs,
 };
 

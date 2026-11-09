@@ -3,7 +3,7 @@
     "description": "Hyperion Sample Data - rebinds the Magento (Luma) sample data widgets and layout links to the Hyperion theme",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.3",
+    "version": "0.9.0-beta.4",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

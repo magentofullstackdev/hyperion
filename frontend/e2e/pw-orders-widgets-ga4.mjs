@@ -86,7 +86,7 @@ async function login(page) {
 const dataLayerEvents = (page) => page.evaluate(() => (window.dataLayer || []).filter((a) => a[0] === 'event').map((a) => [a[1], a[2]]));
 const history = (page, key) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), key);
 const waitHeaderState = (page) => page.waitForResponse((r) => r.url().includes('/hyperion/header/state'), { timeout: 20000 }).catch(() => null);
-let orderId = '';
+let orderId;
 
 try {
     // ------------------------------------------------------------ guest: GA4, history, compare sidebar

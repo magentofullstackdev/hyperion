@@ -6,6 +6,14 @@
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <body>
+        <!-- The fold of this page type is painted by its own inline critical sheet, so the theme
+             stylesheet loads without blocking (HyperionCore::head/scripts.phtml). -->
+        <referenceBlock name="hyperion.head.scripts">
+            <arguments>
+                <argument name="critical_css_type" xsi:type="string">category</argument>
+            </arguments>
+        </referenceBlock>
+
         <!-- Wishlist and compare sidebars (see Magento_Theme/layout/default.xml): the listing
              pages carry them in the additional rail (under the filters on 2 / 3 column layouts,
              under the inline filters on 1column). -->

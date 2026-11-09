@@ -56,6 +56,11 @@ export class HyperionTabs extends LitElement {
 
         [part="tab-list"] {
             display: flex;
+            /* Narrower than the labels (three tabs at 320px) the strip wraps
+               instead of widening the page: a tab is never split over two
+               lines, a row is. The skeleton strip (product/view.phtml) wraps
+               the same way. */
+            flex-wrap: wrap;
             border-bottom: 1px solid var(--tabs-border-color);
             background: var(--tabs-background);
         }
@@ -72,6 +77,7 @@ export class HyperionTabs extends LitElement {
                skeleton (product/view.phtml) must measure the same (CLS). */
             font: inherit;
             line-height: 1.5;
+            white-space: nowrap;
         }
 
         [part="tab"][aria-selected="true"] {

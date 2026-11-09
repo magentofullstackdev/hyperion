@@ -26,8 +26,7 @@
 
     <!--
         Core's ImageResize service (catalog:images:resize, the product save
-        observer, the resize consumer, get.php) writes the cache files the
-        Hyperion templates link through UrlBuilder; it bypasses
+        observer, the resize consumer, get.php) writes cache files without
         Product\Image::saveFile, so its files are scheduled here.
     -->
     <type name="Magento\MediaStorage\Service\ImageResize">

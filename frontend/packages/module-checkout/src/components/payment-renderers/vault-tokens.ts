@@ -168,7 +168,7 @@ export async function fetchVaultNonce(token: VaultToken): Promise<VaultNonce> {
     url.searchParams.set('public_hash', token.publicHash);
 
     let response: Response;
-    let body: Record<string, unknown> | null = null;
+    let body: Record<string, unknown> | null;
     try {
         response = await fetch(url.toString(), {
             method: 'GET',

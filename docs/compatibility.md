@@ -5,7 +5,7 @@
 | | Value |
 |---|---|
 | PHP | `~8.3.0 \|\| ~8.4.0 \|\| ~8.5.0`, `ext-gd` (`ext-imagick` suggested) |
-| Magento framework | `magento/framework ^103.0.6` (Magento Open Source 2.4.6+, Mage-OS 2.x and 3.x) |
+| Magento framework | `magento/framework ^103.0.6` (Magento Open Source 2.4.6+, Mage-OS 2.x, 3.x and 4.0) |
 | Magento modules | `magento/module-catalog >= 104.0.0`, `magento/module-media-storage >= 100.4.0`, the others unconstrained. Hard requirements on core modules that a store could in principle remove: `magento/module-re-captcha-ui` (Core), `magento/module-page-builder` (Cms), `magento/module-wishlist` (Customer), `magento/module-elasticsearch` and `magento/module-advanced-search` (Search), `magento/module-backend`, `module-ui`, `module-widget` (MegaMenu); all of them ship with every Open Source and Mage-OS install |
 | Search engine | Elasticsearch or OpenSearch (the Search module queries the engine) |
 | Varnish | VCL written for Varnish 6.x / 7.x |
@@ -31,6 +31,7 @@ rerun before a tag.
 | C | Mage-OS 2.3.0 | 8.4 | 7.7 | Composer, copied | developer | 71 / 71 | 0 | 0 | 208 (PHPUnit 10, 2026-10-29) |
 | D | Magento Open Source 2.4.9 | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | 74 / 74 | 0 | 0 | 291 (PHPUnit 12, 2026-10-30) |
 | E | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | 74 / 74 | 0 | 0 | 291 (PHPUnit 12, 2026-10-30) |
+| G | Mage-OS 4.0.0 (OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | 74 / 74 | 0 | 0 | 481 (PHPUnit 12, 2026-11-09) |
 | F | Magento Open Source 2.4.9 (OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | Composer, copied, clean install on Luma sample data | developer | 74 / 74 | 0 | 0 | 291 (PHPUnit 12, 2026-10-30, no deprecation reported) |
 
 The E2E suite covers every page type, add to cart for every product type
@@ -71,7 +72,7 @@ yet at the time of writing.
 - Magento 2.4.7 declares `ManagerInterface::addErrorMessage()` /
   `addSuccessMessage()` for `string`; Hyperion casts its `Phrase` messages
   so the same code passes phpstan on 2.4.7 and on 2.4.8+.
-- Magento 2.4.8 and Mage-OS 2.x run PHPUnit 10, Magento 2.4.9 and Mage-OS 3.x
+- Magento 2.4.8 and Mage-OS 2.x run PHPUnit 10, Magento 2.4.9 and Mage-OS 3.x / 4.0
   PHPUnit 12 (data providers need the `#[DataProvider]` attribute, which the
   tests carry next to the annotation); 2.4.7 runs PHPUnit 9. Hyperion's
   unit tests avoid PHPUnit 9 only APIs (`withConsecutive`, `at()`) and run
@@ -81,11 +82,14 @@ yet at the time of writing.
   version.
 - Magento 2.4.8+ / Mage-OS: Symfony Mailer rejects `sendmail_path` helper
   scripts; configure SMTP (see [Install](./install.md)).
+- Mage-OS 4.0 adds `MageOS_PasskeyAuth`, which depends on `Magento_TwoFactorAuth`:
+  a development install that switches the admin 2FA off has to disable the two
+  modules together (`module:disable MageOS_PasskeyAuth Magento_TwoFactorAuth`).
 
 ## Not tested
 
 - Production mode on Magento 2.4.9 and Mage-OS (developer mode only).
-- Mage-OS 3.x `MageOS_ThemeOptimization`: the theme keeps the speculation
+- Mage-OS 3.x and 4.0 `MageOS_ThemeOptimization`: the theme keeps the speculation
   rules prefetch and removes the view transitions opt-in and the bfcache
   handler (both written for Luma; the transition opt-in raised a page error on
   redirected navigations). Its response plugin that strips `no-store` only

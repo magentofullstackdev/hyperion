@@ -4,16 +4,16 @@ Guidance for AI coding assistants (Claude Code and others) working in this repos
 
 ## What this is
 
-Hyperion is a Magento 2 storefront theme plus a suite of eleven PHP modules. Frontend stack: Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2, served through Varnish with ESI. There is no RequireJS, jQuery or Knockout on the storefront. License MIT, version `0.9.0-beta.3`, one maintainer.
+Hyperion is a Magento 2 storefront theme plus a suite of eleven PHP modules. Frontend stack: Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2, served through Varnish with ESI. There is no RequireJS, jQuery or Knockout on the storefront. License MIT, version `0.9.0-beta.4`, one maintainer.
 
-Supported: Magento 2.4.7 to 2.4.9 and Mage-OS 2.3+ / 3.x, PHP `~8.3.0 || ~8.4.0 || ~8.5.0`, Node 22, pnpm 10. See `docs/compatibility.md`.
+Supported: Magento 2.4.7 to 2.4.9 and Mage-OS 2.3+ / 3.x / 4.0, PHP `~8.3.0 || ~8.4.0 || ~8.5.0`, Node 22, pnpm 10. See `docs/compatibility.md`.
 
 ## Repository layout
 
 - `app/code/Magentofullstackdev/Hyperion*`: the modules. `HyperionCore` is the foundation (ESI fragments, asset manifest, Varnish BAN, ViewModel registry, HTMX-aware controller plugins, rate limiter, purchase restriction pool). `HyperionCatalog`, `HyperionSearch`, `HyperionMegaMenu` (the only module with an admin UI), `HyperionCheckout`, `HyperionCustomer`, `HyperionNavigation`, `HyperionCms`, `HyperionImage`, `HyperionCatalogMode`, and the optional `HyperionSampleData`. Every module sequences on `Magentofullstackdev_HyperionCore` in `etc/module.xml` and has a `composer.json` named `magentofullstackdev/module-hyperion-<domain>`.
 - `app/design/frontend/Magentofullstackdev/hyperion`: the theme (`magentofullstackdev/theme-hyperion`, no parent theme). Its `composer.json` requires the ten storefront modules. It overrides core templates module by module (`Magento_Catalog/templates/...`).
 - `frontend/`: the pnpm workspace with three npm packages under `frontend/packages/`: `shared` (`@magentofullstackdev/hyperion-shared`: tokens, Tailwind preset, `HyperionLightElement`), `theme-default` (`@magentofullstackdev/hyperion-theme`: components, entry, CSS, the `hyperion` child theme CLI in `bin/hyperion.js`), `module-checkout` (`@magentofullstackdev/hyperion-checkout`: the Lit checkout app). End to end scripts live in `frontend/e2e/`.
-- `docs/`: public documentation (`install.md`, `configuration.md`, `checkout.md`, `child-themes.md`, `pagebuilder.md`, `varnish.md`, `development.md`, `compatibility.md`, `known-limitations.md`). Keep it in sync when behaviour or configuration paths change.
+- `docs/`: public documentation (`install.md`, `configuration.md`, `checkout.md`, `child-themes.md`, `pagebuilder.md`, `varnish.md`, `development.md`, `compatibility.md`, `known-limitations.md`). Keep it in sync when behavior or configuration paths change.
 - `.github/`: CI (`frontend.yml`, `php.yml`), the Satis workflow that publishes the Composer repository on GitHub Pages (`satis.yml`, `scripts/build-satis.sh`), issue and PR templates.
 
 ## Commands
@@ -46,6 +46,7 @@ PHP gates (from a Magento install that has the modules): phpstan level 5 and php
 - **Optional modules** (`Magento_Paypal`, `Magento_Msrp`, `Magento_GiftMessage`, `Magento_Weee`, `Magento_LoginAsCustomer*`, `Magento_OrderCancellation*`) are reached only through `Module\Manager` and string class names, and listed under composer `suggest`.
 - **Checkout state** uses signals; address completeness is ONE predicate in `utils/address-validation.ts`; a postcode format mismatch is a warning, only a missing required postcode blocks; the REST client sends `X-Requested-With: XMLHttpRequest`; URLs are built on `hyperion.baseUrl`, never on `staticBaseUrl`.
 - **Motion and layout shift.** Components that render after their chunk arrives ship a server rendered skeleton with the same geometry; `_motion.css` carries the reduced motion rules for the light DOM and every shadow root component carries its own `@media (prefers-reduced-motion: reduce)` block placed after the transitions it overrides. `node e2e/pw-cls.mjs <baseUrl>` must report CLS 0.
+- **Critical CSS per page type.** The home / CMS, category / search and product pages inline a critical sheet built from the TEMPLATES of their fold (`frontend/packages/theme-default/src/css/critical/`, lists in `tailwind.ts`; the `@config` at-rule comes after the `@import`s) and load the theme stylesheet without blocking; the layout argument `critical_css_type` on `hyperion.head.scripts` selects the sheet, every other page keeps the synchronous link. The component chunks wait for the stylesheet (`lib/theme-stylesheet.js`) and `RenderBlockingMarkerPlugin` holds the first paint until the footer is parsed. A template that puts new classes above the fold of a typed page needs its file in the list; `node e2e/pw-critical.mjs <baseUrl>` (the fold painted by the critical sheet alone must equal the full sheet, pixel by pixel) is the gate, `docs/development.md` has the procedure.
 
 ## Conventions
 
@@ -58,10 +59,11 @@ PHP gates (from a Magento install that has the modules): phpstan level 5 and php
 - Commit messages use conventional prefixes (`feat:`, `fix:`, `chore:`, `docs:`). Keep the three npm versions and the twelve Composer versions aligned on release; the Composer `version` must equal the git tag (the Satis build refuses a mismatch). Release steps: `docs/development.md`, "Release procedure".
 - Comments explain the code; do not record project history, ticket numbers or tooling conversations in them.
 - Plain hyphens, commas and colons in prose; no em dash or en dash in code, comments, docs or commit messages.
+- US English in comments, docblocks, docs, the changelog, commit messages and UI strings (`behavior`, `color`, `initialize`, `normalize`, `center`, `license`, `canceled`). Files not touched since this rule may still carry British spellings: fix them in any file you edit, never in a spelling-only change; translation keys, identifiers exported from other files and command names (`phpstan analyse`) stay as they are.
 
 ## Before you say a task is done
 
 1. `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r test` green; `pnpm -r build` run and the result committed when anything under `frontend/` changed.
 2. phpstan level 5 and phpcs clean on every PHP file touched; PHPUnit green for the modules touched.
 3. The relevant Playwright script run against a store with sample data (the suite, or the focused script for the area; `docs/development.md` lists them), as a guest and as a customer where sessions are involved.
-4. `docs/` and `CHANGELOG.md` ("Unreleased" section) updated when behaviour, configuration paths or limitations changed.
+4. `docs/` and `CHANGELOG.md` ("Unreleased" section) updated when behavior, configuration paths or limitations changed.

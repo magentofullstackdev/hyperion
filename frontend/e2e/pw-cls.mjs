@@ -109,7 +109,7 @@ try {
         const knob = getComputedStyle(document.documentElement).getPropertyValue('--hyperion-motion-fast').trim();
         let viewTransitionRule = false, navigationRule = false, addedRule = false;
         for (const sheet of document.styleSheets) {
-            try { for (const rule of sheet.cssRules) { const t = rule.cssText; if (/::view-transition-old\(root\)/.test(t)) viewTransitionRule = true; if (/@view-transition/.test(t) && /navigation:\s*auto/.test(t)) navigationRule = true; if (/\.htmx-added\s*\{\s*opacity:\s*0/.test(t)) addedRule = true; } } catch (e) { /* cross origin */ }
+            try { for (const rule of sheet.cssRules) { const t = rule.cssText; if (/::view-transition-old\(root\)/.test(t)) viewTransitionRule = true; if (/@view-transition/.test(t) && /navigation:\s*auto/.test(t)) navigationRule = true; if (/\.htmx-added\s*\{\s*opacity:\s*0/.test(t)) addedRule = true; } } catch { /* cross origin */ }
         }
         const knobMs = /ms$/.test(knob) ? parseFloat(knob) : parseFloat(knob) * 1000; // the minifier writes 120ms as .12s
         return { swapsWithoutViewTransitions: cfg.globalViewTransitions !== true, knob, knobMs, viewTransitionRule, navigationRule, addedRule };
@@ -117,7 +117,7 @@ try {
     check('motion: the knob is 120ms, the page cross-fade rules and the swap fade-in rule are present, htmx swaps stay off the View Transitions API', motion.swapsWithoutViewTransitions && motion.knobMs === 120 && motion.viewTransitionRule && motion.navigationRule && motion.addedRule, JSON.stringify(motion));
     const gridId = '#hyperion-product-grid';
     const dimming = [];
-    const poll = setInterval(async () => { try { dimming.push(await page.evaluate((id) => document.querySelector(id)?.classList.contains('htmx-request') ? getComputedStyle(document.querySelector(id)).opacity : null, gridId)); } catch (e) { /* navigating */ } }, 40);
+    const poll = setInterval(async () => { try { dimming.push(await page.evaluate((id) => document.querySelector(id)?.classList.contains('htmx-request') ? getComputedStyle(document.querySelector(id)).opacity : null, gridId)); } catch { /* navigating */ } }, 40);
     await page.route(/hyperion\/category\/filter/, async (route) => { await sleep(600); await route.continue(); });
     await page.selectOption('[data-hyperion-toolbar] select[name="product_list_order"]', 'name');
     await page.waitForResponse((r) => /hyperion\/category\/filter/.test(r.url()));

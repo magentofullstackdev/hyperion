@@ -74,6 +74,17 @@ The block is inserted in the `after.body.start` container after
 `hyperion.head.scripts`, so the parent's critical CSS, entry CSS, HTMX and
 entry module are already in place when your code runs. The parent's own stylesheet link carries `data-hyperion-theme-css`: it is the sheet the mini-cart drawer adopts into its shadow root when it upgrades (fetched once per page, cached for every instance).
 
+On the home, CMS, category, search and product pages the parent inlines a
+critical sheet for that page type and loads its stylesheet without blocking
+(`docs/development.md`, "Critical CSS per page type"); your own stylesheet
+link stays synchronous, so your rules are in place at the first paint and
+override the parent's as before. The parent's critical sheets are built from
+the parent's templates: a child template that puts new Tailwind classes above
+the fold of one of those pages should ship their rules in the child's own
+sheet, or map the handle back to the synchronous mode with an empty
+`critical_css_type` on the `hyperion.head.scripts` block in the child's layout
+file for that handle.
+
 ## Design tokens
 
 Colors are CSS custom properties declared by
@@ -133,7 +144,7 @@ parent uses.
 ## Markup contracts the parent JavaScript relies on
 
 The parent's components and HTMX wiring find their markup by `data-hyperion-*`
-attributes. An override that keeps them keeps the behaviour (and the zero
+attributes. An override that keeps them keeps the behavior (and the zero
 layout shift); an override that drops them loses it silently. The attributes
 below are the ones a template override is most likely to touch.
 
@@ -272,7 +283,7 @@ add a second one.
 
 All three are published as source (`src/`, `tailwind.config.ts`, README,
 LICENSE); a TypeScript-aware bundler such as Vite is required. Versions move
-together with the Composer packages (`0.9.0-beta.3`).
+together with the Composer packages (`0.9.0-beta.4`).
 
 | Package | Contents | Exports |
 |---|---|---|

@@ -13,7 +13,7 @@
  *                the click is rejected with a message, no PayPal window.
  *   createOrder  product context only: post the add-to-cart form first
  *                (same request as the Add to Cart button, so options,
- *                swatches and quantities are honoured and validated);
+ *                swatches and quantities are honored and validated);
  *                then POST `getTokenUrl` with `quote_id`, `customer_id`,
  *                `form_key`, `button` and hand the token to PayPal.
  *   onApprove    POST `onAuthorizeUrl` with `paymentToken`, `payerId`,
@@ -388,7 +388,6 @@ export class HyperionPaypalButtons extends HyperionLightElement {
 
     _report(error) {
         if (!error || error.handled) return;
-        // eslint-disable-next-line no-console
         console.error('[hyperion-paypal-buttons]', error);
     }
 }

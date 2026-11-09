@@ -62,7 +62,7 @@ export class SummaryItem extends LitElement {
 
     private _parseOptions(raw: CartItem['options']): readonly { label: string; value: string }[] {
         if (!raw) return [];
-        let list: readonly { label: string; value: string }[] = [];
+        let list: readonly { label: string; value: string }[];
         if (typeof raw === 'string') {
             try {
                 const parsed = JSON.parse(raw);

@@ -589,9 +589,9 @@ try {
                  shadow buttons): until the chunk arrives `_components.css` shows this strip and the
                  first panel only, with the panel's padding, so the section has its final height from
                  the first paint; once defined the strip is hidden (no layout shift). */ ?>
-        <div class="flex border-b border-subtle" data-hyperion-tabs-skeleton aria-hidden="true">
+        <div class="flex flex-wrap border-b border-subtle" data-hyperion-tabs-skeleton aria-hidden="true">
             <?php foreach ($tabs as $tab): ?>
-                <span class="-mb-px border-b-2 border-transparent px-4 py-3 text-transparent"><?= $escaper->escapeHtml($tab['label']) ?></span>
+                <span class="-mb-px whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-transparent"><?= $escaper->escapeHtml($tab['label']) ?></span>
             <?php endforeach; ?>
         </div>
         <?php foreach ($tabs as $tab): ?>

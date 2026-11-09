@@ -141,10 +141,14 @@
             </argument>
         </arguments>
     </type>
-    <!-- A generated meta description for the pages that have none, set right before the head renders. -->
+    <!-- A generated meta description for the pages that have none, set right before the head renders;
+         the render blocking marker of the pages that paint their fold from an inline critical sheet. -->
     <type name="Magento\Framework\View\Page\Config\Renderer">
         <plugin name="hyperion_core_meta_description_fallback"
                 type="Magentofullstackdev\HyperionCore\Plugin\Seo\MetaDescriptionFallbackPlugin"
                 sortOrder="5"/>
+        <plugin name="hyperion_core_render_blocking_marker"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\Page\Config\RenderBlockingMarkerPlugin"
+                sortOrder="10"/>
     </type>
 </config>

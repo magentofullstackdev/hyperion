@@ -7,7 +7,6 @@ namespace Magentofullstackdev\HyperionCatalog\Test\Unit\ViewModel;
 
 use Magento\Catalog\Helper\Output as OutputHelper;
 use Magento\Catalog\Model\Product;
-use Magento\Catalog\Model\Product\Image\UrlBuilder as ImageUrlBuilder;
 use Magento\Catalog\Model\View\Asset\PlaceholderFactory;
 use Magento\Framework\Data\Helper\PostHelper;
 use Magento\Framework\Escaper;
@@ -17,6 +16,7 @@ use Magento\Framework\UrlInterface;
 use Magentofullstackdev\HyperionCatalog\ViewModel\Pricing;
 use Magentofullstackdev\HyperionCatalog\ViewModel\ProductView;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
+use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -53,7 +53,7 @@ class PriceFallbackTest extends TestCase
             $this->createStub(UrlInterface::class),
             $this->createStub(PostHelper::class),
             $this->createStub(LoggerInterface::class),
-            $this->createStub(ImageUrlBuilder::class),
+            $this->createStub(ImageRenderer::class),
             $this->createStub(ImageConfig::class),
             $this->createStub(OutputHelper::class),
             $degraded,

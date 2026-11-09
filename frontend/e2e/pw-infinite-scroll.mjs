@@ -35,10 +35,10 @@ const check = (name, ok, detail = '') => {
 };
 const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'exec', '-T', ...(user ? ['-u', user] : []), service, 'bash', '-c', cmd], { encoding: 'utf8' });
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
-const ban = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* no varnish */ } };
+const ban = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* no varnish */ } };
 const flush = () => { magento('cache:clean config full_page block_html >/dev/null'); ban(); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const configShow = (p) => { try { return magento(`config:show ${p} 2>/dev/null`).trim(); } catch (e) { return ''; } };
+const configShow = (p) => { try { return magento(`config:show ${p} 2>/dev/null`).trim(); } catch { return ''; } };
 const original = { mode: configShow('hyperion/catalog/infinite_scroll') || 'disabled', cap: configShow('hyperion/catalog/infinite_scroll_auto_pages') || '3' };
 const setMode = (mode, cap) => {
     magento(`config:set hyperion/catalog/infinite_scroll ${mode} >/dev/null`);
@@ -61,6 +61,9 @@ const FOOT = '[data-hyperion-load-more]';
 const BUTTON = '[data-hyperion-load-more-button]';
 const hasPager = (html) => /data-hyperion-limiter|aria-label="Next page"|aria-current="page"/.test(html);
 const foot = (html) => (html.match(/<div id="hyperion-load-more"[\s\S]*?<\/div>/) || [''])[0];
+// The element, not the attribute name: the inline critical sheet of the listing carries the
+// `[data-hyperion-load-more]` rules on every category page.
+const hasFoot = (html) => /<div id="hyperion-load-more"/.test(html);
 
 execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURE, 'php-fpm:/tmp/infinite-scroll-fixture.php']);
 const browser = await chromium.launch({ headless: true });
@@ -79,7 +82,7 @@ try {
     // ---- disabled: the pager
     setMode('disabled', 3);
     let html = (await get(ctx, WOMEN)).text;
-    check('disabled: the category keeps the pager and has no Load more', hasPager(html) && !/data-hyperion-load-more/.test(html));
+    check('disabled: the category keeps the pager and has no Load more', hasPager(html) && !hasFoot(html));
 
     // ---- button mode
     setMode('button');
@@ -120,10 +123,10 @@ try {
     // ---- category override, both directions
     fixture('apply', 'tops-women', 'disabled'); flush();
     const womenHtml = (await get(ctx, WOMEN)).text; const menHtml = (await get(ctx, MEN)).text;
-    check('override: a category set to Disabled keeps the pager while the configuration is Automatic (other categories load automatically)', hasPager(womenHtml) && !/data-hyperion-load-more/.test(womenHtml) && /data-hyperion-load-more-mode="scroll"/.test(menHtml));
+    check('override: a category set to Disabled keeps the pager while the configuration is Automatic (other categories load automatically)', hasPager(womenHtml) && !hasFoot(womenHtml) && /data-hyperion-load-more-mode="scroll"/.test(menHtml));
     setMode('disabled'); fixture('apply', 'tops-women', 'button'); flush();
     const womenHtml2 = (await get(ctx, WOMEN)).text; const menHtml2 = (await get(ctx, MEN)).text;
-    check('override: a category set to Load more button gets the button while the configuration is Disabled (other categories keep the pager)', /data-hyperion-load-more-mode="button"/.test(womenHtml2) && !hasPager(womenHtml2) && hasPager(menHtml2) && !/data-hyperion-load-more/.test(menHtml2));
+    check('override: a category set to Load more button gets the button while the configuration is Disabled (other categories keep the pager)', /data-hyperion-load-more-mode="button"/.test(womenHtml2) && !hasPager(womenHtml2) && hasPager(menHtml2) && !hasFoot(menHtml2));
     fixture('remove', 'tops-women'); flush();
 
     // ---- search results follow the configuration
@@ -153,8 +156,8 @@ try {
 } catch (e) {
     check('script completed', false, e.message);
 } finally {
-    try { fixture('remove', 'tops-women'); fixture('remove', 'tops-men'); } catch (e) { /* fixture gone */ }
-    try { setMode(original.mode, original.cap); } catch (e) { /* restore failed */ }
+    try { fixture('remove', 'tops-women'); fixture('remove', 'tops-men'); } catch { /* fixture gone */ }
+    try { setMode(original.mode, original.cap); } catch { /* restore failed */ }
     await browser.close();
 }
 const failed = results.filter((r) => !r.ok).map((r) => r.name);

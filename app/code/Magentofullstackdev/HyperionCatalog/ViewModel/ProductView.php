@@ -7,7 +7,6 @@ namespace Magentofullstackdev\HyperionCatalog\ViewModel;
 
 use Magento\Catalog\Helper\Output as OutputHelper;
 use Magento\Catalog\Model\Product;
-use Magento\Catalog\Model\Product\Image\UrlBuilder as ImageUrlBuilder;
 use Magento\Catalog\Model\View\Asset\PlaceholderFactory;
 use Magento\Catalog\Pricing\Price\FinalPrice;
 use Magento\Framework\Data\Helper\PostHelper;
@@ -16,6 +15,7 @@ use Magento\Framework\Pricing\Render as PriceRender;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
+use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
 use Psr\Log\LoggerInterface;
 
@@ -48,7 +48,7 @@ class ProductView implements ArgumentInterface
         private readonly UrlInterface $urlBuilder,
         private readonly PostHelper $postHelper,
         private readonly LoggerInterface $logger,
-        private readonly ImageUrlBuilder $imageUrlBuilder,
+        private readonly ImageRenderer $imageRenderer,
         private readonly ImageConfig $imageConfig,
         private readonly OutputHelper $outputHelper,
         private readonly DegradedResponse $degradedResponse,
@@ -92,9 +92,16 @@ class ProductView implements ArgumentInterface
 
     /**
      * Build the PDP gallery payload. Each entry carries three role
-     * URLs (thumb / img / full) resolved through Magento's role-aware
-     * `UrlBuilder`, plus their WebP and AVIF companion URLs whenever
-     * the companion file actually exists on disk.
+     * URLs (thumb / img / full) resolved through the image helper, plus
+     * their WebP and AVIF companion URLs whenever the companion file
+     * actually exists on disk.
+     *
+     * The helper, not `Product\Image\UrlBuilder`: the builder only
+     * computes the cache URL, so a size that was never generated (fresh
+     * install, media import, changed `view.xml` sizes) depends on the web
+     * server routing the miss to `get.php`. The helper writes the missing
+     * file during this render, like every other product image of the
+     * theme, and its `saveFile()` path schedules the companions too.
      *
      * Why ship the companion URLs in the gallery JSON?
      *
@@ -154,9 +161,9 @@ class ProductView implements ArgumentInterface
                 $isVideo = (string) $image->getData('media_type') === 'external-video'
                     && (string) $image->getData('video_url') !== '';
 
-                $thumbUrl = (string) $this->imageUrlBuilder->getUrl($file, self::IMAGE_ROLE_THUMB);
-                $imgUrl = (string) $this->imageUrlBuilder->getUrl($file, self::IMAGE_ROLE_MEDIUM);
-                $fullUrl = (string) $this->imageUrlBuilder->getUrl($file, self::IMAGE_ROLE_LARGE);
+                $thumbUrl = $this->imageRenderer->getUrl($product, self::IMAGE_ROLE_THUMB, $file);
+                $imgUrl = $this->imageRenderer->getUrl($product, self::IMAGE_ROLE_MEDIUM, $file);
+                $fullUrl = $this->imageRenderer->getUrl($product, self::IMAGE_ROLE_LARGE, $file);
 
                 $result[] = [
                     'thumb' => $thumbUrl,

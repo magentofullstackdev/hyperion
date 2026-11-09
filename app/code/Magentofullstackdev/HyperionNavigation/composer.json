@@ -3,7 +3,7 @@
     "description": "Hyperion Navigation: header, footer, and top-menu blocks built on Magento Topmenu",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.3",
+    "version": "0.9.0-beta.4",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {

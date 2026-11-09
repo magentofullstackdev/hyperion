@@ -34,7 +34,7 @@ const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); con
 const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'exec', '-T', ...(user ? ['-u', user] : []), service, 'bash', '-c', cmd], { encoding: 'utf8' });
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (q) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(q)} 2>/dev/null`);
-const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* none */ } };
+const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* none */ } };
 const categoryPath = u('/men/tops-men.html');
 const attrId = sql("SELECT attribute_id FROM eav_attribute WHERE attribute_code='page_layout' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')").trim();
 const catId = sql("SELECT entity_id FROM catalog_category_entity WHERE entity_id IN (SELECT entity_id FROM catalog_category_entity_varchar WHERE attribute_id=(SELECT attribute_id FROM eav_attribute WHERE attribute_code='url_key' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')) AND value='tops-men') LIMIT 1").trim();
@@ -85,7 +85,7 @@ try {
     await open(page, base + categoryPath, { waitUntil: 'networkidle' }); await page.waitForTimeout(800);
     g = await geometry();
     if (shots) await page.screenshot({ path: path.join(shots, 'sidebars_3columns.png') });
-    check('3columns: filters left, products centre, additional right', g.filters && g.additional && g.filters.x + g.filters.w <= g.main.x && g.additional.x >= g.main.x + g.main.w && Math.abs(g.additional.y - g.filters.y) < 4, JSON.stringify({ filters: g.filters, additional: g.additional, main: g.main }));
+    check('3columns: filters left, products center, additional right', g.filters && g.additional && g.filters.x + g.filters.w <= g.main.x && g.additional.x >= g.main.x + g.main.w && Math.abs(g.additional.y - g.filters.y) < 4, JSON.stringify({ filters: g.filters, additional: g.additional, main: g.main }));
     // 1column
     setLayout('1column');
     await open(page, base + categoryPath, { waitUntil: 'networkidle' }); await page.waitForTimeout(800);

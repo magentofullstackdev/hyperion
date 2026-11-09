@@ -27,7 +27,7 @@ app/
                            modules (plus MageOS_ThemeOptimization), committed
                            build output in web/
 frontend/
-  pnpm-workspace.yaml, pnpm-lock.yaml, package.json, .eslintrc.cjs, tsconfig.base.json
+  pnpm-workspace.yaml, pnpm-lock.yaml, package.json, eslint.config.js, tsconfig.base.json
   packages/shared/         @magentofullstackdev/hyperion-shared (source only)
   packages/theme-default/  @magentofullstackdev/hyperion-theme (+ the hyperion CLI)
   packages/module-checkout/  @magentofullstackdev/hyperion-checkout
@@ -55,7 +55,7 @@ pnpm install --frozen-lockfile
 pnpm -r build        # shared (no-op), then theme, then checkout
 pnpm -r test         # Vitest (happy-dom for the theme, jsdom for the checkout)
 pnpm -r typecheck    # tsc --noEmit in every package
-pnpm -r lint         # ESLint, config in frontend/.eslintrc.cjs
+pnpm -r lint         # ESLint 10 flat config (typescript-eslint 8) in frontend/eslint.config.js
 ```
 
 Per package: `pnpm --filter @magentofullstackdev/hyperion-theme build`,
@@ -120,8 +120,8 @@ probe of `/women/tops-women`, `e2e/lib/url-suffix.mjs`), so a store whose
 (the empty string allowed) skips the probe.
 
 `pw-suite.mjs`, `pw-check.mjs`, `pw-perf.mjs`, `pw-cls.mjs`,
-`pw-ui-polish.mjs` and `pw-a11y.mjs` need only the URL and change nothing on
-the store. Every
+`pw-ui-polish.mjs`, `pw-critical.mjs` and `pw-a11y.mjs` need only the URL and
+change nothing on the store. Every
 other script takes `<baseUrl> <slotDir>` (the Magento install directory,
 with its `.env` and docker compose files) and changes store configuration or
 creates fixtures for the run, restoring everything at the end. Those scripts
@@ -140,6 +140,7 @@ exits 1 on a failure, a page error or an HTTP 5xx.
 | `pw-perf.mjs` | `<baseUrl> [path ...]` | TTFB, LCP, CLS, requests, third parties | none | no |
 | `pw-cls.mjs` | `<baseUrl> [--pages n]` | CLS 0 on nine page types, skeleton parity, motion knob, view transitions | none | no |
 | `pw-ui-polish.mjs` | `<baseUrl>` | header footprint, drawer scroll lock, toasts, category landings | none | no |
+| `pw-critical.mjs` | `<baseUrl>` | the critical sheet of each page type paints the fold like the full stylesheet (pixel comparison), the non blocking stylesheet applies, the mini-cart adopts it, the untyped pages keep the synchronous link | none | no |
 | `pw-a11y.mjs` | `<baseUrl>` | axe-core on seven page types: fails on `critical` / `serious` violations, lists the rest | none | no |
 | `pw-agreements.mjs` | `<baseUrl> <slotDir>` | checkout agreements, guest and customer order | one agreement, `checkout/options/enable_agreements` | yes |
 | `pw-checkout-login.mjs` | `<baseUrl> <slotDir>` | inline checkout login, quote merge | `checkout/options/enable_guest_checkout_login` | yes |
@@ -185,6 +186,49 @@ components render, and that the motion knob and the view transitions are in
 place. Run it after touching a listing template, a component that renders
 after its chunk arrives, or the page layouts.
 
+### Critical CSS per page type
+
+The home and CMS pages, the category and search results pages and the
+product page paint their fold from an inline critical sheet and load the
+theme stylesheet without blocking; every other page inlines the small tokens
+sheet (`src/css/source/critical.css`) and links the stylesheet synchronously,
+as before. The sheets live in `frontend/packages/theme-default/src/css/critical/`:
+`cms.css`, `category.css` and `product.css` import the structural partials the
+fold of that page type uses and run a second Tailwind pass (`@config` with
+`tailwind.<type>.ts`) whose `content` is the list of templates, layout files
+and PHP renderers that print the markup above the fold (`tailwind.ts`, lists
+`FOLD_COMMON`, `FOLD_CMS`, `FOLD_CATEGORY`, `FOLD_PRODUCT`). The list, not a
+rendered page, is the extraction: the build is the same on every machine and
+the sheet covers every store that renders those templates. Vite emits them as
+`critical-<type>.<hash>.css`; `HyperionCore\Block\AssetManifest::getCriticalCss($type)`
+reads them and `head/scripts.phtml` inlines the one named by the layout
+argument `critical_css_type` of the `hyperion.head.scripts` block (the theme
+sets it in `cms_index_index.xml`, `cms_page_view.xml`,
+`catalog_category_view.xml`, `catalogsearch_result_index.xml` and
+`catalog_product_view.xml`). Sizes: about 11 KB gzip for cms and product, 14 KB
+for category (the full stylesheet is 17 KB), on top of every HTML response of
+the type; the first paint no longer waits for the stylesheet request.
+
+Three companions keep the page stable in that mode: the stylesheet link
+carries `media="print"` and an inline script right after it flips it to `all`
+on load (a `<noscript>` link covers browsers without scripting); the entry
+module fetches the component chunks only once the stylesheet applies
+(`src/js/lib/theme-stylesheet.js`), so they do not share the connection with
+the images of the fold; and `RenderBlockingMarkerPlugin` adds
+`<link rel="expect" href="#hyperion-footer" blocking="render">` to the head,
+so the browser does not paint a document that is still streaming in.
+
+`node e2e/pw-critical.mjs <baseUrl>` is the gate: it loads every typed page
+with the stylesheet request aborted and again normally, desktop and phone,
+and compares the viewport screenshots pixel by pixel (budget 0.1% of the
+pixels); it also checks the link contract and that the untyped pages keep the
+synchronous link. Something missing from a template list shows up there as a
+difference; add the file to the list, never a rule by hand. To cover another
+page type: a list in `tailwind.ts`, a `tailwind.<type>.ts`, a `<type>.css`
+with the partials the fold needs, the input in `vite.config.ts`, the layout
+argument on the handle, a page in `pw-critical.mjs`. `pw-cls.mjs` stays the
+layout shift gate.
+
 ### Accessibility
 
 `node e2e/pw-a11y.mjs <baseUrl>` injects [axe-core](https://github.com/dequelabs/axe-core)
@@ -208,9 +252,9 @@ Composer packages and merchants never run Node. Rules:
   sources.
 - `THIRD_PARTY_LICENSES.txt` (theme `web/`, checkout `view/frontend/web/`) is
   written by the build too (`frontend/build/third-party-licenses.ts`,
-  rollup-plugin-license): the full licence text of every bundled library, for
+  rollup-plugin-license): the full license text of every bundled library, for
   Composer consumers who never see the npm packages. A dependency without a
-  licence text or outside the allow list of that file fails the build.
+  license text or outside the allow list of that file fails the build.
 - Never `.gitignore` or delete them. `emptyOutDir: true` removes old hashes
   on each build, so a rebuild never leaves stale files behind.
 
@@ -319,7 +363,7 @@ page cache key (customer group, store, currency).
    green, `pnpm -r publish --dry-run`, `composer validate` in every
    package, install from the tag in a clean Magento 2.4.8 and Mage-OS, run
    the end-to-end suite.
-3. Tag `v<version>` (for this release `v0.9.0-beta.3`) and push.
+3. Tag `v<version>` (for this release `v0.9.0-beta.4`) and push.
 4. Publish npm first or together with the tag: the child theme scaffold
    depends on the three packages at `^<version>`.
    `pnpm -r publish --access public` from `frontend/` (pnpm rewrites

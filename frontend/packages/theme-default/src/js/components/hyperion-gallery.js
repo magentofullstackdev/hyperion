@@ -182,7 +182,7 @@ function injectPhotoSwipeThemeOverrides() {
 }
 
 /**
- * Normalise a caller-supplied image descriptor to the canonical shape
+ * Normalize a caller-supplied image descriptor to the canonical shape
  * used internally. Accepts the shape emitted by Hyperion\Catalog\
  * ViewModel\ProductView::getGalleryImages() (url + label + position)
  * AS WELL as the Magento configurable jsonConfig.images[productId][]
@@ -190,7 +190,7 @@ function injectPhotoSwipeThemeOverrides() {
  * the input has no usable URL so bad data falls out of the gallery
  * rather than crashing the render loop.
  */
-function normaliseImage(raw) {
+function normalizeImage(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const full = raw.full || raw.url || raw.img || raw.thumb || '';
     const img = raw.img || raw.url || raw.full || raw.thumb || '';
@@ -224,7 +224,7 @@ function normaliseImage(raw) {
 function parseImages(source) {
     if (!source) return [];
     if (Array.isArray(source)) {
-        return source.map(normaliseImage).filter(Boolean);
+        return source.map(normalizeImage).filter(Boolean);
     }
     if (typeof source === 'string') {
         const trimmed = source.trim();
@@ -713,7 +713,6 @@ export class HyperionGallery extends LitElement {
             lightbox.loadAndOpen(this._activeIndex);
         } catch (err) {
             // Fail gracefully -- the shopper still has the inline image.
-            // eslint-disable-next-line no-console
             console.error('hyperion-gallery: lightbox failed to load', err);
         } finally {
             this._lightboxBusy = false;

@@ -3,7 +3,7 @@
 
 import { videoEmbedUrl } from './video-embed.js';
 
-// PageBuilder storefront behaviour.
+// PageBuilder storefront behavior.
 //
 // Core drives a handful of content types with RequireJS widgets
 // (module-page-builder/view/base/web/js). Layout and every admin setting that
@@ -217,7 +217,7 @@ function infoWindowContent(location) {
 }
 
 function drawGoogleMap(element, locations, maps) {
-    let styles = [];
+    let styles;
     try {
         styles = JSON.parse(element.dataset.hyperionMapsStyle || '[]');
     } catch {

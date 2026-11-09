@@ -60,11 +60,11 @@ import '../../ui/checkbox.js';
 
 type Status = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
 
-/** `additional_data` of the order the shopper just authorised; cleared once used. */
-let authorised: Record<string, unknown> | null = null;
+/** `additional_data` of the order the shopper just authorized; cleared once used. */
+let authorized: Record<string, unknown> | null = null;
 
 export function getGooglePayAuthorisation(): Record<string, unknown> | null {
-    return authorised;
+    return authorized;
 }
 
 export function buildPaymentDataRequest(config: BraintreeGooglePayConfig): Partial<GooglePayPaymentDataRequest> {
@@ -229,8 +229,7 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             this._status = 'ready';
         } catch (err) {
             if (stale()) return;
-            // eslint-disable-next-line no-console
-            console.error('[hyperion-checkout] Braintree Google Pay could not be initialised', err);
+            console.error('[hyperion-checkout] Braintree Google Pay could not be initialized', err);
             this._status = 'error';
             this._message = t('Hyperion_Checkout::braintree_googlepay_init_failed');
         }
@@ -259,7 +258,6 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
                 paymentData = await client.loadPaymentData(instance.createPaymentDataRequest(buildPaymentDataRequest(config)));
             } catch (err) {
                 if (!isCancellation(err)) {
-                    // eslint-disable-next-line no-console
                     console.error('[hyperion-checkout] Google Pay sheet failed', err);
                     this._message = t('Hyperion_Checkout::braintree_googlepay_failed');
                 }
@@ -267,16 +265,16 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             }
             this._placing = true;
             const data = await this._collectPaymentData(config, instance, paymentData);
-            authorised = data;
+            authorized = data;
             store.paymentMethodData.set({ ...store.paymentMethodData.get(), [this.code]: data });
             const orderId = await flowActions().placeOrder();
             if (orderId !== null) {
                 navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
                 return;
             }
-            authorised = null;
+            authorized = null;
         } catch (err) {
-            authorised = null;
+            authorized = null;
             this._message = (err as Error).message || t('Hyperion_Checkout::braintree_googlepay_failed');
         } finally {
             if (this.isConnected) {
@@ -295,9 +293,8 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
         try {
             payload = await instance.parseResponse(paymentData);
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Google Pay response could not be tokenized', err);
-            throw new Error(t('Hyperion_Checkout::braintree_googlepay_failed'));
+            throw new Error(t('Hyperion_Checkout::braintree_googlepay_failed'), { cause: err });
         }
         const networkTokenized = payload.details.isNetworkTokenized === true;
         const vaultEnabled = isVaultEnabledFor(config.vaultCode);
@@ -328,7 +325,6 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
         try {
             await instance.teardown();
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Braintree Google Pay teardown failed', err);
         }
     }
@@ -358,10 +354,10 @@ export function registerBraintreeGooglePayRenderer(): void {
         ownsPlaceOrder: () => true,
         // Only the Google Pay button places this order; the data below is what it collected.
         beforePlaceOrder: async () => {
-            if (!authorised) throw new Error(t('Hyperion_Checkout::braintree_googlepay_not_authorised'));
-            return authorised;
+            if (!authorized) throw new Error(t('Hyperion_Checkout::braintree_googlepay_not_authorised'));
+            return authorized;
         },
-        afterPlaceOrderFailed: () => { authorised = null; },
+        afterPlaceOrderFailed: () => { authorized = null; },
     });
 }
 

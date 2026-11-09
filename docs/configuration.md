@@ -173,12 +173,12 @@ companions everywhere: the conversion modes, the render time safety net,
 `hyperion:image:convert` (also `--force` and the stale check). Catalog
 images are not involved, their caches are already cut per template.
 
-A conversion is triggered in three places, all honouring the conversion mode
-below: when Magento's image helper writes a cache file on demand
-(`Product\Image::saveFile`, the Luma style resize), when core's resize service
-writes the cache files (`bin/magento catalog:images:resize`, the product save
-in the admin, the `media.storage.catalog.image.resize` consumer, `get.php`;
-these are the gallery and tile sizes Hyperion links through `UrlBuilder`), and
+A conversion is triggered in three places, all honoring the conversion mode
+below: when Magento's image helper writes a cache file during a render
+(`Product\Image::saveFile`, the path every product image of the theme takes),
+when core's resize service writes the cache files (`bin/magento
+catalog:images:resize`, the product save in the admin, the
+`media.storage.catalog.image.resize` consumer, `get.php`), and
 as a safety net when a template finds no companion for an image it renders:
 the conversion is then scheduled once per file and day (a flag in the
 application cache, tag `HYPERION_IMAGE`) so the next render carries the

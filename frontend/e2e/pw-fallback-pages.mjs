@@ -85,8 +85,8 @@ const pageFacts = (page) => page.evaluate(() => ({
     luma: document.querySelectorAll('.table-order-items, .block-order-details-view, .data.table, .product-review, .my-credit-cards, .page.tracking').length,
     text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 300),
 }));
-let orderId = '';
-let docs = {};
+let orderId;
+let docs;
 
 try {
     // ------------------------------------------------------------ guest: drawers, carousel, compare, single review, widget

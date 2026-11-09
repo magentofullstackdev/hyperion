@@ -23,6 +23,14 @@
         <remove src="mage/gallery/gallery.css"/>
     </head>
     <body>
+        <!-- The fold of this page type is painted by its own inline critical sheet, so the theme
+             stylesheet loads without blocking (HyperionCore::head/scripts.phtml). -->
+        <referenceBlock name="hyperion.head.scripts">
+            <arguments>
+                <argument name="critical_css_type" xsi:type="string">product</argument>
+            </arguments>
+        </referenceBlock>
+
         <attribute name="itemtype" value="http://schema.org/Product"/>
         <attribute name="itemscope" value="itemscope"/>
 

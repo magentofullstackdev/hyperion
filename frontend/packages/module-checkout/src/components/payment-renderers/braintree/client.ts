@@ -47,7 +47,6 @@ export function getDeviceData(
         .then((instance) => instance.deviceData)
         .catch((err: unknown) => {
             deviceData.delete(key);
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Braintree device data collection failed', err);
             return null;
         });

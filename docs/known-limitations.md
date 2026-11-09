@@ -1,6 +1,6 @@
 # Known limitations
 
-State of 0.9.0-beta.3: 187 native storefront features of Magento Open
+State of 0.9.0-beta.4: 187 native storefront features of Magento Open
 Source were checked one by one against the theme, and the list below is
 what is left.
 Every default-configuration flow exercised by the end-to-end suite works

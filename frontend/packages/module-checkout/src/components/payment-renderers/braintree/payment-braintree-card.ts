@@ -235,8 +235,7 @@ export class PaymentBraintreeCard extends LitElement {
             this._status = 'ready';
         } catch (err) {
             if (stale()) return;
-            // eslint-disable-next-line no-console
-            console.error('[hyperion-checkout] Braintree hosted fields could not be initialised', err);
+            console.error('[hyperion-checkout] Braintree hosted fields could not be initialized', err);
             this._status = 'error';
         }
     }
@@ -248,7 +247,6 @@ export class PaymentBraintreeCard extends LitElement {
         try {
             await instance.teardown();
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] Braintree hosted fields teardown failed', err);
         }
     }
@@ -339,7 +337,7 @@ export class PaymentBraintreeCard extends LitElement {
         try {
             payload = await instance.tokenize({});
         } catch (err) {
-            throw new Error(this._explainTokenizeError(err as BraintreeError));
+            throw new Error(this._explainTokenizeError(err as BraintreeError), { cause: err });
         }
 
         const vaultEnabled = isVaultEnabledFor(config.ccVaultCode);
@@ -360,7 +358,6 @@ export class PaymentBraintreeCard extends LitElement {
     }
 
     private _explainTokenizeError(err: BraintreeError): string {
-        // eslint-disable-next-line no-console
         console.error('[hyperion-checkout] Braintree tokenization failed', err);
         const code = err?.code ?? '';
         const useCvv = getBraintreeCardConfig()?.useCvv ?? false;

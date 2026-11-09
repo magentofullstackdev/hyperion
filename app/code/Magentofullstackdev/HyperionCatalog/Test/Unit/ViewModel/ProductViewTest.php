@@ -7,7 +7,6 @@ namespace Magentofullstackdev\HyperionCatalog\Test\Unit\ViewModel;
 
 use Magento\Catalog\Helper\Output as OutputHelper;
 use Magento\Catalog\Model\Product;
-use Magento\Catalog\Model\Product\Image\UrlBuilder as ImageUrlBuilder;
 use Magento\Catalog\Model\View\Asset\Placeholder;
 use Magento\Catalog\Model\View\Asset\PlaceholderFactory;
 use Magento\Framework\Data\Helper\PostHelper;
@@ -17,8 +16,8 @@ use Magento\Framework\Pricing\Render as PriceRender;
 use Magento\Framework\UrlInterface;
 use Magentofullstackdev\HyperionCatalog\ViewModel\ProductView;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
+use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ImageRenderer;
 use Magentofullstackdev\HyperionImage\ViewModel\ImageConfig;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -77,6 +76,48 @@ class ProductViewTest extends TestCase
         self::assertTrue($images[0]['isMain']);
     }
 
+    public function testEveryRoleIsResolvedThroughTheImageHelperWithTheGalleryFile(): void
+    {
+        $calls = [];
+        $renderer = $this->createStub(ImageRenderer::class);
+        $renderer->method('getUrl')->willReturnCallback(
+            static function (Product $product, string $imageId, string $file) use (&$calls): string {
+                $calls[] = [$imageId, $file];
+
+                return 'https://shop.test/media/cache/' . $imageId . $file;
+            }
+        );
+        $product = $this->product([new DataObject(['file' => '/a/front.jpg', 'position' => 1])]);
+
+        $images = $this->viewModel($this->createStub(PlaceholderFactory::class), $renderer)->getGalleryImages($product);
+
+        self::assertSame(
+            [
+                ['product_page_image_small', '/a/front.jpg'],
+                ['product_page_image_medium', '/a/front.jpg'],
+                ['product_page_image_large', '/a/front.jpg'],
+            ],
+            $calls
+        );
+        self::assertSame('https://shop.test/media/cache/product_page_image_small/a/front.jpg', $images[0]['thumb']);
+        self::assertSame('https://shop.test/media/cache/product_page_image_medium/a/front.jpg', $images[0]['img']);
+        self::assertSame('https://shop.test/media/cache/product_page_image_large/a/front.jpg', $images[0]['full']);
+    }
+
+    public function testAFailingImageHelperLeavesAnEmptyLoggedGallery(): void
+    {
+        $renderer = $this->createStub(ImageRenderer::class);
+        $renderer->method('getUrl')->willThrowException(new \RuntimeException('media storage down'));
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('media storage down'));
+
+        $images = $this->viewModel($this->createStub(PlaceholderFactory::class), $renderer, $logger)->getGalleryImages(
+            $this->product([new DataObject(['file' => '/a/front.jpg', 'position' => 1])])
+        );
+
+        self::assertSame([], $images);
+    }
+
     private function placeholder(): Placeholder
     {
         $placeholder = $this->createStub(Placeholder::class);
@@ -97,15 +138,17 @@ class ProductViewTest extends TestCase
         return $product;
     }
 
-    /**
-     * @param PlaceholderFactory&MockObject $factory
-     */
-    private function viewModel(PlaceholderFactory $factory): ProductView
-    {
-        $urlBuilder = $this->createStub(ImageUrlBuilder::class);
-        $urlBuilder->method('getUrl')->willReturnCallback(
-            static fn (string $file): string => 'https://shop.test/media/cache' . $file
-        );
+    private function viewModel(
+        PlaceholderFactory $factory,
+        ?ImageRenderer $renderer = null,
+        ?LoggerInterface $logger = null
+    ): ProductView {
+        if ($renderer === null) {
+            $renderer = $this->createStub(ImageRenderer::class);
+            $renderer->method('getUrl')->willReturnCallback(
+                static fn (Product $product, string $imageId, string $file): string => 'https://shop.test/media/cache' . $file
+            );
+        }
         $imageConfig = $this->createStub(ImageConfig::class);
         $imageConfig->method('hasWebpCompanion')->willReturn(false);
         $imageConfig->method('hasAvifCompanion')->willReturn(false);
@@ -115,8 +158,8 @@ class ProductViewTest extends TestCase
             $this->createStub(Escaper::class),
             $this->createStub(UrlInterface::class),
             $this->createStub(PostHelper::class),
-            $this->createStub(LoggerInterface::class),
-            $urlBuilder,
+            $logger ?? $this->createStub(LoggerInterface::class),
+            $renderer,
             $imageConfig,
             $this->createStub(OutputHelper::class),
             new DegradedResponse(),

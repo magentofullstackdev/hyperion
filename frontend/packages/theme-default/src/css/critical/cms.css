@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Critical sheet of the home and CMS pages (`critical_css_type` = cms).
+ *
+ * Inlined into every HTML response of the type, so the theme stylesheet can
+ * load without blocking the first paint: the fold must look exactly as it
+ * does with the full sheet (e2e/pw-critical.mjs compares the pixels).
+ * Same partials in the same order as entry.css, reduced to what the fold
+ * uses: PageBuilder content and the widgets are what a landing page shows
+ * first. Utilities come from the templates listed in tailwind.ts.
+ */
+@import '../source/_theme.css';
+@import '../source/_motion.css';
+@import '../source/_topmenu.css';
+@import '../source/_pricing.css';
+@import '../source/_pagebuilder.css';
+@import '../source/_widgets.css';
+@import '../source/_components.css';
+
+/* After the imports: postcss-import drops an @import that follows another at-rule. */
+@config "./tailwind.cms.ts";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

@@ -18,7 +18,7 @@
  *   v2-checkbox   visible checkbox widget; submit waits for the tick.
  *
  * Submission is gated with a capturing `submit` listener on the form:
- * without a token the event is cancelled, the token is fetched, and the
+ * without a token the event is canceled, the token is fetched, and the
  * form is re-submitted with `requestSubmit()`. That works for native
  * forms and for HTMX forms alike (HTMX listens to the same event and
  * sees the second submission only).
@@ -42,7 +42,7 @@ function loadApi(url) {
             script.defer = true;
             script.onload = () => {
                 if (!window.grecaptcha) {
-                    reject(new Error('reCAPTCHA API did not initialise'));
+                    reject(new Error('reCAPTCHA API did not initialize'));
                     return;
                 }
                 window.grecaptcha.ready(() => resolve(window.grecaptcha));
@@ -112,7 +112,7 @@ export class HyperionRecaptcha extends LitElement {
         } else {
             // v3 / invisible: load on the first interaction with the form, so
             // the script round-trip is off the submit path and v3 still sees
-            // the shopper's behaviour while the form is filled in.
+            // the shopper's behavior while the form is filled in.
             for (const type of WARMUP_EVENTS) {
                 this._form.addEventListener(type, this._onWarmup, { once: true, passive: true });
             }
@@ -221,7 +221,6 @@ export class HyperionRecaptcha extends LitElement {
     }
 
     _report(err) {
-        // eslint-disable-next-line no-console
         console.warn('[hyperion] reCAPTCHA', err);
     }
 }

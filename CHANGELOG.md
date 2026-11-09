@@ -4,7 +4,17 @@ All notable changes to Hyperion are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0-beta.4] - 2026-11-09
+
+### Changed
+- Critical CSS per page type: the home and CMS pages, the category and search results pages and the product page inline a critical sheet that paints their fold on its own (built by a second Tailwind pass over the templates of that fold, `frontend/packages/theme-default/src/css/critical/`) and load the theme stylesheet without blocking the first paint; the entry module fetches the component chunks once the stylesheet applies, and a `<link rel="expect">` marker keeps the browser from painting a document that is still streaming in. The other pages keep the synchronous stylesheet. The layout argument `critical_css_type` on the `hyperion.head.scripts` block maps a handle to a sheet (an empty value restores the synchronous mode). `e2e/pw-critical.mjs` compares the fold painted by the critical sheet with the full stylesheet pixel by pixel.
+- Development toolchain: ESLint 10 with the flat config (`frontend/eslint.config.js`, typescript-eslint 8), which removes the last minimatch 3 dependency of the toolchain; the `minimatch` of the ESLint tree is pinned to the 11 line glob already uses. The rules new to the recommended set led to small source changes with no change in behavior: a rethrown checkout error now carries the original as its `cause`, initial values that were always overwritten are gone, and stale `eslint-disable` comments are removed.
+
+### Fixed
+- Product page: the gallery sizes (`product_page_image_small`, `_medium`, `_large`) are resolved through Magento's image helper like every other product image of the theme, so a size that was never generated (fresh install without `catalog:images:resize`, media import, changed `view.xml` sizes) is written during the render instead of depending on the web server routing the miss to `get.php`; the files written that way get their WebP / AVIF companions scheduled immediately.
+- Product page: the PayPal buttons under Add to Cart showed through the open mini-cart. The PayPal SDK positions its button iframe and its funding menu with their own z-index against the page, above the sticky header that contains the drawers; the component host now isolates them inside its own box (the Pay Later message too).
+- Mini-cart and mobile navigation drawer: the closed panel sits just past the right edge of the viewport and its shadow shaded the page along that edge (visible on phones and in PageSpeed screenshots). The closed panel is hidden now; the slide in and out are unchanged.
+- Product page: the tab strip (Details, More Information, Reviews) widened the page on viewports narrower than its labels (about 320px, wider with longer translations), leaving a gap beside the footer. The strip wraps onto a second row instead, and the server rendered skeleton does the same.
 
 ## [0.9.0-beta.3] - 2026-11-04
 
@@ -34,7 +44,7 @@ First public beta. See the README for supported Magento versions and
 
 ### Added
 - Guest "Create an Account" offer on the order success page: core's `checkout.registration` block is kept and rendered with Hyperion's own template (a card with the order email and a link to `checkout/account/delegateCreate`, which pre-fills the registration form from the order).
-- Layered navigation: visual swatch attributes render as colour / image chips and text swatch attributes as pills (`LayerFilterSwatches` view model); every chip is a link with the HTMX grid swap and a "Label (count)" accessible name. Filter links carry the active filters in the fragment request, and the search results filters target the search fragment endpoint.
+- Layered navigation: visual swatch attributes render as color / image chips and text swatch attributes as pills (`LayerFilterSwatches` view model); every chip is a link with the HTMX grid swap and a "Label (count)" accessible name. Filter links carry the active filters in the fragment request, and the search results filters target the search fragment endpoint.
 - Per variant stock notices on configurable products: "Only N left" for the chosen variant within `cataloginventory/options/stock_threshold_qty` (`SwatchConfig` `stockNotices`, `<hyperion-swatches stock-target>`).
 - Cart line "Edit" (cart and mini-cart) opens core's `checkout/cart/configure` page with the line's options and quantity preselected (configurable, bundle, custom options); "Update Cart" replaces the line in place through `checkout/cart/updateItemOptions`.
 - Mini-cart quantity stepper (minus, input, plus) posting to core's `checkout/cart/updatePost` like the cart page; a quantity the stock refuses, which core saves without a message, is reported as an error toast and printed under the line in the cart and in the drawer (`UpdatePostPlugin`, `CartData` item `messages`).
@@ -124,7 +134,7 @@ First public beta. See the README for supported Magento versions and
   Compared Products widgets rendered from a localStorage history written by
   product page views and compare clicks.
 - Google Analytics 4 and Google Ads conversion (`google/gtag/*`) through
-  `<hyperion-gtag>`: lazily loaded gtag.js honouring the cookie restriction
+  `<hyperion-gtag>`: lazily loaded gtag.js honoring the cookie restriction
   mode, `view_item`, `view_item_list`, `add_to_cart`, `begin_checkout`,
   `purchase` and the Ads `conversion`.
 - Accessibility: the mobile menu and mini-cart drawers are `inert` while
@@ -171,7 +181,7 @@ First public beta. See the README for supported Magento versions and
   and the Luma "left menu" blocks are styled.
 
 ### Fixed
-- The cart coupon form carries the `coupon_code` reCAPTCHA of `Magento_ReCaptchaCheckoutSalesRule` (`<hyperion-recaptcha>` rendered inside the HTMX form, token in the request body, a reCAPTCHA refusal answered as a toast instead of a redirect), sends `remove` only when cancelling a coupon so the check really runs, and takes its five labels from translated attributes.
+- The cart coupon form carries the `coupon_code` reCAPTCHA of `Magento_ReCaptchaCheckoutSalesRule` (`<hyperion-recaptcha>` rendered inside the HTMX form, token in the request body, a reCAPTCHA refusal answered as a toast instead of a redirect), sends `remove` only when canceling a coupon so the check really runs, and takes its five labels from translated attributes.
 - The Luma sample "Privacy Policy" page menu toggles again: `lib/collapsible-nav.js` gives `.block-collapsible-nav > .title` button semantics on phones (role, tabindex, aria-expanded, aria-controls; click, Enter, Space) and `_widgets.css` styles the menu as a card.
 - Every price box of the theme is guarded (related, upsell and cross-sell lists, the compare table, the product widgets, the cart cross-sells): a pricing failure prints `--` and degrades the request instead of an HTTP 500, and no block cache entry (`block_html`) is written during a degraded request, widgets included (`DegradedBlockCachePlugin`).
 - PHP 8.5 deprecations removed: `imagedestroy()` in the GD encoder, `ReflectionProperty::setAccessible()` in the breadcrumbs observer and the image conversion plugin.
@@ -196,10 +206,10 @@ First public beta. See the README for supported Magento versions and
 - Checkout: terms and conditions render again. Magento emits the agreement
   `mode` and `agreementId` as strings, which the bundle compared with
   numbers, so no checkbox was ever rendered and a required agreement made
-  every order fail server-side; the config is normalised at boot. Accepted
+  every order fail server-side; the config is normalized at boot. Accepted
   ids are sent as `paymentMethod.extension_attributes.agreement_ids`, where
   Magento's agreement validation reads them.
-- Reduced motion is honoured inside the shadow DOM components too (mini-cart, gallery, swatches, notification: each carries its own `prefers-reduced-motion` block, the document stylesheet never reaches a shadow root) and the JavaScript scroll calls take their `behavior` from `lib/reduced-motion.js`; the document rules shorten every duration instead of removing transforms, which would break the translate based panels.
+- Reduced motion is honored inside the shadow DOM components too (mini-cart, gallery, swatches, notification: each carries its own `prefers-reduced-motion` block, the document stylesheet never reaches a shadow root) and the JavaScript scroll calls take their `behavior` from `lib/reduced-motion.js`; the document rules shorten every duration instead of removing transforms, which would break the translate based panels.
 - The header is sticky; every drawer returns the focus with `preventScroll`, otherwise Chrome scrolled the page on close, and `html:active-view-transition { overflow-x: clip }` removes the transient horizontal overflow of cross document transitions.
 - Checkout: overlapping shipping estimates and shipping saves are tracked
   per request; a superseded response is ignored, an aborted estimate is not

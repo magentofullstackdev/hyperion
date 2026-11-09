@@ -292,8 +292,7 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
             this._status = 'ready';
         } catch (err) {
             if (stale()) return;
-            // eslint-disable-next-line no-console
-            console.error('[hyperion-checkout] PayPal Express could not be initialised', err);
+            console.error('[hyperion-checkout] PayPal Express could not be initialized', err);
             this._status = 'error';
         }
     }
@@ -322,7 +321,6 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
                 this._cancelled = true;
             },
             onError: (err) => {
-                // eslint-disable-next-line no-console
                 console.error('[hyperion-checkout] PayPal Express button error', err);
                 if (!failureReported) reportFailure('');
                 failureReported = false;
@@ -343,7 +341,6 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
         try {
             await sdk.Messages(amount ? { amount: Number(amount) } : {}).render(element);
         } catch (err) {
-            // eslint-disable-next-line no-console
             console.error('[hyperion-checkout] PayPal Pay Later message could not be rendered', err);
         }
     }

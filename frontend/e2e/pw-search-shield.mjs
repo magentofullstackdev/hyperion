@@ -48,15 +48,15 @@ function compose(service, cmd, user) {
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const configSet = (p, v) => magento(`config:set ${p} ${JSON.stringify(String(v))} >/dev/null`);
 const configUnset = (p) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e "DELETE FROM core_config_data WHERE path = '${p}' AND scope = 'default' AND scope_id = 0" 2>/dev/null`);
-const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* no varnish */ } };
+const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* no varnish */ } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fixture = (action) => JSON.parse(compose('php-fpm', `php /tmp/search-freshness-fixture.php /var/www/html ${action} ${FRESH_WORD}`, 'www-data').trim().split('\n').pop());
 const removeFixture = () => { try { fixture('remove'); } catch (e) { console.error('fixture removal failed: ' + String(e.message).slice(0, 200)); } };
 const TOUCHED = ['hyperion_search/general/fuzziness', 'hyperion_search/general/promoted_skus', 'hyperion_search/general/stop_words',
     'hyperion/security/search_suggest_limit', 'hyperion/security/catalog_filter_limit'];
 const original = Object.fromEntries(TOUCHED.map((p) => {
-    let v = '';
-    try { v = magento(`config:show ${p} 2>/dev/null`).trim(); } catch (e) { v = ''; }
+    let v;
+    try { v = magento(`config:show ${p} 2>/dev/null`).trim(); } catch { v = ''; }
     return [p, v];
 }));
 const restore = () => {
@@ -82,7 +82,7 @@ const get = async (p, headers = {}) => {
 const decodeAttr = (v) => v.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const tileSkus = (html) => [...html.matchAll(/data-hyperion-product-meta="([^"]+)"/g)].map((m) => {
-    try { return JSON.parse(decodeAttr(m[1])).sku; } catch (e) { return null; }
+    try { return JSON.parse(decodeAttr(m[1])).sku; } catch { return null; }
 }).filter(Boolean);
 const headingText = (html) => decodeAttr(((html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) || ['', ''])[1]).replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 

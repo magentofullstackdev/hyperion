@@ -43,7 +43,7 @@ const cleanup = () => {
     sql(`DELETE FROM hyperion_megamenu_group WHERE identifier = '${identifier}'`);
     sql(`DELETE FROM admin_user WHERE username = '${adminUser}'`);
     magento('cache:clean block_html full_page >/dev/null');
-    try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch (e) { /* none */ }
+    try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* none */ }
 };
 const createAdmin = () => magento(`admin:user:create --admin-user=${adminUser} --admin-password=${adminPassword} --admin-email=${adminUser}@example.com --admin-firstname=Hyperion --admin-lastname=E2E >/dev/null`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
