@@ -42,7 +42,7 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 | 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, counts below | 692 (PHPUnit 12) | 0 | 0 |
 | 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | `pw-cls` 6, `pw-critical` 39, `pw-a11y` 14, `pw-ui-polish` 26, `pw-listing-state` 26, `pw-cart-features` 51 | not rerun (same code as the row above) | not rerun | not rerun |
 | 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, see the note on counts below | 692 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer | `0.9.0-beta.1` | 2026-10-30 | 74 / 74 | not rerun for `0.9.0-beta.5`, see below | 291 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green, counts below | 701 (PHPUnit 12) | 0 | 0 |
 | 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 10) | 0 | not in the smoke battery |
 | 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 12) | 0 | not in the smoke battery |
 
@@ -51,10 +51,10 @@ plugin method of the modules targets an existing public method of its
 subject).
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row is an install that takes the
-packages from the published Composer repository, so it cannot run a release
-before its publication: it keeps the release and date of its last battery and
-is rerun once `0.9.0-beta.5` is published. PHP 8.5 is covered for this
-release by the Mage-OS 4.0 row, and the shipped VCL of this release compiles
+packages from the published Composer repository, so its battery runs after
+the publication of the release (`0.9.0-beta.5` on 2026-11-12, with the six
+sample data and three checkout tests added after the batteries of the other
+rows, hence 701 PHPUnit tests). The shipped VCL of this release compiles
 (`varnishd -C`) on Varnish 8.0, 7.7, 7.6 and 7.4.
 
 On the Mage-OS 4.0 row every script passed too; four of them count fewer
@@ -63,6 +63,11 @@ reCAPTCHA keys (`pw-megamenu-admin.mjs` 21, `pw-cart-features.mjs` 45,
 `pw-fallback-pages.mjs` 57, `pw-catalog-completeness.mjs` 38). On that row
 the Open Graph and JSON-LD checks ran against the platform SEO module, see
 "Mage-OS 4.0 SEO module" below.
+
+On the Magento 2.4.9 / PHP 8.5 / Varnish 8 row every script passed; two of
+them count fewer checks because the install has no reCAPTCHA keys
+(`pw-cart-features.mjs` 45, `pw-fallback-pages.mjs` 57), every other script
+has the counts of the first row.
 
 Counts of the first row (Magento 2.4.9, PHP 8.4, developer mode,
 2026-11-11), one line per script, every check passed:
