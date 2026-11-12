@@ -17,10 +17,11 @@ use Psr\Log\LoggerInterface;
  * Appends the Open Graph tags to the `<head>` content of product pages.
  *
  * The head is rendered before the body blocks, from the page config, so a
- * template cannot add to it; core's own tags live in `head.additional`,
- * which the theme removes. The product comes from the registry entry the
- * catalog controller sets (`current_product`), the page from the request's
- * full action name.
+ * template cannot add to it; core's own block (`opengraph.general` in
+ * `head.additional`) is removed by the theme. The product comes from the
+ * registry entry the catalog controller sets (`current_product`), the page
+ * from the request's full action name. Nothing is appended when another
+ * module owns the tags (OpenGraph::isOwnedExternally()).
  */
 class RendererPlugin
 {
@@ -56,6 +57,9 @@ class RendererPlugin
             }
             $product = $this->registry->registry('current_product');
             if (!$product instanceof Product || !$product->getId()) {
+                return $result;
+            }
+            if ($this->openGraph->isOwnedExternally()) {
                 return $result;
             }
 

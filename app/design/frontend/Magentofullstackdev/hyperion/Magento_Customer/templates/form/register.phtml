@@ -164,7 +164,7 @@ $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
                         <?php if ($addressForm->isVatVisible()): ?>
                             <div>
                                 <label for="vat_id" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
-                                    <?= $escaper->escapeHtml(__('VAT Number')) ?>
+                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('vat_id'))) ?>
                                 </label>
                                 <input type="text" id="vat_id" name="vat_id"
                                        value="<?= $escaper->escapeHtmlAttr((string) $formData->getVatId()) ?>"
@@ -191,20 +191,6 @@ $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
                                        <?= $line === 1 && $isRequired('street') ? 'required' : '' ?>/>
                             </div>
                         <?php endfor; ?>
-
-                        <?php if ($addressHelper->isVatAttributeVisible()): ?>
-                            <div>
-                                <label for="vat_id" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
-                                    <?= $escaper->escapeHtml((string) __($attributeData->getFrontendLabel('vat_id'))) ?>
-                                </label>
-                                <input type="text"
-                                       id="vat_id"
-                                       name="vat_id"
-                                       value="<?= $escaper->escapeHtmlAttr((string) $formData->getVatId()) ?>"
-                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
-                                       <?= $isRequired('vat_id') ? 'required' : '' ?>/>
-                            </div>
-                        <?php endif; ?>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>

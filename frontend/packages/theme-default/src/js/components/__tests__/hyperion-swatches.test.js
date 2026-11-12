@@ -100,7 +100,7 @@ describe('hyperion-swatches', () => {
     });
 
     test('skips a default that the other defaults make unreachable', async () => {
-        // Blue only exists in XS; size S is dropped, colour Blue stays.
+        // Blue only exists in XS; size S is dropped, color Blue stays.
         const { el, form } = fixture(config({ defaultValues: { 93: '50', 144: '167' } }));
         await mount(el);
         expect(checked(el)).toEqual(['50']);
@@ -124,6 +124,70 @@ describe('hyperion-swatches', () => {
         expect(checked(el)).toEqual(['50', '166']);
         expect(form.querySelector('[name="super_attribute[93]"]').value).toBe('50');
         expect(form.querySelector('[name="super_attribute[144]"]').value).toBe('166');
+    });
+});
+
+describe('hyperion-swatches price format', () => {
+    // Magento's price format of a German store view in euro.
+    const german = {
+        currencyFormat: '%s\u00a0€',
+        priceFormat: {
+            pattern: '%s\u00a0€', precision: 2, requiredPrecision: 2,
+            decimalSymbol: ',', groupSymbol: '.', groupLength: 3, integerRequired: false,
+        },
+        optionPrices: {
+            11: { finalPrice: { amount: 10 } },
+            12: { finalPrice: { amount: 1234.5 }, oldPrice: { amount: 1300 } },
+            13: { finalPrice: { amount: 13 } },
+        },
+    };
+
+    async function pick(el, ...optionIds) {
+        for (const id of optionIds) {
+            el.shadowRoot.querySelector(`[data-option-id="${id}"]`).click();
+            await el.updateComplete;
+        }
+    }
+
+    test('after a pick the price uses the decimal comma and the group dot of the store view', async () => {
+        const { el, price } = fixture(config(german));
+        await mount(el);
+        await pick(el, '49', '167');
+
+        const [final, old] = [...price.querySelectorAll('span')].map((span) => span.textContent);
+        expect(final).toBe('1.234,50\u00a0€');
+        expect(old).toBe('1.300,00\u00a0€');
+        expect(price.textContent).not.toContain('1234.50');
+    });
+
+    test('a price target without microdata still gets the formatted variant price', async () => {
+        const { el, price } = fixture(config(german));
+        price.innerHTML = '<span class="price">10,00\u00a0€</span>';
+        await mount(el);
+        await pick(el, '50', '166');
+
+        expect(price.querySelector('meta')).toBeNull();
+        expect(price.textContent).toBe('13,00\u00a0€');
+    });
+
+    test('the Offer microdata of the target keeps a plain number while the text is localized', async () => {
+        const { el, price } = fixture(config(german));
+        price.innerHTML = '<span itemprop="offers" itemscope itemtype="https://schema.org/Offer">'
+            + '<span class="price">10,00\u00a0€</span>'
+            + '<meta itemprop="price" content="10"><meta itemprop="priceCurrency" content="EUR"></span>';
+        await mount(el);
+        await pick(el, '50', '166');
+
+        expect(price.querySelector('span').textContent).toBe('13,00\u00a0€');
+        expect(price.querySelector('[itemprop="offers"] meta[itemprop="price"]').getAttribute('content')).toBe('13');
+        expect(price.querySelector('meta[itemprop="priceCurrency"]').getAttribute('content')).toBe('EUR');
+    });
+
+    test('a config without a price format keeps two decimals inside the currency pattern', async () => {
+        const { el, price } = fixture(config());
+        await mount(el);
+        await pick(el, '49', '167');
+        expect(price.textContent).toBe('$12.00');
     });
 });
 

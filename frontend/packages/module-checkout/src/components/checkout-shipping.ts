@@ -16,7 +16,6 @@ import type { Address } from '../types/address.js';
 import { getStore } from '../store/index.js';
 import { flowActions } from '../store/flow-actions.js';
 import { getCheckoutConfig } from '../bootstrap-config.js';
-import { debounce } from '../utils/debounce.js';
 import { t } from '../utils/i18n.js';
 import { sanitiseHtml } from '../utils/sanitize-html.js';
 import './address-form.js';
@@ -25,10 +24,6 @@ import './shipping-method-list.js';
 import './ui/button.js';
 
 export class CheckoutShipping extends SignalWatcher(LitElement) {
-    private _triggerEstimate = debounce(() => {
-        void flowActions().estimateShipping();
-    }, 500);
-
     public override createRenderRoot(): HTMLElement { return this; }
 
     public override render(): unknown {
@@ -66,7 +61,7 @@ export class CheckoutShipping extends SignalWatcher(LitElement) {
     /**
      * `shipping/shipping_policy/*`: a button that opens the merchant's policy
      * text in a modal <dialog>. The content is admin HTML (core nl2br's it),
-     * passed through the shared sanitiser like every other HTML we render.
+     * passed through the shared sanitizer like every other HTML we render.
      */
     private _renderShippingPolicy(): unknown {
         const policy = getCheckoutConfig().shippingPolicy;
@@ -123,12 +118,12 @@ export class CheckoutShipping extends SignalWatcher(LitElement) {
     private _onAddressChange(e: CustomEvent<Address>): void {
         const store = getStore();
         store.shippingAddress.set(e.detail);
-        this._triggerEstimate();
+        flowActions().scheduleShippingEstimate();
     }
 
     private _onSavedPick(): void {
-        // Saved-address pick is synchronous enough to fire the estimate immediately.
-        void flowActions().estimateShipping();
+        // A saved address arrives complete: no typing to wait for.
+        void flowActions().estimateShippingNow();
     }
 }
 

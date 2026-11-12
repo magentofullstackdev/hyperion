@@ -7,6 +7,7 @@ namespace Magentofullstackdev\HyperionSampleData\Setup;
 
 use Magentofullstackdev\HyperionSampleData\Model\LumaStylesheetLinkRemover;
 use Magentofullstackdev\HyperionSampleData\Model\LumaStylesheetReplacer;
+use Magentofullstackdev\HyperionSampleData\Model\SampleProducts;
 use Magentofullstackdev\HyperionSampleData\Model\WidgetThemeRebinder;
 use Magento\Framework\Setup\InstallDataInterface;
 use Magento\Framework\Setup\ModuleContextInterface;
@@ -19,9 +20,10 @@ use Psr\Log\LoggerInterface;
  * A recurring script was chosen over a one-shot data patch on purpose:
  * the Luma sample data can be installed (or re-installed) after this
  * module, and Magento only registers themes during setup:upgrade, so a
- * patch that ran once before the Hyperion theme existed would silently
- * do nothing forever. The rebind itself is idempotent, so re-running it
- * is free. The same goes for the Luma stylesheet replacement.
+ * patch that ran once before the Hyperion theme or the sample data existed
+ * would silently do nothing forever. Every step is idempotent and limited
+ * to what the sample data created (see the model classes), so re-running
+ * it changes nothing once the sample content is on Hyperion.
  */
 class RecurringData implements InstallDataInterface
 {
@@ -29,7 +31,8 @@ class RecurringData implements InstallDataInterface
         private readonly WidgetThemeRebinder $rebinder,
         private readonly LumaStylesheetReplacer $stylesheetReplacer,
         private readonly LumaStylesheetLinkRemover $stylesheetLinkRemover,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly SampleProducts $sampleProducts
     ) {
     }
 
@@ -38,7 +41,11 @@ class RecurringData implements InstallDataInterface
      */
     public function install(ModuleDataSetupInterface $setup, ModuleContextInterface $context): void
     {
-        $this->rebinder->rebind($setup);
+        try {
+            $this->rebinder->rebind($setup);
+        } catch (\Throwable $e) {
+            $this->logger->error('HyperionSampleData: widgets not rebound -- ' . $e->getMessage());
+        }
         try {
             // The Luma sample data stylesheet fights the theme (Model\LumaStylesheetReplacer);
             // a media directory problem must never abort setup:upgrade for it.
@@ -57,5 +64,7 @@ class RecurringData implements InstallDataInterface
         } catch (\Throwable $e) {
             $this->logger->error('HyperionSampleData: styles.css link not removed -- ' . $e->getMessage());
         }
+        // Completes the sample products when the sample catalog arrived after the data patches ran.
+        $this->sampleProducts->create();
     }
 }

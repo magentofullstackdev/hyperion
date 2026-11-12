@@ -9,7 +9,9 @@
  * only when the listing's resolved mode is not disabled; the pager renders
  * otherwise. The link is a real anchor to the next page (crawlers and
  * visitors without JavaScript paginate) carrying the HTMX attributes that
- * fetch the grid fragment with `append=1` and append its tiles to the list.
+ * fetch the grid fragment with `append=1` (the next page of the listing as it
+ * is filtered now, Listing::getAppendFragmentUrl()) and append its tiles to
+ * the list.
  * In the automatic mode the link also triggers when it enters the viewport,
  * until the configured number of automatic loads is reached.
  *
@@ -39,7 +41,7 @@ $last = max(1, (int) $toolbar->getLastPageNum());
 $shown = min($total, max(0, (int) $toolbar->getLastNum()));
 $hasMore = $current < $last;
 $next = $current + 1;
-$fragmentUrl = $listing->getFragmentUrl($list);
+$appendUrl = $listing->getAppendFragmentUrl($list, $next);
 $gridId = $listing->getGridTargetId();
 $automatic = $hasMore && $listing->isAutomaticLoad($list, $current);
 // Inside an append answer core builds the pager URL on the fragment route: the view model gives the page URL.
@@ -64,8 +66,8 @@ $viewListJson = $append ? (string) $list->getData('hyperion_view_list_json') : '
         <a href="<?= $escaper->escapeUrl($nextUrl) ?>"
            class="inline-flex items-center justify-center gap-2 rounded-md border border-primary px-6 py-2.5 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary focus:outline-none focus:ring-2 focus:ring-primary transition-colors"
            data-hyperion-load-more-button
-           <?php if ($fragmentUrl !== ''): ?>
-           hx-get="<?= $escaper->escapeUrl($fragmentUrl . '&p=' . $next . '&' . $listing->getAppendParam() . '=1') ?>"
+           <?php if ($appendUrl !== ''): ?>
+           hx-get="<?= $escaper->escapeUrl($appendUrl) ?>"
            hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?> [data-hyperion-tiles]"
            hx-swap="beforeend"
            hx-include="[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[type=hidden]"

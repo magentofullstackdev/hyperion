@@ -19,7 +19,7 @@
     <!--
         Coerce Magento\Cms\Model\Page::getContent() NULL -> '' so the CMS Page
         block's _toHtml() doesn't hand NULL to Magento\Framework\Filter\Template::filter(),
-        which since 2.4.7 throws InvalidArgumentException - the parent Email
+        which rejects a NULL content with an InvalidArgumentException - the parent Email
         filter then substitutes its error text in place of the page body.
         Relevant when the home page delivers its content via Content > Widgets
         and the cms_page row's content column is NULL / empty.

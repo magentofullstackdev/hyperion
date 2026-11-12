@@ -5,7 +5,9 @@
  * Hyperion pagination, used by every pager block of the storefront.
  *
  * On the product list the links also carry an hx-get against the product grid
- * fragment URL, so a page change swaps only the grid; the URL the browser then
+ * fragment URL of the listing as it is filtered now (the active layered
+ * filters come from the Listing view model, the toolbar state through
+ * hx-include), so a page change swaps only the grid; the URL the browser then
  * shows is the `HX-Push-Url` header of the fragment response (the page URL),
  * and the href goes through the Listing view model because the pager is
  * re-rendered inside the fragment, where core builds it on the fragment route.
@@ -41,12 +43,12 @@ if ($last <= 1 && !$showAmounts) {
 }
 
 /** hx-* attributes for a page link: only where a grid fragment endpoint exists. */
-$hxAttributes = static function (int $page) use ($fragmentUrl, $gridId, $escaper): string {
+$hxAttributes = static function (int $page) use ($fragmentUrl, $listing, $listProduct, $gridId, $escaper): string {
     if ($fragmentUrl === '') {
         return '';
     }
     // The toolbar's selects and hidden inputs ride along, so a page change keeps sort, direction, size and mode.
-    return ' hx-get="' . $escaper->escapeUrl($fragmentUrl) . '&p=' . $page . '"'
+    return ' hx-get="' . $escaper->escapeUrl($listing->getStateFragmentUrl($listProduct, ['p' => $page])) . '"'
         . ' hx-target="#' . $escaper->escapeHtmlAttr($gridId) . '"'
         . ' hx-include="[data-hyperion-toolbar] select, [data-hyperion-toolbar] input[type=hidden]"'
         . ' hx-swap="outerHTML"'

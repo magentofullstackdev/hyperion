@@ -15,12 +15,12 @@ use Magento\Store\Model\ScopeInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Self-service order cancellation, bridged to Magento_OrderCancellation
- * (Magento 2.4.7+ / Mage-OS) without a hard dependency on it.
+ * Self-service order cancellation, bridged to the optional
+ * Magento_OrderCancellation module without a hard dependency on it.
  *
  * The core classes are resolved by name at run time and only when the
- * module is enabled, so Hyperion installs on 2.4.6 where they do not
- * exist. The rules mirror the GraphQL `cancelOrder` mutation
+ * module is enabled, so Hyperion works on an install where the module is
+ * absent or disabled. The rules mirror the GraphQL `cancelOrder` mutation
  * (`Magento\OrderCancellationGraphQl\Model\Validator\ValidateOrder`):
  * feature flag per store, order state, no shipment yet.
  */

@@ -7,7 +7,10 @@
 // arrives, the same header footprint with scripting off as after the
 // components upgrade, toast dismissed on mini-cart open, 32rem mini-cart,
 // single category landing content and a styled sidebar on the top-level
-// categories.
+// categories; request synchronization: a double click on Add to Cart adds
+// one unit (product page and tile), the button shows its busy text without
+// changing size and keeps the focus, and rapid taps on the mini-cart stepper
+// end at the right quantity with one or two requests.
 // node e2e/pw-ui-polish.mjs <baseUrl>   (URL only, nothing is changed on the store)
 import { createRequire } from 'node:module';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
@@ -112,6 +115,120 @@ try {
     await page.waitForTimeout(400);
     check('mini-cart: without a stable gutter the lock pads the body by the scrollbar width and nothing moves', Math.abs(noGutter.header - widthBefore.header) < 0.5 && noGutter.bodyPadding === `${widthBefore.scrollbar}px`, JSON.stringify(noGutter));
     check('toast: success auto-close is 3.5 s', await page.evaluate(() => document.querySelector('#hyperion-notification')?.getAttribute('auto-close')) === '3500');
+
+    // ---- request synchronization and the Add to Cart busy state
+    // A fresh visitor, so the counts start from an empty cart.
+    {
+        const syncCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 } });
+        const sync = await syncCtx.newPage();
+        sync.on('pageerror', (e) => problems.push(`pageerror ${sync.url().replace(base, '')}: ${e.message.slice(0, 120)}`));
+        sync.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`); });
+        const finished = { add: 0, update: 0 };
+        sync.on('requestfinished', (r) => {
+            if (r.method() !== 'POST') return;
+            if (r.url().includes('/checkout/cart/add')) finished.add++;
+            if (r.url().includes('/checkout/cart/updatePost')) finished.update++;
+        });
+        // The add answers after 600 ms, so the busy state can be measured while it runs.
+        await sync.route(/\/checkout\/cart\/add(\/|\?|$)/, async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            await route.continue();
+        });
+        const cartCount = () => sync.evaluate(() => Number((document.querySelector('#hyperion-mini-cart-count')?.textContent || '').trim()) || 0);
+        const syncToast = () => sync.waitForFunction(() => { const n = document.querySelector('#hyperion-notification'); return n && !n.hidden && n.innerText.trim().length > 0; }, null, { timeout: 25000 }).then(() => true).catch(() => false);
+        const buttonState = (selector) => sync.evaluate((sel) => {
+            const button = document.querySelector(sel);
+            const visible = (part) => { const el = button?.querySelector(part); return el ? getComputedStyle(el).visibility === 'visible' : null; };
+            let active = document.activeElement;
+            while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+            const rect = button?.getBoundingClientRect();
+            return { width: rect?.width, height: rect?.height, label: visible('[data-hyperion-atc-label]'), busy: visible('[data-hyperion-atc-busy]'), focused: !!button && active === button };
+        }, selector);
+
+        // A simple product outside the bags category, so the tile below adds another line
+        // (the header count may be the number of lines or the sum of the quantities).
+        const pdpButton = '#product_addtocart_form button[type="submit"]';
+        await sync.goto(base + u('/affirm-water-bottle.html'), { waitUntil: 'networkidle' });
+        const pdpCountBefore = await cartCount();
+        const idle = await buttonState(pdpButton);
+        await sync.dblclick(pdpButton);
+        // Within 100 ms of the click (the answer is still 500 ms away).
+        const busy = await buttonState(pdpButton);
+        const pdpToast = await syncToast();
+        await sync.waitForTimeout(700);
+        const done = await buttonState(pdpButton);
+        const pdpCountAfter = await cartCount();
+        const toasts = await sync.evaluate(() => [...document.querySelectorAll('hyperion-notification, #hyperion-notification')].filter((n) => !n.hidden && n.innerText.trim().length > 0).length);
+        check('add to cart: a double click on the product page sends one request, adds one unit and shows one toast',
+            finished.add === 1 && pdpCountAfter === pdpCountBefore + 1 && pdpToast && toasts === 1,
+            JSON.stringify({ requests: finished.add, before: pdpCountBefore, after: pdpCountAfter, toasts }));
+        check('add to cart: the button shows the busy text while the request runs and the label again after it',
+            idle.label === true && idle.busy === false && busy.label === false && busy.busy === true && done.label === true && done.busy === false,
+            JSON.stringify({ idle, busy, done }));
+        check('add to cart: the button has the same size before, during and after the request',
+            idle.width > 0 && idle.width === busy.width && idle.width === done.width && idle.height === busy.height && idle.height === done.height,
+            JSON.stringify({ idle: [idle.width, idle.height], busy: [busy.width, busy.height], done: [done.width, done.height] }));
+        check('add to cart: the submit button still has the focus after the add', done.focused === true, JSON.stringify({ during: busy.focused, after: done.focused }));
+
+        // A tile: the first Add to Cart form of the bags category (products without required options).
+        await sync.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
+        const tileButton = '[data-hyperion-tiles] form[hx-post*="checkout/cart/add"] button[type="submit"]';
+        if (await sync.locator(tileButton).count() > 0) {
+            const tileCountBefore = await cartCount();
+            const addsBefore = finished.add;
+            await sync.locator(tileButton).first().dblclick();
+            await syncToast();
+            await sync.waitForTimeout(700);
+            const tileCountAfter = await cartCount();
+            check('add to cart: a double click on a tile adds one unit', finished.add === addsBefore + 1 && tileCountAfter === tileCountBefore + 1,
+                JSON.stringify({ requests: finished.add - addsBefore, before: tileCountBefore, after: tileCountAfter }));
+        } else {
+            console.log('SKIP  add to cart: a double click on a tile adds one unit  -- the listing has no Add to Cart form ("Add to Cart from Listing Page" is off)');
+        }
+        await syncCtx.close();
+
+        // Mini-cart stepper: one line at quantity 2, five taps on plus 50 ms apart.
+        const stepCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 } });
+        const step = await stepCtx.newPage();
+        step.on('pageerror', (e) => problems.push(`pageerror ${step.url().replace(base, '')}: ${e.message.slice(0, 120)}`));
+        step.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`); });
+        let updates = 0;
+        step.on('requestfinished', (r) => { if (r.method() === 'POST' && r.url().includes('/checkout/cart/updatePost')) updates++; });
+        await step.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
+        await step.fill('#qty', '2');
+        await step.click(pdpButton);
+        await step.waitForFunction(() => { const n = document.querySelector('#hyperion-notification'); return n && !n.hidden && n.innerText.trim().length > 0; }, null, { timeout: 25000 }).catch(() => {});
+        await step.evaluate(() => document.querySelector('hyperion-mini-cart').openPanel());
+        const line = () => step.evaluate(() => {
+            const root = document.querySelector('hyperion-mini-cart').shadowRoot;
+            const total = root.querySelector('[data-hyperion-minicart-row-total]');
+            // The first text of the row total (an "Excl. Tax" line may follow), as an integer of its digits.
+            const amount = Number(((total?.firstChild?.textContent || total?.textContent || '').match(/[\d.,]+/) || [''])[0].replace(/\D/g, ''));
+            return { lines: root.querySelectorAll('[data-hyperion-minicart-item]').length, qty: root.querySelector('[data-hyperion-minicart-qty]')?.value ?? '', amount };
+        });
+        await step.waitForFunction(() => !!document.querySelector('hyperion-mini-cart').shadowRoot.querySelector('[data-hyperion-minicart-qty]'), null, { timeout: 20000 }).catch(() => {});
+        const startLine = await line();
+        const plus = step.locator('hyperion-mini-cart [data-hyperion-minicart-qty-step="1"]').first();
+        for (let i = 0; i < 5; i++) {
+            await plus.click();
+            await step.waitForTimeout(50);
+        }
+        const tapped = await line();
+        // The quiet time, the request (two at most) and the refetch of the drawer.
+        await step.waitForFunction((start) => {
+            const total = document.querySelector('hyperion-mini-cart').shadowRoot.querySelector('[data-hyperion-minicart-row-total]');
+            const amount = Number(((total?.firstChild?.textContent || total?.textContent || '').match(/[\d.,]+/) || [''])[0].replace(/\D/g, ''));
+            return amount > start;
+        }, startLine.amount, { timeout: 20000 }).catch(() => {});
+        await step.waitForTimeout(1200);
+        const endLine = await line();
+        check('mini-cart stepper: five taps 50 ms apart end at the start quantity plus five',
+            startLine.lines === 1 && startLine.qty === '2' && tapped.qty === '7' && endLine.qty === '7',
+            JSON.stringify({ start: startLine.qty, afterTaps: tapped.qty, end: endLine.qty }));
+        check('mini-cart stepper: the row total is the one of seven units', startLine.amount > 0 && endLine.amount * 2 === startLine.amount * 7, JSON.stringify({ atTwo: startLine.amount, atSeven: endLine.amount }));
+        check('mini-cart stepper: the five taps cost one or two update requests', updates >= 1 && updates <= 2, `${updates} requests`);
+        await stepCtx.close();
+    }
 
     // ---- category landings
     for (const path of [u('/men.html'), u('/women.html'), u('/gear.html')]) {

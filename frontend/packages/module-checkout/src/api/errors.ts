@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Normalised REST error type.
+ * Normalized REST error type.
  *
  * Magento's wire shape (`MagentoWireError` in `types/errors.ts`) has
  * several inconsistencies per endpoint -- sometimes `parameters` is an
@@ -19,6 +19,7 @@
  * reported by its nested, specific messages.
  */
 import type { MagentoWireError } from '../types/errors.js';
+import { t } from '../utils/i18n.js';
 
 export class MagentoApiError extends Error {
     public readonly httpStatus: number;
@@ -58,6 +59,18 @@ export class NetworkError extends Error {
 }
 
 /**
+ * The request was given a time limit (`ApiFetchOptions.timeoutMs`) and no
+ * answer arrived within it. A transport failure like any other for the
+ * callers, except that the request may well have reached the server.
+ */
+export class RequestTimeoutError extends NetworkError {
+    public constructor(cause?: unknown) {
+        super(cause ?? new Error('Request timed out'));
+        this.name = 'RequestTimeoutError';
+    }
+}
+
+/**
  * True for the rejection `fetch()` produces when its `AbortSignal` fires
  * (a `DOMException` named `AbortError`). Such a rejection is a caller's own
  * cancellation, never a transport failure: the client rethrows it as is and
@@ -72,7 +85,7 @@ export function isAbortError(err: unknown): boolean {
  * a flat list positional to the phrase, or nothing) as a string record:
  * list entries are keyed by their index as a string.
  */
-function normaliseParameters(raw: MagentoWireError['parameters']): Record<string, string> {
+function normalizeParameters(raw: MagentoWireError['parameters']): Record<string, string> {
     const parameters: Record<string, string> = {};
     if (Array.isArray(raw)) {
         raw.forEach((v, i) => {
@@ -118,36 +131,50 @@ export function interpolateMessage(
 }
 
 /**
- * Normalise a raw Magento REST error body into `MagentoApiError`.
- * Exported for unit-test coverage -- the client re-exports it
- * internally. The message is the phrase rendered with its parameters
- * (or the nested errors of an aggregate), ready to show; i18n of the
- * phrase itself is the server's (`__()` ran before the exception).
+ * The message of an error answer that carries none of its own (an empty
+ * body, a proxy's HTML page), chosen by the status class.
  */
-export function normaliseMagentoError(
+function fallbackMessage(httpStatus: number): string {
+    if (httpStatus >= 500) return t('Hyperion_Checkout::error_store_unavailable');
+    if (httpStatus === 429) return t('Hyperion_Checkout::error_too_many_requests');
+    if (httpStatus === 403) return t('Hyperion_Checkout::error_request_blocked');
+    return t('Hyperion_Checkout::unexpected_error');
+}
+
+/**
+ * Normalize a raw Magento REST error body into `MagentoApiError`. The
+ * message is the phrase rendered with its parameters (or the nested errors
+ * of an aggregate), ready to show; i18n of the phrase itself is the
+ * server's (`__()` ran before the exception). A body that is not a JSON
+ * object, or one without a message, yields a translated message for the
+ * status class: the caller passes `undefined` for a body that is not JSON,
+ * so a proxy's page never becomes the text.
+ */
+export function normalizeMagentoError(
     httpStatus: number,
     body: unknown
 ): MagentoApiError {
     if (body === null || typeof body !== 'object') {
-        return new MagentoApiError(
-            httpStatus,
-            'unknown',
-            `HTTP ${httpStatus} (no error body)`
-        );
+        return new MagentoApiError(httpStatus, 'unknown', fallbackMessage(httpStatus));
     }
 
     const wire = body as MagentoWireError;
-    const parameters = normaliseParameters(wire.parameters);
-    const rawMessage = typeof wire.message === 'string' && wire.message.length > 0
-        ? wire.message
-        : `HTTP ${httpStatus}`;
+    const parameters = normalizeParameters(wire.parameters);
     const errors = Array.isArray(wire.errors)
         ? wire.errors
             .filter((e): e is MagentoWireError => !!e && typeof e === 'object' && typeof e.message === 'string')
-            .map((e) => interpolateMessage(e.message, normaliseParameters(e.parameters)))
+            .map((e) => interpolateMessage(e.message, normalizeParameters(e.parameters)))
             .filter((m) => m.trim().length > 0)
         : [];
-    const message = errors.length > 0 ? errors.join(' ') : interpolateMessage(rawMessage, parameters);
+    const rawMessage = typeof wire.message === 'string' ? wire.message.trim() : '';
+    let message: string;
+    if (errors.length > 0) {
+        message = errors.join(' ');
+    } else if (rawMessage !== '') {
+        message = interpolateMessage(rawMessage, parameters);
+    } else {
+        message = fallbackMessage(httpStatus);
+    }
 
     return new MagentoApiError(httpStatus, String(httpStatus), message, parameters, errors);
 }

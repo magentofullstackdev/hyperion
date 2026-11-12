@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * hyperion-order-cancel -- self-service order cancellation (Magento 2.4.7+
- * Magento_OrderCancellation) without RequireJS or GraphQL in the browser.
+ * hyperion-order-cancel -- self-service order cancellation (the optional
+ * Magento_OrderCancellation module) without RequireJS or GraphQL in the browser.
  *
  * Renders a trigger (text button or icon link) and a native `<dialog>`
  * with the cancellation reason `<select>`. The dialog form is an HTMX POST

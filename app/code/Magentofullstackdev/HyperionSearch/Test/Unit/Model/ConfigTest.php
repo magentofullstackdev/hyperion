@@ -30,9 +30,6 @@ class ConfigTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider fuzzinessProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('fuzzinessProvider')]
     public function testFuzzinessMapsToTheEngineValue(?string $raw, ?string $expected): void
     {

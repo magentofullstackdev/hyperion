@@ -121,3 +121,4 @@
 "store value","winkelwaarde"
 "this store only","alleen deze winkel"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} wordt vervangen door de basis-URL van de winkelweergave; een pad zonder schema is daaraan relatief."
+"The item does not belong to this menu.","Het item hoort niet bij dit menu."

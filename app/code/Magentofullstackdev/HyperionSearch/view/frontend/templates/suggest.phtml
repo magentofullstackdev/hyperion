@@ -157,13 +157,14 @@ $cartButton = 'inline-flex w-full items-center justify-center rounded-md bg-prim
                                                   hx-target="#hyperion-notification"
                                                   hx-swap="outerHTML"
                                                   hx-select="#hyperion-notification"
+                                                  hx-sync="this:drop"
                                                   class="flex">
                                                 <?php /* Filled from the cookie by entry.js after the swap (the fragment is public). */ ?>
                                                 <input type="hidden" name="form_key" value="">
                                                 <input type="hidden" name="product" value="<?= (int) $productId ?>">
                                                 <input type="hidden" name="qty" value="1">
-                                                <button type="submit" class="<?= /* @noEscape */ $cartButton ?>">
-                                                    <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+                                                <button type="submit" data-hyperion-atc class="<?= /* @noEscape */ $cartButton ?>">
+                                                    <span data-hyperion-atc-label><?= $escaper->escapeHtml(__('Add to Cart')) ?></span><span data-hyperion-atc-busy aria-hidden="true"><?= $escaper->escapeHtml(__('Adding to cart...')) ?></span>
                                                 </button>
                                             </form>
                                         <?php else: ?>

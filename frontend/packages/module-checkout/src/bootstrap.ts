@@ -77,11 +77,22 @@ export async function bootstrap(): Promise<void> {
         // address entered on its own, right away instead of after a click.
         startInitialRequests(store, flowActions());
 
+        // A page restored from the back/forward cache after the order went
+        // through would show its frozen state over a quote that is gone.
+        window.addEventListener('pageshow', reloadWhenRestored);
+
         // Mount.
         await mountCheckoutApp();
     } catch (err) {
         renderBootstrapError(err);
         throw err;
+    }
+}
+
+/** `pageshow` handler: a page restored from the back/forward cache starts over. */
+export function reloadWhenRestored(event: PageTransitionEvent): void {
+    if (event.persisted) {
+        window.location.reload();
     }
 }
 

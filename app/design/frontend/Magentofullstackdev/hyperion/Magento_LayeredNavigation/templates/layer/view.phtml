@@ -81,7 +81,9 @@ $parentName = (string) $block->getLayout()->getParentName($block->getNameInLayou
 $isInlineVariant = $parentName !== 'sidebar.main';
 $showSection = !empty($filters) || $hasActiveFilters;
 ?>
-<div id="hyperion-layered-nav" data-hyperion-layered-nav<?= $showSection ? '' : ' hidden' ?>>
+<?php /* One request queue with the product grid: a filter click aborts the listing request in flight, so the
+         grid, this navigation (swapped out of band) and the pushed URL always come from the same response. */ ?>
+<div id="hyperion-layered-nav" data-hyperion-layered-nav hx-sync="#<?= $escaper->escapeHtmlAttr($gridId) ?>:replace"<?= $showSection ? '' : ' hidden' ?>>
 <?php if ($showSection): ?>
 <section class="space-y-4" aria-labelledby="hyperion-filters-title">
 

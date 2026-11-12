@@ -52,6 +52,7 @@ $heading = $kind === 'compared' ? __('Recently Compared Products') : __('Recentl
                           <?= $listVm->isWishlistEnabled() ? 'wishlist-enabled' : '' ?>
                           <?= $listVm->isCompareEnabled() ? 'compare-enabled' : '' ?>
                           cart-label="<?= $escaper->escapeHtmlAttr(__('Add to Cart')) ?>"
+                          adding-label="<?= $escaper->escapeHtmlAttr(__('Adding to cart...')) ?>"
                           options-label="<?= $escaper->escapeHtmlAttr(__('Select Options')) ?>"
                           wishlist-label="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>"
                           compare-label="<?= $escaper->escapeHtmlAttr(__('Add to Compare')) ?>"

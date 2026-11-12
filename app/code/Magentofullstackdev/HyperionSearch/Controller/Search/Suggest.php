@@ -11,6 +11,7 @@ use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\View\Result\PageFactory;
 use Magento\Store\Model\StoreManagerInterface;
+use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
 use Magentofullstackdev\HyperionSearch\Model\Suggest\Cache as SuggestCache;
 use Magentofullstackdev\HyperionSearch\ViewModel\Suggest as SuggestViewModel;
@@ -26,6 +27,10 @@ use Psr\Log\LoggerInterface;
  * Varnish keeps it for an hour (the VCL hashes the vary cookie and sorts the
  * query string), the application cache keeps the rendered HTML for the same
  * hour, and X-Magento-Tags lets a product or category save purge both.
+ *
+ * An answer computed while the search engine did not respond (the request is
+ * marked as degraded) is delivered once: it is not written to the
+ * application cache and `CacheHeaders::applyPublic()` sends it private.
  */
 class Suggest implements HttpGetActionInterface
 {
@@ -41,7 +46,8 @@ class Suggest implements HttpGetActionInterface
         private readonly SuggestViewModel $viewModel,
         private readonly HttpContext $httpContext,
         private readonly StoreManagerInterface $storeManager,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly DegradedResponse $degradedResponse
     ) {
     }
 
@@ -73,7 +79,9 @@ class Suggest implements HttpGetActionInterface
             $block = $page->getLayout()->getBlock(self::BLOCK_NAME);
             $html = $block ? (string) $block->toHtml() : '';
             $tags = $this->viewModel->getCacheTags();
-            $this->cache->save($key, $html, $tags);
+            if (!$this->degradedResponse->isDegraded()) {
+                $this->cache->save($key, $html, $tags);
+            }
 
             return $this->deliver($response, $html, $tags);
         } catch (\Throwable $e) {

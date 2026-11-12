@@ -31,6 +31,38 @@ export function getCustomerCart(): Promise<QuoteData> {
     return apiFetch<QuoteData>('carts/mine', { auth: 'customer' });
 }
 
+/** The fields of a cart that tell whether it was turned into an order. */
+export interface CartStateProbe {
+    id?: number | string;
+    is_active?: boolean;
+}
+
+/** How long a cart state read may take before its answer counts as missing. */
+export const CART_STATE_TIMEOUT_MS = 15000;
+
+/**
+ * One read of the cart, never retried, with a time limit: used after an
+ * order request lost its answer. An ordered guest quote still answers 200,
+ * with `is_active` false and without its items.
+ */
+export function getGuestCartState(maskedCartId: string): Promise<CartStateProbe> {
+    return apiFetch<CartStateProbe>(
+        `guest-carts/${encodeURIComponent(maskedCartId)}`,
+        { auth: 'guest', retry: false, timeoutMs: CART_STATE_TIMEOUT_MS }
+    );
+}
+
+/**
+ * The customer's counterpart: `carts/mine` answers 404 once the quote was
+ * ordered, and a quote with another id when a new cart was started since.
+ */
+export function getCustomerCartState(): Promise<CartStateProbe> {
+    return apiFetch<CartStateProbe>(
+        'carts/mine',
+        { auth: 'customer', retry: false, timeoutMs: CART_STATE_TIMEOUT_MS }
+    );
+}
+
 export function getGuestTotals(maskedCartId: string): Promise<Totals> {
     return apiFetch<Totals>(
         `guest-carts/${encodeURIComponent(maskedCartId)}/totals`,

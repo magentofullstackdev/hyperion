@@ -101,7 +101,20 @@
         <referenceBlock name="category.product.list.additional.wishlist_addto" remove="true"/>
         <referenceBlock name="google.maps.api" remove="true"/>
         <referenceBlock name="theme.active.editor" remove="true"/>
-        <referenceBlock name="head.additional" remove="true"/>
+        <!-- `head.additional` renders (root.phtml prints it), so a module's head block lands in
+             the page as that module wrote it. Core children that only feed RequireJS are removed
+             by name, here and with `translate-config` above: the analytics, Ads and form key
+             `x-magento-init` scripts, and the `window.sriHashes` map of the checkout pages, which
+             only core's RequireJS loader reads. Core's product Open Graph block goes too: the
+             tags come from HyperionCatalog (Model\OpenGraph). A removal declared in this handle
+             also applies to a block that a page-specific handle adds, removals run once every
+             handle is merged. A child theme removes one more head block the same way. -->
+        <referenceBlock name="google_analytics" remove="true"/>
+        <referenceBlock name="google_gtag_analytics" remove="true"/>
+        <referenceBlock name="gtag_google_adwords" remove="true"/>
+        <referenceBlock name="form_key_provider" remove="true"/>
+        <referenceBlock name="csp.sri.hashes" remove="true"/>
+        <referenceBlock name="opengraph.general" remove="true"/>
 
         <!-- Additional Luma JS-init bootstrap blocks that emit inert
              <script type="text/x-magento-init"> JSON payloads (mage/cookies,
@@ -354,12 +367,16 @@
                 </block>
             </block>
 
-            <!-- Remove Luma footer children superseded by hyperion.footer. -->
-            <referenceBlock name="footer_links" remove="true"/>
+            <!-- Luma footer children superseded by hyperion.footer. -->
             <referenceBlock name="copyright" remove="true"/>
             <referenceBlock name="report.bugs" remove="true"/>
             <referenceBlock name="form.subscribe.info" remove="true"/>
         </referenceContainer>
+        <!-- Core's `footer_links` block stays in the layout, so the links other modules add to it
+             (search terms, advanced search, RSS) reach the footer, which lists them itself. It
+             moves out of core's `footer` container, which would print it as a raw list, under
+             hyperion.footer with an alias the template never prints. -->
+        <move element="footer_links" destination="hyperion.footer" as="core_links"/>
 
         <!-- ===========================================================
              Structural classes for `main`, `columns`, `sidebar.main`,

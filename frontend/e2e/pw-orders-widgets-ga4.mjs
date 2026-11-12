@@ -4,9 +4,11 @@
 // Live check of the order view completeness, the wishlist / compare sidebars,
 // the recently viewed / compared widgets and GA4 + Google Ads:
 //   node e2e/pw-orders-widgets-ga4.mjs https://shop.example <slotDir>
-// Turns on bank transfer with instructions and GA4 / Ads test ids, creates the
-// CMS page /hyperion-history-check (e2e/fixtures/sprint3-fixtures.php) and restores
-// everything at the end. The customer login needs the customer_login reCAPTCHA
+// Turns on bank transfer with instructions, the purchase order method, a check
+// payee and GA4 / Ads test ids, creates the CMS page /hyperion-history-check
+// (e2e/fixtures/sprint3-fixtures.php) and restores everything at the end. Also
+// places a guest order with a purchase order number and reads the number back
+// from the order. The customer login needs the customer_login reCAPTCHA
 // type cleared for the run (see docs/development.md). Exit code 1 on any failure.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
@@ -28,6 +30,8 @@ const slotDir = path.resolve(process.argv[3] || '.');
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'sprint3-fixtures.php');
 const CUSTOMER = { email: 'roni_cost@example.com', password: 'roni_cost3@example.com' };
 const INSTRUCTIONS = 'Wire the amount to IBAN IT60X0542811101000000123456 within 3 days.';
+const PAYEE = 'Hyperion E2E Store';
+const PO_NUMBER = `HYP-PO-${Date.now()}`;
 
 const results = [];
 const check = (name, ok, detail = '') => {
@@ -40,27 +44,35 @@ function compose(service, cmd, user) {
 }
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
-const configValue = (p) => { const v = sql(`select value from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`); return v === '' ? null : v; };
-function restoreConfig(p, previous) {
-    if (previous === null) sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`);
-    else magento(`config:set ${p} ${JSON.stringify(previous)}`);
+// A default-scope setting as stored: no row, a row holding SQL NULL, or a row with a value (read as hex, so any text survives the trip).
+const configSnapshot = (p) => {
+    const raw = sql(`select if(value is null, 'N', concat('V', hex(value))) from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`);
+    if (raw === '') return { state: 'absent', value: null };
+    if (raw === 'N') return { state: 'null', value: null };
+    return { state: 'value', value: Buffer.from(raw.slice(1), 'hex').toString('utf8') };
+};
+// Puts a setting back exactly as the snapshot found it: the row removed, SQL NULL, or the stored value byte for byte.
+function restoreConfig(p, snapshot) {
+    if (snapshot.state === 'absent') {
+        sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`);
+        return;
+    }
+    const stored = snapshot.state === 'null' ? 'NULL' : `unhex('${Buffer.from(snapshot.value, 'utf8').toString('hex')}')`;
+    sql(`insert into core_config_data (scope, scope_id, path, value) values ('default', 0, '${p}', ${stored}) on duplicate key update value = ${stored}`);
 }
 const fixtures = (args) => compose('php-fpm', `cd /var/www/html && php /tmp/sprint3-fixtures.php /var/www/html ${args}`, 'www-data').trim();
 const CONFIG = {
     'payment/banktransfer/active': '1',
     'payment/banktransfer/instructions': INSTRUCTIONS,
+    'payment/purchaseorder/active': '1',
+    'payment/checkmo/payable_to': PAYEE,
     'google/gtag/analytics4/active': '1',
     'google/gtag/analytics4/measurement_id': 'G-TEST12345',
     'google/gtag/adwords/active': '1',
     'google/gtag/adwords/conversion_id': 'AW-TEST123',
-    'google/gtag/adwords/conversion_label': 'spec023',
+    'google/gtag/adwords/conversion_label': 'hyperion-e2e',
 };
-const previous = Object.fromEntries(Object.keys(CONFIG).map((p) => [p, configValue(p)]));
-execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint3-fixtures.php']);
-for (const [p, v] of Object.entries(CONFIG)) magento(`config:set ${p} ${JSON.stringify(v)}`);
-console.log(fixtures('page'));
-magento('cache:flush');
-console.log('config set: bank transfer, GA4 + Ads test ids, history page');
+const previous = Object.fromEntries(Object.keys(CONFIG).map((p) => [p, configSnapshot(p)]));
 
 const browser = await chromium.launch({ headless: true, ...launchOptions() });
 async function newJourney() {
@@ -85,10 +97,39 @@ async function login(page) {
 }
 const dataLayerEvents = (page) => page.evaluate(() => (window.dataLayer || []).filter((a) => a[0] === 'event').map((a) => [a[1], a[2]]));
 const history = (page, key) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), key);
+async function fillGuestAddress(page) {
+    const fill = async (sel, value) => { const el = page.locator(sel).first(); if (await el.count()) await el.fill(value); };
+    await fill('input[type="email"][name="email"], checkout-email input[type="email"]', `po.${Date.now()}@example.com`);
+    await fill('input[name="firstname"]', 'Purchase');
+    await fill('input[name="lastname"]', 'Order');
+    await fill('input[name="street_0"]', '1 Test Street');
+    await fill('input[name="city"]', 'Calder');
+    const country = page.locator('select[name="country_id"]').first();
+    if (await country.count()) await country.selectOption('US');
+    await page.waitForTimeout(600);
+    const region = page.locator('select[name="region_id"]').first();
+    if (await region.count()) await region.selectOption({ label: 'Michigan' }).catch(() => {});
+    await fill('input[name="postcode"]', '49628');
+    await fill('input[name="telephone"]', '5552293326');
+    await page.locator('input[name="telephone"]').first().blur().catch(() => {});
+}
+const placeOrderState = (page) => page.evaluate(() => {
+    const button = document.querySelector('place-order-button button');
+    return {
+        softDisabled: button?.getAttribute('aria-disabled') === 'true',
+        disabled: !!button?.disabled,
+        hint: document.querySelector('place-order-button [data-place-order-hint]')?.textContent.replace(/\s+/g, ' ').trim() || '',
+    };
+});
 const waitHeaderState = (page) => page.waitForResponse((r) => r.url().includes('/hyperion/header/state'), { timeout: 20000 }).catch(() => null);
 let orderId;
 
 try {
+    execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint3-fixtures.php']);
+    for (const [p, v] of Object.entries(CONFIG)) magento(`config:set ${p} ${JSON.stringify(v)}`);
+    console.log(fixtures('page'));
+    magento('cache:flush');
+    console.log('config set: bank transfer, purchase order, check payee, GA4 + Ads test ids, history page');
     // ------------------------------------------------------------ guest: GA4, history, compare sidebar
     {
         const j = await newJourney();
@@ -146,6 +187,69 @@ try {
         await j.ctx.close();
     }
 
+    // ------------------------------------------------------------ guest: check payee, purchase order number
+    {
+        const j = await newJourney();
+        const { page } = j;
+        const orderBodies = [];
+        page.on('request', (r) => {
+            if (r.method() === 'POST' && /\/payment-information$/.test(r.url())) {
+                try { orderBodies.push(JSON.parse(r.postData() ?? 'null')); } catch { orderBodies.push(null); }
+            }
+        });
+        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
+        await page.click('#product_addtocart_form button[type="submit"]');
+        await toast(page);
+        await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
+        await page.waitForSelector('checkout-app', { timeout: 30000 }).catch(() => {});
+        await fillGuestAddress(page);
+        await page.waitForSelector('shipping-method-row', { timeout: 40000 }).catch(() => {});
+        await page.waitForSelector('#hc-pay-purchaseorder', { timeout: 40000 }).catch(() => {});
+
+        if (await page.locator('#hc-pay-checkmo').count()) {
+            await page.locator('#hc-pay-checkmo').click();
+            const payee = await page.locator('payment-offline [data-payment-check-payable-to]').first().textContent({ timeout: 10000 }).catch(() => '');
+            check('checkout: the check payee is visible when Check / Money order is selected', (payee || '').trim() === PAYEE, payee || '(none)');
+        } else {
+            console.log('SKIP  checkout: check payee (Check / Money order is not offered on this install)');
+        }
+
+        check('checkout: purchase order offered', await page.locator('#hc-pay-purchaseorder').count() === 1);
+        await page.locator('#hc-pay-purchaseorder').click();
+        await page.waitForSelector('payment-offline input[name="po_number"]', { timeout: 10000 }).catch(() => {});
+        await page.waitForTimeout(1500);
+        let state = await placeOrderState(page);
+        check('purchase order: Place Order is soft disabled while the number is empty', state.softDisabled && !state.disabled, JSON.stringify(state));
+        await page.locator('place-order-button button').click({ force: true }).catch(() => {});
+        await page.waitForSelector('place-order-button [data-place-order-hint]', { timeout: 10000 }).catch(() => {});
+        state = await placeOrderState(page);
+        check('purchase order: an early press names the purchase order number and places nothing',
+            /purchase order number/i.test(state.hint) && !page.url().includes('success') && orderBodies.length === 0, state.hint || '(no hint)');
+        check('purchase order: the empty field is marked invalid with its message',
+            await page.evaluate(() => {
+                const input = document.querySelector('payment-offline input[name="po_number"]');
+                return input?.getAttribute('aria-invalid') === 'true' && /purchase order number/i.test(input.closest('hc-text-input')?.textContent || '');
+            }));
+
+        await page.locator('payment-offline input[name="po_number"]').fill(PO_NUMBER);
+        await page.waitForFunction(() => document.querySelector('place-order-button button')?.getAttribute('aria-disabled') !== 'true', null, { timeout: 15000 }).catch(() => {});
+        state = await placeOrderState(page);
+        check('purchase order: Place Order opens once the number is typed', !state.softDisabled && !state.disabled, JSON.stringify(state));
+        await page.locator('place-order-button button').click().catch(() => {});
+        await page.waitForURL((url) => url.toString().includes('success'), { timeout: 45000 }).catch(() => {});
+        const banner = await page.evaluate(() => document.querySelector('error-banner')?.innerText || '');
+        check('purchase order: guest order placed', page.url().includes('success'), banner || page.url().replace(base, ''));
+        const body = orderBodies.find((b) => b && b.paymentMethod);
+        check('purchase order: the number travels as a top-level field of the payment',
+            body?.paymentMethod?.po_number === PO_NUMBER && !('additional_data' in (body?.paymentMethod ?? {})), JSON.stringify(body?.paymentMethod ?? null));
+        const poOrderId = await page.evaluate(() => (document.body.innerText.match(/#\s*(\d{9})/) || [])[1] || '');
+        let stored = '';
+        try { stored = poOrderId ? fixtures(`po ${poOrderId}`) : ''; } catch (e) { stored = `fixture failed: ${String(e.message).slice(0, 80)}`; }
+        check('purchase order: the order carries the typed number', poOrderId !== '' && stored === PO_NUMBER, `${poOrderId}: ${stored}`);
+        check('guest purchase order: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
+        await j.ctx.close();
+    }
+
     // ------------------------------------------------------------ customer: wishlist sidebar, bank transfer order, order view
     {
         const j = await newJourney();
@@ -182,6 +286,9 @@ try {
         await page.waitForSelector('#hc-pay-banktransfer', { timeout: 40000 }).catch(() => {});
         check('checkout: bank transfer offered', await page.locator('#hc-pay-banktransfer').count() === 1);
         await page.locator('#hc-pay-banktransfer').click();
+        const shownInstructions = await page.locator('payment-offline [data-payment-instructions]').first().textContent({ timeout: 10000 }).catch(() => '');
+        check('checkout: bank transfer instructions shown for the selected method before the order',
+            (shownInstructions || '').includes('IBAN IT60X0542811101000000123456') && !page.url().includes('success'), (shownInstructions || '(none)').slice(0, 100));
         await page.waitForTimeout(1500);
         await page.locator('place-order-button button').click().catch(() => {});
         await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
@@ -191,7 +298,7 @@ try {
         const purchase = successEvents.find(([n]) => n === 'purchase');
         const conversion = successEvents.find(([n]) => n === 'conversion');
         check('gtag: purchase on the success page with the order number', !!purchase && purchase[1].transaction_id === orderId && purchase[1].items?.length > 0, JSON.stringify(purchase?.[1]).slice(0, 160));
-        check('gtag: Google Ads conversion sent with the purchase', !!conversion && conversion[1].send_to === 'AW-TEST123/spec023' && conversion[1].transaction_id === orderId, JSON.stringify(conversion?.[1]));
+        check('gtag: Google Ads conversion sent with the purchase', !!conversion && conversion[1].send_to === 'AW-TEST123/hyperion-e2e' && conversion[1].transaction_id === orderId, JSON.stringify(conversion?.[1]));
         check('success page: no x-magento-init from the core Ads blocks', await page.evaluate(() => document.querySelectorAll('script[type="text/x-magento-init"], [data-mage-init]').length) === 0);
 
         console.log(fixtures(`comment ${orderId}`));
@@ -234,14 +341,29 @@ try {
         check('guest: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
         await j.ctx.close();
     }
+} catch (e) {
+    check('script completed', false, String(e?.message ?? e).split('\n')[0]);
 } finally {
-    await browser.close();
-    for (const [p, v] of Object.entries(previous)) restoreConfig(p, v);
-    console.log(fixtures('remove'));
-    compose('php-fpm', 'rm -f /tmp/sprint3-fixtures.php');
-    magento('cache:flush');
-    console.log('config restored');
+    // Every step runs even when another one throws; a step that fails is a failed check.
+    const steps = [
+        ['browser closed', () => browser.close()],
+        ...Object.entries(previous).map(([p, snapshot]) => [`${p} restored`, () => restoreConfig(p, snapshot)]),
+        ['fixtures removed', () => console.log(fixtures('remove'))],
+        ['fixture file removed', () => compose('php-fpm', 'rm -f /tmp/sprint3-fixtures.php')],
+        ['cache flushed', () => magento('cache:flush')],
+    ];
+    let restored = true;
+    for (const [label, step] of steps) {
+        try {
+            await step();
+        } catch (e) {
+            restored = false;
+            check(`restore: ${label}`, false, String(e?.message ?? e).split('\n')[0]);
+        }
+    }
+    console.log(restored ? 'config restored' : 'config NOT fully restored, see the failed restore checks');
 }
 const failed = results.filter((r) => !r.ok);
 console.log(JSON.stringify({ base, total: results.length, passed: results.length - failed.length, failed: failed.map((f) => f.name) }, null, 2));
+console.log(`${results.length - failed.length} / ${results.length} passed`);
 process.exit(failed.length ? 1 : 0);

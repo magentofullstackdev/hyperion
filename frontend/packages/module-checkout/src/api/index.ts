@@ -11,13 +11,14 @@ export {
     buildClientConfig,
     MagentoApiError,
     NetworkError,
+    RequestTimeoutError,
 } from './client.js';
 export type {
     ApiFetchOptions,
     AuthMode,
     ClientConfig,
 } from './client.js';
-export { normaliseMagentoError } from './errors.js';
+export { normalizeMagentoError } from './errors.js';
 
 export * from './cart.js';
 export * from './shipping.js';

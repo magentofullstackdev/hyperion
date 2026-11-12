@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionNavigation\Block;
 
 use Magentofullstackdev\HyperionNavigation\Model\LogoResolver;
+use Magentofullstackdev\HyperionNavigation\Model\StoreBrand;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Template;
 use Magento\Framework\View\Element\Template\Context;
@@ -20,6 +21,7 @@ class Header extends Template
      * @param UrlInterface $urlBuilder
      * @param LogoResolver $logoResolver
      * @param LoggerInterface $logger
+     * @param StoreBrand $storeBrand
      * @param array $data
      */
     public function __construct(
@@ -28,6 +30,7 @@ class Header extends Template
         private readonly UrlInterface $urlBuilder,
         private readonly LogoResolver $logoResolver,
         private readonly LoggerInterface $logger,
+        private readonly StoreBrand $storeBrand,
         array $data = []
     ) {
         parent::__construct($context, $data);
@@ -50,16 +53,13 @@ class Header extends Template
     }
 
     /**
+     * The merchant's brand name (never the store view name).
+     *
      * @return string
      */
     public function getStoreName(): string
     {
-        try {
-            return (string) $this->storeManager->getStore()->getName();
-        } catch (\Throwable $e) {
-            $this->logger->error('Hyperion Header: failed to get store name: ' . $e->getMessage());
-            return '';
-        }
+        return $this->storeBrand->getName();
     }
 
     /**

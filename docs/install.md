@@ -2,24 +2,26 @@
 
 This is the procedure that was verified on a clean Magento Open Source
 2.4.8-p5 with the Luma sample data (2,040 products), then repeated on Magento
-2.4.7-p10, 2.4.9, Mage-OS 2.3.0, 3.6.0 and 4.0.0. See [Compatibility](./compatibility.md).
+2.4.9, Mage-OS 3.6.0 and 4.0.0. The supported platforms, their tiers and the
+dates of the test runs are in [Compatibility](./compatibility.md).
 
 ## Prerequisites
 
 | Requirement | Value |
 |---|---|
 | PHP | 8.3, 8.4 or 8.5, with `ext-gd` (`ext-imagick` recommended for catalogs with 1000+ products) |
-| Magento | Open Source 2.4.6+ or Mage-OS 2.x / 3.x / 4.0 (`magento/framework ^103.0.6`); tested on 2.4.7, 2.4.8, 2.4.9, Mage-OS 2.3.0, 3.6.0 and 4.0.0 |
+| Magento | Open Source 2.4.8 or 2.4.9, Mage-OS 3.6 or 4.0 (`magento/framework ^103.0.8`). Tier 1: Magento 2.4.9 and Mage-OS 4.0; Tier 2: Magento 2.4.8 and Mage-OS 3.6 ([support policy](./compatibility.md#support-policy)). Older platforms keep the last release that supported them ([Previously tested](./compatibility.md#previously-tested)) |
 | Core modules | `Magento_PageBuilder`, `Magento_ReCaptchaUi`, `Magento_Swatches`, `Magento_Review`, `Magento_Wishlist`, `Magento_MessageQueue`, `Magento_Elasticsearch`, `Magento_AdvancedSearch`, `Magento_Backend`, `Magento_Ui`, `Magento_Widget` must be present (they are in every Open Source and Mage-OS install) |
 | Search engine | Elasticsearch or OpenSearch (the only engines Magento 2.4 supports): the search module queries the engine for the autocomplete and the relevance tuning |
-| Full page cache | Varnish 6 or 7 recommended (all test runs used Varnish); without it the ESI fragments render inline |
+| Full page cache | Varnish recommended (all test runs used it). Varnish 7.4 to 8.x tested; the VCL is `vcl 4.1` and uses only `std`; 6.0 LTS untested. Without Varnish the ESI fragments render inline |
 | Cron | running (`bin/magento cron:run`): the image consumer `hyperion.image.convert` is started by cron |
 | Node.js | not needed for a Composer install |
 
 Optional core modules that Hyperion detects at runtime and uses when they are
 enabled (Composer `suggest`, never required): `Magento_Msrp`,
-`Magento_GiftMessage`, `Magento_Paypal`, `Magento_OrderCancellation` (2.4.7+),
-`Magento_LoginAsCustomer`.
+`Magento_GiftMessage`, `Magento_Paypal`, `Magento_OrderCancellation`,
+`Magento_LoginAsCustomer`, and on Mage-OS 4.0 `MageOS_Seo` (it then owns the
+Open Graph tags, see [Compatibility](./compatibility.md#mage-os-40-seo-module)).
 
 ## 1. Composer
 
@@ -34,13 +36,13 @@ the Magento root:
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.4
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.4   # optional, see below
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.5
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.5   # optional, see below
 ```
 
 `minimum-stability beta` is needed while the release is a beta: the theme
-requires its modules at the exact version `0.9.0-beta.4`, and a stability
-flag on the root constraint (`^0.9.0-beta.4`) does not reach those
+requires its modules at the exact version `0.9.0-beta.5`, and a stability
+flag on the root constraint (`^0.9.0-beta.5`) does not reach those
 transitive requirements. `prefer-stable` keeps every other package on its
 stable release, and Magento projects already ship with it set. The step
 disappears with the first stable release.
@@ -51,7 +53,7 @@ one command installs the suite (11 packages, 12 with the sample data module):
 | Package | Type |
 |---|---|
 | `magentofullstackdev/theme-hyperion` | theme `Magentofullstackdev/hyperion` |
-| `magentofullstackdev/module-hyperion-core` | ESI, asset manifest, HTMX plugins, header state, Varnish BAN |
+| `magentofullstackdev/module-hyperion-core` | ESI, asset manifest, HTMX plugins, header state, the Varnish VCL, rate limiter |
 | `magentofullstackdev/module-hyperion-catalog` | listing and product page blocks, fragment endpoints, swatches |
 | `magentofullstackdev/module-hyperion-catalog-mode` | catalog mode: purchasing limited to selected customer groups (off by default) |
 | `magentofullstackdev/module-hyperion-checkout` | Lit checkout, cart page, mini-cart fragments |
@@ -61,13 +63,43 @@ one command installs the suite (11 packages, 12 with the sample data module):
 | `magentofullstackdev/module-hyperion-image` | WebP / AVIF generation |
 | `magentofullstackdev/module-hyperion-search` | search engine autocomplete (products, popular terms, categories), typo tolerance, SKU and promoted boosts, stop words, zero-results fallback |
 | `magentofullstackdev/module-hyperion-mega-menu` | admin menu builder (Content > Menu > Menu Management) rendered by the Hyperion navigation; the category tree stays the menu until a group exists |
-| `magentofullstackdev/module-hyperion-sample-data` | optional: rebinds the Luma sample-data widgets to Hyperion, adds a bundle and a virtual test product |
+| `magentofullstackdev/module-hyperion-sample-data` | optional, demo stores only: moves the Luma sample widgets to Hyperion, adds three test products |
 
 Install `module-hyperion-sample-data` only on a store that has the Luma
-sample data: it rebinds the sample widgets and layout links to the Hyperion
-theme on every `setup:upgrade` (they are bound to `Magento/luma` and would
-never render otherwise) and creates the products `HYP-BUNDLE-TRAVEL-KIT` and
-`HYP-VIRTUAL-GIFT-WRAP` for testing. Do not install it on a production store.
+sample data and shows it with Hyperion: it is a demo helper. On every
+`setup:upgrade` it does four things:
+
+- While `Magento_WidgetSampleData` is enabled, it moves the 17 CMS block
+  widgets the Luma sample data creates (matched by type and title) and their
+  layout links from `Magento/luma` to the Hyperion theme; bound to Luma they
+  would never render. Other widgets and the custom layout updates of
+  categories, products and CMS pages are not touched.
+- It replaces `pub/media/styles.css` when that file is the Luma sample
+  stylesheet (recognized by its selectors) and keeps the original as
+  `pub/media/styles.css.luma.bak`. A stylesheet of your own is left alone and
+  reported in the log.
+- It removes the `{{MEDIA_URL}}styles.css` link from `design/head/includes`
+  for the store views that run Hyperion or a child theme. A row shared with a
+  store view on another theme stays, and the Hyperion store views get a
+  cleaned value at their own scope.
+- It creates the products `HYP-BUNDLE-TRAVEL-KIT`, `HYP-VIRTUAL-GIFT-WRAP`
+  and `HYP-CUSTOM-ENGRAVED-BOTTLE` when the Luma catalog is present; a
+  failure is logged and never aborts the deploy.
+- Two data patches, applied once, give the sample store its look: the store
+  name `HYPERION` (Store Information > Store Name, only when the store has no
+  name yet), which the theme prints as the wordmark while no logo image is
+  configured, and the CMS block `hyperion-footer-about` with a sample
+  sentence under the footer logo (only when no block with that identifier
+  exists). The sentence is a `{{trans}}` directive translated by the module's
+  `i18n/` files. Change the name or the block in the admin afterwards; the
+  patches never run again.
+
+**Do not install it on a production store, and not on a store that serves
+Luma to customers on another store view.** `pub/media/styles.css` is one
+file for every store view: once replaced, a Luma store view still links it
+but loses the sample content styling (restore `styles.css.luma.bak` and
+disable the module to get it back). A widget instance has one theme: a
+sample widget moved to Hyperion no longer renders on a Luma store view.
 
 ## 2. Magento setup
 
@@ -195,9 +227,45 @@ Anti-Abuse Shield ([Configuration](./configuration.md)).
   (products, popular terms, categories), served by `/hyperion/search/suggest`
   with `x-magento-cache-debug: MISS` then `HIT` (same request header).
 
-## Mail on Magento 2.4.8+ and Mage-OS
+## Production checklist
 
-Magento 2.4.8+ and Mage-OS use Symfony Mailer, which rejects the
+- **Production mode**: `bin/magento deploy:mode:set production` (or your
+  pipeline's equivalent), then `setup:di:compile` and
+  `setup:static-content:deploy`. The build output of the theme and of the
+  checkout is committed, so the deploy only publishes files.
+- **JS and CSS minification are supported** (`dev/js/minify_files`,
+  `dev/css/minify_files`). The theme and checkout bundles are already
+  minified by Vite and import each other by file name, so Magento must
+  neither rewrite nor rename them: `HyperionCore` ships two exclude defaults,
+  `dev/js/minify_exclude/hyperion_build` =
+  `/assets/[^/]+[.-][A-Za-z0-9_-]{8}\.js$` and
+  `dev/css/minify_exclude/hyperion_build` =
+  `/assets/[^/]+[.-][A-Za-z0-9_-]{8}\.css$`, which match every hashed file
+  directly under an `assets/` directory (`name.<hash>.js`, `name-<hash>.js`
+  and the `.css` twins: the theme's and the checkout's output). Everything
+  else is minified by Magento as usual, including the email stylesheets
+  (`css/email.css`, `css/email-inline.css`) and the mega menu admin files.
+  The two values are configuration defaults, not admin fields:
+  `bin/magento config:set` refuses the path, an override goes through
+  `app/etc/env.php` / `config.php` or an environment variable. Redeploy the
+  static content after switching minification on or off.
+- **HTML minification is not supported** in this release: keep
+  `dev/template/minify_html` at 0. Magento's template minifier breaks the
+  PHP heredoc blocks several Hyperion templates use, and every page answers
+  an error with it on ([Known limitations](./known-limitations.md)).
+- **Child themes**: a theme scaffolded with this release is covered by the
+  same excludes; one scaffolded earlier may need three lines in its
+  `vite.config.js`, see [Child themes](./child-themes.md#minification).
+- **Trusted proxies** (`hyperion/security/trusted_proxies`), the Varnish
+  purge ACL and the edge rule that refuses `PURGE`: see step 5 above and
+  [Varnish](./varnish.md).
+- **Store name**: the header and footer wordmark print Stores >
+  Configuration > General > Store Information > Store Name (then the store
+  group name, the website name, the host). Set it, or upload a logo.
+
+## Mail
+
+Every supported platform uses Symfony Mailer, which rejects the
 `sendmail_path` helper scripts that local stacks (MailHog, Mailpit) often
 configure ("Unsupported sendmail command flags"). Configure an SMTP transport
 instead: `system/smtp/transport = smtp`, `system/smtp/host`, `system/smtp/port`.
@@ -227,7 +295,9 @@ bin/magento cache:flush
 
 All twelve packages (eleven modules and the theme) carry the same version and
 require each other with `self.version`, so they always move together. Read the [changelog](../CHANGELOG.md)
-for the release you upgrade to. If `pub/static` keeps symlinks to old hashed
+for the release you upgrade to: a release that needs more than these
+commands has an "Upgrade notes" block (`0.9.0-beta.5` asks for a new VCL, a
+cache flush and a look at the page head). If `pub/static` keeps symlinks to old hashed
 assets (developer mode), remove the dangling ones before the deploy:
 `find pub/static -xtype l -delete`.
 

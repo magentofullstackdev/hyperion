@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -44,11 +45,7 @@ function compose(service, cmd, user) {
 }
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
-const configValue = (p) => { const v = sql(`select value from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`); return v === '' ? null : v; };
-function restoreConfig(p, previous) {
-    if (previous === null) sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`);
-    else magento(`config:set ${p} ${JSON.stringify(previous)}`);
-}
+const { configSnapshot, restoreConfig } = makeConfigSnapshot(sql);
 const setStock = (sku, qty) => JSON.parse(compose('php-fpm', `cd /var/www/html && php /tmp/variant-stock-fixture.php /var/www/html set ${sku} ${qty}`, 'www-data').trim());
 function reindexStock() {
     // Both indexers exist on MSI, only the first one without it.
@@ -62,7 +59,7 @@ const productPath = (sku) => sql(`select request_path from url_rewrite where ent
 execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURE, 'php-fpm:/tmp/variant-stock-fixture.php']);
 const lowChildId = Number(sql(`select entity_id from catalog_product_entity where sku = '${LOW_SKU}'`));
 const pdpPath = '/' + productPath(PARENT_SKU);
-const previousThreshold = configValue(THRESHOLD_PATH);
+const previousThreshold = configSnapshot(THRESHOLD_PATH);
 const stock = setStock(LOW_SKU, LOW_QTY);
 console.log('fixture:', JSON.stringify(stock), 'child id', lowChildId, 'pdp', pdpPath);
 magento(`config:set ${THRESHOLD_PATH} ${THRESHOLD}`);
@@ -130,7 +127,7 @@ try {
 }
 
 // Without a threshold (the default) the config carries no notices at all.
-if (previousThreshold === null || Number(previousThreshold) <= 0) {
+if (previousThreshold.value === null || Number(previousThreshold.value) <= 0) {
     const ctx = await (await chromium.launch({ headless: true, ...launchOptions() })).newContext({ ignoreHTTPSErrors: true });
     const html = await (await ctx.request.get(base + pdpPath)).text();
     check('threshold 0: no stockNotices in the swatch config', html.includes('hyperion-swatches') && !html.includes('stockNotices'), `${html.length} bytes`);

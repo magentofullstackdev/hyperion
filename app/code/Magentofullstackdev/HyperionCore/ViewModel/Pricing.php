@@ -8,37 +8,59 @@ namespace Magentofullstackdev\HyperionCore\ViewModel;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Model\Product as CatalogProduct;
 use Magento\Catalog\Pricing\Price\FinalPrice;
-use Magento\ConfigurableProduct\Model\Product\Type\Configurable as ConfigurableType;
-use Magento\Framework\Pricing\Helper\Data as PricingHelper;
+use Magento\Catalog\Pricing\Price\RegularPrice;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\Pricing\Amount\AmountInterface;
+use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
+use Magento\Store\Model\ScopeInterface;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Compact price of a product for the tiles that have no price render block
+ * (widget grid, cart cross-sell).
+ *
+ * Amounts come from the product's price info: they carry the tax adjustment
+ * of the catalog tax display and are already in the display currency, so
+ * they are formatted and never converted again.
+ */
 class Pricing implements ArgumentInterface
 {
-    /** @var array<int, array{0:float,1:float}> */
-    private array $lowestPriceCache = [];
+    private const TAX_DISPLAY_TYPE_PATH = 'tax/display/type';
+    private const TAX_DISPLAY_BOTH = 3;
+    private const TAX_ADJUSTMENT = 'tax';
+    /** Types whose price is the lowest one the shopper can pay. */
+    private const LOWEST_PRICE_TYPES = ['configurable', 'grouped', 'bundle'];
 
     public function __construct(
-        private readonly PricingHelper $pricingHelper,
+        private readonly PriceCurrencyInterface $priceCurrency,
         private readonly LoggerInterface $logger,
-        private readonly DegradedResponse $degradedResponse
+        private readonly DegradedResponse $degradedResponse,
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
     }
 
+    /**
+     * A base currency amount converted to the display currency: formatted,
+     * or as a plain number when `$format` is false.
+     */
     public function currency(float $amount, bool $format = true, bool $includeContainer = true): string
     {
-        return (string) $this->pricingHelper->currency($amount, $format, $includeContainer);
+        return $format
+            ? (string) $this->priceCurrency->convertAndFormat($amount, $includeContainer)
+            : (string) $this->priceCurrency->convert($amount);
     }
 
     /**
      * Render a product's price.
      *
      * Behavior:
-     *  - Configurable: bare lowest child final price (Hyva style, no "From" prefix).
-     *  - Grouped / bundle: "Starting at" / "From" the minimal final price of the price index.
+     *  - Configurable: bare lowest variant price (no "From" prefix), struck regular price when lower.
+     *  - Grouped / bundle: "Starting at" / "From" the minimal final price.
      *  - Discounted (catalog rule / special price): final bolder + regular struck-through.
      *  - Simple / everything else: single price.
+     *  - Catalog tax display "both": the excluding amount follows, muted.
      */
     public function getProductPriceHtml(ProductInterface $product): string
     {
@@ -58,145 +80,80 @@ class Pricing implements ArgumentInterface
     private function renderProductPrice(ProductInterface $product): string
     {
         if (!$product instanceof CatalogProduct) {
-            // Only the catalog model carries final prices and type instances.
-            return $this->renderSingle((float) $product->getPrice());
+            // Only the catalog model carries a price info: its raw price is a base currency amount.
+            return $this->wrap($this->escape($this->currency((float) $product->getPrice(), true, false)), 'hyperion-price');
         }
 
-        if ($product->getTypeId() === ConfigurableType::TYPE_CODE) {
-            $prices = $this->getLowestChildPricePair($product);
-            if ($prices === null) {
-                return $this->renderSingle((float) $product->getFinalPrice());
-            }
-            [$final, $regular] = $prices;
-            if ($regular > 0 && $final > 0 && $final < $regular) {
-                return $this->renderDiscounted($final, $regular);
-            }
-            return $this->renderSingle($final);
-        }
+        $priceInfo = $product->getPriceInfo();
+        $finalPrice = $priceInfo->getPrice(FinalPrice::PRICE_CODE);
+        $type = (string) $product->getTypeId();
+        $final = $finalPrice instanceof FinalPrice && in_array($type, self::LOWEST_PRICE_TYPES, true)
+            ? $finalPrice->getMinimalPrice()
+            : $finalPrice->getAmount();
+        $finalValue = (float) $final->getValue();
+        $excluding = $this->excludingTax($final);
 
-        // Types whose own price is 0: the price to show is the lowest price the
-        // shopper can pay, from the price index, behind core's label for the type.
-        $label = match ($product->getTypeId()) {
-            'grouped' => __('Starting at'),
-            'bundle' => __('From'),
+        // Types whose own price is 0: the lowest price behind core's label for the type.
+        $label = match ($type) {
+            'grouped' => (string) __('Starting at'),
+            'bundle' => (string) __('From'),
             default => null,
         };
         if ($label !== null) {
-            $minimal = $this->getMinimalFinalPrice($product);
-            if ($minimal !== null) {
-                return $this->renderFrom($minimal, (string) $label);
-            }
+            $labelHtml = $finalValue > 0
+                ? '<span class="text-sm font-normal text-muted">' . $this->escape($label) . '</span> '
+                : '';
+
+            return $this->wrap($labelHtml . '<span>' . $this->format($finalValue) . '</span>' . $excluding);
         }
 
-        $regular = (float) $product->getPrice();
-        $final = (float) $product->getFinalPrice();
-
-        if ($regular <= 0 && $final <= 0) {
-            return $this->renderSingle(0.0);
+        $regularValue = (float) $priceInfo->getPrice(RegularPrice::PRICE_CODE)->getAmount()->getValue();
+        if ($finalValue > 0 && $regularValue > $finalValue) {
+            return $this->wrap(
+                '<span class="text-secondary font-extrabold">' . $this->format($finalValue) . '</span> '
+                . '<span class="text-muted line-through font-normal">' . $this->format($regularValue) . '</span>'
+                . $excluding,
+                'hyperion-price hyperion-price--sale inline-flex items-baseline gap-2'
+            );
         }
 
-        if ($final > 0 && $regular > 0 && $final < $regular) {
-            return $this->renderDiscounted($final, $regular);
-        }
-
-        return $this->renderSingle($final > 0 ? $final : $regular);
+        return $excluding === ''
+            ? $this->wrap($this->format($finalValue), 'hyperion-price')
+            : $this->wrap('<span>' . $this->format($finalValue) . '</span>' . $excluding);
     }
 
     /**
-     * Lowest child final/regular price pair for a configurable product.
-     * Returns [final, regular] so callers can detect discounts.
-     *
-     * @return array{0:float,1:float}|null
+     * The muted "Excl. Tax" amount that follows the price when the catalog
+     * shows both, an empty string otherwise.
      */
-    private function getLowestChildPricePair(CatalogProduct $product): ?array
+    private function excludingTax(AmountInterface $amount): string
     {
-        $productId = (int) $product->getId();
-        if (isset($this->lowestPriceCache[$productId])) {
-            return $this->lowestPriceCache[$productId];
+        $displayType = (int) $this->scopeConfig->getValue(self::TAX_DISPLAY_TYPE_PATH, ScopeInterface::SCOPE_STORE);
+        if ($displayType !== self::TAX_DISPLAY_BOTH) {
+            return '';
         }
 
-        $typeInstance = $product->getTypeInstance();
-        if (!$typeInstance instanceof ConfigurableType) {
-            return null;
-        }
-
-        $children = $typeInstance->getUsedProducts($product);
-        if (empty($children)) {
-            return null;
-        }
-
-        $lowestFinal = null;
-        $matchedRegular = 0.0;
-        foreach ($children as $child) {
-            if (!$child instanceof CatalogProduct) {
-                continue;
-            }
-            $childFinal = (float) $child->getFinalPrice();
-            $childRegular = (float) $child->getPrice();
-            if ($childFinal <= 0) {
-                continue;
-            }
-            if ($lowestFinal === null || $childFinal < $lowestFinal) {
-                $lowestFinal = $childFinal;
-                $matchedRegular = $childRegular;
-            }
-        }
-
-        if ($lowestFinal === null) {
-            return null;
-        }
-
-        $pair = [$lowestFinal, $matchedRegular];
-        $this->lowestPriceCache[$productId] = $pair;
-        return $pair;
+        return ' <span class="text-sm font-normal text-muted">'
+            . $this->escape((string) __('Excl. Tax')) . ': '
+            . $this->format((float) $amount->getValue(self::TAX_ADJUSTMENT))
+            . '</span>';
     }
 
     /**
-     * Lowest final price of a grouped or bundle product (the cheapest
-     * associated product, the cheapest valid bundle selection), null when the
-     * price index has none.
+     * The parts are separated by a space in the markup: the flex gap is not
+     * part of the text a screen reader or a copy reads.
      */
-    private function getMinimalFinalPrice(CatalogProduct $product): ?float
+    private function wrap(string $inner, string $class = 'hyperion-price inline-flex items-baseline gap-1'): string
     {
-        $finalPrice = $product->getPriceInfo()->getPrice(FinalPrice::PRICE_CODE);
-        if (!$finalPrice instanceof FinalPrice) {
-            return null;
-        }
-        $minimal = (float) $finalPrice->getMinimalPrice()->getValue();
-
-        return $minimal > 0 ? $minimal : null;
+        return '<span class="' . $class . '">' . $inner . '</span>';
     }
 
-    private function renderFrom(float $price, string $label): string
+    /**
+     * A display currency amount as escaped text.
+     */
+    private function format(float $amount): string
     {
-        return sprintf(
-            '<span class="hyperion-price inline-flex items-baseline gap-1">'
-                . '<span class="text-sm font-normal text-muted">%s</span>'
-                . '<span>%s</span>'
-            . '</span>',
-            $this->escape($label),
-            $this->escape($this->currency($price, true, false))
-        );
-    }
-
-    private function renderSingle(float $price): string
-    {
-        return sprintf(
-            '<span class="hyperion-price">%s</span>',
-            $this->escape($this->currency($price, true, false))
-        );
-    }
-
-    private function renderDiscounted(float $final, float $regular): string
-    {
-        return sprintf(
-            '<span class="hyperion-price hyperion-price--sale inline-flex items-baseline gap-2">'
-                . '<span class="text-secondary font-extrabold">%s</span>'
-                . '<span class="text-muted line-through font-normal">%s</span>'
-            . '</span>',
-            $this->escape($this->currency($final, true, false)),
-            $this->escape($this->currency($regular, true, false))
-        );
+        return $this->escape((string) $this->priceCurrency->format($amount, false));
     }
 
     private function escape(string $value): string

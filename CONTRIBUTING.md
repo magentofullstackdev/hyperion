@@ -23,9 +23,10 @@ so small, focused pull requests are the ones that get merged fastest.
 
 ## Development setup
 
-Requirements: Node 22, pnpm 10, a Magento Open Source 2.4.7 to 2.4.9 or
-Mage-OS 2.3+ / 3.x install (the versions the end-to-end suite is run on,
-see [docs/compatibility.md](./docs/compatibility.md)).
+Requirements: Node 22, pnpm 10, and an install of one of the supported
+platforms: see the support policy and the matrix in
+[docs/compatibility.md](./docs/compatibility.md) (develop against a Tier 1
+platform when you can).
 
 ```
 cd frontend
@@ -53,7 +54,13 @@ PHP checks (run from the Magento root, the tools come with Magento's
 vendor/bin/phpcs --standard=Magento2 --extensions=php,phtml path/to/hyperion/app
 vendor/bin/phpstan analyse --level=5 path/to/hyperion/app/code/Magentofullstackdev
 for t in path/to/hyperion/app/code/Magentofullstackdev/*/Test; do vendor/bin/phpunit --no-extensions -c dev/tests/unit/phpunit.xml.dist "$t"; done
+php path/to/hyperion/.github/scripts/check-plugin-targets.php . path/to/hyperion
 ```
+
+Unit tests run on PHPUnit 10 and 12: data providers carry the
+`#[DataProvider]` attribute only. The last command checks that every plugin
+method targets an existing public method; details in
+[docs/development.md](./docs/development.md#php-quality-gate).
 
 Please read the [Code of Conduct](./CODE_OF_CONDUCT.md); it applies to
 issues, pull requests and discussions.

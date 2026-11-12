@@ -37,9 +37,11 @@
 
 $logoUrl = $block->getLogoUrl();
 // The logo link's accessible name: the image's alt (configured alt text or
-// store name, plus where the link goes), or the wordmark's visible text
-// followed by the same words in sr-only.
-$homeLabel = __('%1 Home', $block->getStoreName());
+// store name, plus where the link goes), or, for the wordmark, the store's
+// brand name plus where the link goes in sr-only (it starts with the visible
+// text, which is hidden from assistive technology so it is not read twice).
+$brandName = $block->getStoreName();
+$homeLabel = __('%1 Home', $brandName);
 $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
 $homeUrl = $escaper->escapeUrl($block->getHomeUrl());
 $searchUrl = $escaper->escapeUrl($block->getSearchActionUrl());
@@ -67,10 +69,12 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
             Resolution order (mirrors \Magento\Theme\Block\Html\Header\Logo::_getLogoUrl):
               1. Admin-uploaded logo (Stores > Configuration > Design > Header).
               2. Theme asset images/logo.svg when present on disk.
-              3. HYPERION wordmark -- text fallback, styled per main branch.
+              3. The store's brand name as a text wordmark.
         */ ?>
+        <?php /* A logo image keeps its size; the text wordmark gives way to the action icons
+                and ends in an ellipsis when the brand name is wider than the room left. */ ?>
         <a href="<?= /* @noEscape -- escaped above */ $homeUrl ?>"
-           class="shrink-0 inline-flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
+           class="<?= $logoUrl !== '' ? 'shrink-0' : 'min-w-0' ?> inline-flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
             <?php if ($logoUrl !== ''): ?>
                 <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
                      alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
@@ -78,11 +82,12 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                      class="h-10 w-auto object-contain"
                      loading="eager" fetchpriority="high">
             <?php else: ?>
-                <span class="text-2xl font-black tracking-tighter text-primary hover:text-primary-hover transition-colors">
-                    HYPERION<span class="text-secondary">.</span>
+                <span class="min-w-0 truncate text-2xl font-black tracking-tighter text-primary hover:text-primary-hover transition-colors"
+                      aria-hidden="true">
+                    <?= $escaper->escapeHtml($brandName) ?><?php if ($brandName !== ''): ?><span class="text-secondary">.</span><?php endif; ?>
                 </span>
                 <?php /* The accessible name starts with the visible text (no aria-label on the link). */ ?>
-                <span class="sr-only"> <?= $escaper->escapeHtml($homeLabel) ?></span>
+                <span class="sr-only"><?= $escaper->escapeHtml($homeLabel) ?></span>
             <?php endif; ?>
         </a>
 
@@ -353,6 +358,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                        hx-trigger="keyup changed delay:300ms, search"
                        hx-target="#header-search-suggestions"
                        hx-swap="innerHTML"
+                       hx-sync="this:replace"
                        hx-params="q">
                 <button type="submit"
                         aria-label="<?= $escaper->escapeHtmlAttr(__('Search')) ?>"

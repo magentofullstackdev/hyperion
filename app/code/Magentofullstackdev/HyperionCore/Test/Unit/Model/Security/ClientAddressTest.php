@@ -63,7 +63,6 @@ class ClientAddressTest extends TestCase
 
     /**
      * @param array<int, array<string, mixed>|string> $cacheHosts
-     * @dataProvider addressProvider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('addressProvider')]
     public function testResolvesTheClientAddress(string $remote, string $forwarded, string $proxies, string $expected, array $cacheHosts = []): void

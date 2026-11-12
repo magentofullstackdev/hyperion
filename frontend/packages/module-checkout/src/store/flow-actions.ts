@@ -39,10 +39,12 @@ import {
     setCustomerPaymentInformation,
     setGuestPaymentInformation,
 } from '../api/payment.js';
-import { isAbortError, MagentoApiError } from '../api/client.js';
+import { getCustomerCartState, getGuestCartState } from '../api/cart.js';
+import { isAbortError, MagentoApiError, NetworkError, RequestTimeoutError } from '../api/client.js';
 import { getStore } from './index.js';
 import { t } from '../utils/i18n.js';
 import { isAddressComplete } from '../utils/address-validation.js';
+import { debounce } from '../utils/debounce.js';
 import { executeRecaptcha } from '../components/hyperion-recaptcha.js';
 import { isSafeForGeneric } from '../components/payment-renderers/registry.js';
 import type { PaymentMethodConfig } from '../types/payment.js';
@@ -53,7 +55,7 @@ import type { Totals } from '../types/totals.js';
  * The quote address Magento receives, built from the checkout's address
  * (`Magento\Quote\Api\Data\AddressInterface` allowlist). A saved address of
  * the current customer is identified by `customer_address_id`, so core can
- * recognise it instead of treating it as new data; a new address carries
+ * recognize it instead of treating it as new data; a new address carries
  * `save_in_address_book` as 1 or 0 (what the checkbox shows, never a guess).
  */
 function addressToRequestPayload(addr: Address): AddressRequestPayload {
@@ -118,12 +120,61 @@ function isSameMethod(a: SelectedShippingMethod, b: SelectedShippingMethod): boo
     return a.carrier_code === b.carrier_code && a.method_code === b.method_code;
 }
 
+/**
+ * True for the in-store pickup rate, which is never offered: the checkout
+ * has no pickup location step, so an order with it would fail.
+ */
+export function isPickupRate(rate: SelectedShippingMethod): boolean {
+    return rate.carrier_code === 'instore' && rate.method_code === 'pickup';
+}
+
+/** A rate the shopper can actually choose: not an error row, and with a method to save. */
+function isUsableRate(rate: ShippingMethod): boolean {
+    return rate.available !== false && Boolean(rate.method_code);
+}
+
+/** How long the shipping form must stay quiet before its address is estimated. */
+const SHIPPING_ESTIMATE_DELAY_MS = 500;
+
+/** What reading the quote says about an order request that lost its answer. */
+type OrderOutcome = 'placed' | 'not-placed' | 'unknown';
+
+/**
+ * What `placeOrder()` resolves with: the order id, `'placed-unconfirmed'`
+ * when the answer was lost and the quote shows the order exists, or null
+ * when no order was placed (the reason is in `globalError`).
+ */
+export type PlaceOrderOutcome = number | 'placed-unconfirmed' | null;
+
+/**
+ * The estimate, shipping save or billing sync currently running, for
+ * `settleShipping()` to wait on. Each run registers itself and clears the
+ * slot when it is still the current one.
+ */
+let pendingShipping: Promise<void> | null = null;
+let pendingBilling: Promise<void> | null = null;
+
 export interface FlowActions {
     estimateShipping: () => Promise<void>;
+    /**
+     * The shipping address was edited: the quote no longer matches the
+     * form (`shippingDirty`, at once) and the rates are estimated once the
+     * typing pauses.
+     */
+    scheduleShippingEstimate: () => void;
+    /** The shipping address was replaced in one step (a saved address): estimate it now. */
+    estimateShippingNow: () => Promise<void>;
+    /**
+     * Run a scheduled estimate now and wait until no estimate, shipping save
+     * or billing sync is in flight. When the form is ahead of the quote and
+     * nothing is running (the last attempt failed), the estimate and save
+     * are sent once more first.
+     */
+    settleShipping: () => Promise<void>;
     saveShippingAndEstimateTotals: () => Promise<void>;
     applyCoupon: (code: string) => Promise<boolean>;
     removeCoupon: () => Promise<boolean>;
-    placeOrder: () => Promise<number | null>;
+    placeOrder: () => Promise<PlaceOrderOutcome>;
     /**
      * Save the selected payment method and billing address on the quote
      * without placing the order. False when it failed (the message is in
@@ -164,6 +215,9 @@ export function createFlowActions(): FlowActions {
     let billingGeneration = 0;
     let paymentInfoGeneration = 0;
 
+    pendingShipping = null;
+    pendingBilling = null;
+
     const resolveGuestId = (): string | null => store.maskedQuoteId.get();
     const isGuest = (): boolean => store.isGuest.get();
 
@@ -199,7 +253,73 @@ export function createFlowActions(): FlowActions {
         return payload;
     };
 
-    async function estimateShipping(): Promise<void> {
+    /** No estimate or save may start against a quote that is being ordered. */
+    const isOrdering = (): boolean => store.isPlacingOrder.get() || store.orderPlaced.get();
+
+    function trackShipping(run: Promise<void>): Promise<void> {
+        const tracked = run.finally(() => {
+            if (pendingShipping === tracked) pendingShipping = null;
+        });
+        pendingShipping = tracked;
+        return tracked;
+    }
+
+    function trackBilling(run: Promise<void>): Promise<void> {
+        const tracked = run.finally(() => {
+            if (pendingBilling === tracked) pendingBilling = null;
+        });
+        pendingBilling = tracked;
+        return tracked;
+    }
+
+    const estimateTimer = debounce((): void => {
+        void estimateShipping();
+    }, SHIPPING_ESTIMATE_DELAY_MS);
+
+    function scheduleShippingEstimate(): void {
+        store.shippingDirty.set(true);
+        estimateTimer();
+    }
+
+    function estimateShippingNow(): Promise<void> {
+        store.shippingDirty.set(true);
+        estimateTimer.cancel();
+        return estimateShipping();
+    }
+
+    async function settleShipping(): Promise<void> {
+        estimateTimer.flush();
+        // The form is ahead of the quote and nothing is on its way to fix
+        // that (an earlier estimate or save failed): try once more, for the
+        // current address and selection. One attempt per call, no loop.
+        const idle = pendingShipping === null
+            && pendingBilling === null
+            && !store.isLoadingShippingMethods.get()
+            && !store.isSavingShipping.get()
+            && !store.isSavingBilling.get();
+        if (idle && store.shippingDirty.get() && !store.isVirtual.get()) {
+            store.globalError.set(null);
+            void estimateShipping();
+        }
+        // Bounded: one run can start another (an estimate ends in a save, a
+        // billing sync in a shipping save), never an endless chain.
+        for (let i = 0; i < 5; i += 1) {
+            const pending = pendingShipping ?? pendingBilling;
+            if (pending === null) return;
+            await pending.catch(() => undefined);
+            const busy = store.isLoadingShippingMethods.get()
+                || store.isSavingShipping.get()
+                || store.isSavingBilling.get();
+            if (pendingShipping === null && pendingBilling === null && !busy) return;
+        }
+    }
+
+    function estimateShipping(): Promise<void> {
+        if (isOrdering()) return Promise.resolve();
+        return trackShipping(runEstimate());
+    }
+
+    async function runEstimate(): Promise<void> {
         const addr = store.shippingAddress.get();
         if (!isAddressComplete(addr)) return;
         if (rateController) rateController.abort();
@@ -229,11 +349,15 @@ export function createFlowActions(): FlowActions {
         }
         if (generation !== estimateGeneration || methods === null) return;
 
-        store.availableShippingMethods.set(methods);
+        // Error rows stay in the list so the shopper sees why a carrier
+        // does not serve the address; only usable rates can be selected.
+        const listed = methods.filter((m) => !isPickupRate(m));
+        store.availableShippingMethods.set(listed);
+        const usable = listed.filter(isUsableRate);
         const current = store.selectedShippingMethod.get();
-        const stillThere = current !== null && methods.some((m) => isSameMethod(m, current));
+        const stillThere = current !== null && usable.some((m) => isSameMethod(m, current));
         if (!stillThere) {
-            const first = methods[0];
+            const first = usable[0];
             if (!first) {
                 // Nothing serves this address: drop the stale selection and
                 // everything that was derived from it.
@@ -256,7 +380,12 @@ export function createFlowActions(): FlowActions {
         await saveShippingAndEstimateTotals();
     }
 
-    async function saveShippingAndEstimateTotals(): Promise<void> {
+    function saveShippingAndEstimateTotals(): Promise<void> {
+        if (isOrdering()) return Promise.resolve();
+        return trackShipping(runShippingSave());
+    }
+
+    async function runShippingSave(): Promise<void> {
         const shipping = store.shippingAddress.get();
         const selectedMethod = store.selectedShippingMethod.get();
         if (!isAddressComplete(shipping) || !selectedMethod) return;
@@ -285,6 +414,12 @@ export function createFlowActions(): FlowActions {
             // pre-selected: their SDK loads when the shopper picks them).
             applyPaymentDetails(details);
             store.appliedShippingMethod.set(selectedMethod);
+            // The quote now carries the address this request was built
+            // from. Every edit stores a new address object, so an edit made
+            // meanwhile keeps the form marked as ahead of the quote.
+            if (store.shippingAddress.get() === shipping) {
+                store.shippingDirty.set(false);
+            }
         } catch (err) {
             if (generation !== saveGeneration) return;
             store.appliedShippingMethod.set(null);
@@ -312,6 +447,7 @@ export function createFlowActions(): FlowActions {
 
     async function refreshPaymentInformation(): Promise<void> {
         const generation = ++paymentInfoGeneration;
+        store.isRefreshingTotals.set(true);
         try {
             const details = isGuest()
                 ? await getGuestPaymentInformation(resolveGuestId() ?? '')
@@ -321,6 +457,10 @@ export function createFlowActions(): FlowActions {
         } catch (err) {
             if (generation !== paymentInfoGeneration) return;
             store.globalError.set(extractMessage(err));
+        } finally {
+            if (generation === paymentInfoGeneration) {
+                store.isRefreshingTotals.set(false);
+            }
         }
     }
 
@@ -334,13 +474,34 @@ export function createFlowActions(): FlowActions {
         store.isSavingBilling.set(false);
     }
 
-    async function syncBillingAddress(): Promise<void> {
+    function syncBillingAddress(): Promise<void> {
+        return trackBilling(runBillingSync());
+    }
+
+    /**
+     * True when the quote does not carry the shipping selection although
+     * one exists: a shipping save was skipped while the separate billing
+     * address was incomplete, and nothing else is about to send it.
+     */
+    function shippingSaveIsOwed(): boolean {
+        if (store.isVirtual.get()) return false;
+        const selected = store.selectedShippingMethod.get();
+        if (selected === null) return false;
+        if (estimateTimer.pending() || store.isLoadingShippingMethods.get() || store.isSavingShipping.get()) {
+            return false;
+        }
+        const applied = store.appliedShippingMethod.get();
+        return store.shippingDirty.get() || applied === null || !isSameMethod(applied, selected);
+    }
+
+    async function runBillingSync(): Promise<void> {
         if (!billingNeedsOwnSync()) return;
         const billing = store.billingAddress.get();
         if (!isAddressComplete(billing)) return;
         const generation = ++billingGeneration;
         store.billingSynced.set(false);
         store.isSavingBilling.set(true);
+        let synced = false;
         try {
             const request = { address: quoteAddress(billing), useForShipping: false };
             if (isGuest()) {
@@ -354,6 +515,7 @@ export function createFlowActions(): FlowActions {
             if (generation !== billingGeneration) return;
             applyPaymentDetails(details);
             store.billingSynced.set(true);
+            synced = true;
         } catch (err) {
             if (generation !== billingGeneration) return;
             store.globalError.set(extractMessage(err));
@@ -361,6 +523,11 @@ export function createFlowActions(): FlowActions {
             if (generation === billingGeneration) {
                 store.isSavingBilling.set(false);
             }
+        }
+        // The shipping save carries the billing address too, so sending it
+        // after the billing sync leaves the quote with both.
+        if (synced && shippingSaveIsOwed()) {
+            await saveShippingAndEstimateTotals();
         }
     }
 
@@ -412,8 +579,12 @@ export function createFlowActions(): FlowActions {
         const agreements = store.acceptedAgreements.get();
         const email = store.email.get();
 
+        // The purchase order number is a field of the payment itself; core
+        // ignores it inside `additional_data`.
+        const { po_number: poNumber, ...additionalData } = data;
         const paymentMethod: PaymentMethodPayload = { method };
-        if (Object.keys(data).length > 0) paymentMethod.additional_data = data;
+        if ('po_number' in data) paymentMethod.po_number = String(poNumber ?? '').trim();
+        if (Object.keys(additionalData).length > 0) paymentMethod.additional_data = additionalData;
         if (agreements.length > 0) {
             paymentMethod.extension_attributes = {
                 agreement_ids: agreements.map((id) => String(id)),
@@ -427,8 +598,83 @@ export function createFlowActions(): FlowActions {
         return request;
     }
 
-    async function placeOrder(): Promise<number | null> {
-        if (store.isPlacingOrder.get()) return null;
+    /**
+     * Read the quote to learn whether an order request that lost its answer
+     * placed the order. An ordered guest quote answers 200 with `is_active`
+     * false (404 once it is gone); a customer's `carts/mine` answers 404, or
+     * another quote when a new cart was started since. The quote of this
+     * checkout, still active, means no order exists. Anything else (no
+     * answer, a session that ended, a server error) decides nothing.
+     */
+    async function probeOrderOutcome(): Promise<OrderOutcome> {
+        try {
+            if (isGuest()) {
+                const maskedId = resolveGuestId();
+                if (!maskedId) return 'unknown';
+                const cart = await getGuestCartState(maskedId);
+                return outcomeOfActiveFlag(cart?.is_active);
+            }
+            // `quoteData.entity_id` of the checkout config, hydrated into the store.
+            const quoteId = Number(store.quoteId.get());
+            if (!Number.isInteger(quoteId) || quoteId <= 0) return 'unknown';
+            const cart = await getCustomerCartState();
+            if (cart === null || typeof cart !== 'object' || cart.id === undefined) return 'unknown';
+            if (Number(cart.id) !== quoteId) return 'placed';
+            return outcomeOfActiveFlag(cart.is_active);
+        } catch (err) {
+            return err instanceof MagentoApiError && err.httpStatus === 404 ? 'placed' : 'unknown';
+        }
+    }
+
+    /**
+     * The order request got no answer: decide from the quote. Resolves like
+     * `placeOrder()`. After a timeout the server may still be working on
+     * the request, so a quote that is still active proves nothing yet.
+     */
+    async function resolveLostAnswer(timedOut: boolean): Promise<PlaceOrderOutcome> {
+        let outcome = await probeOrderOutcome();
+        if (timedOut && outcome === 'not-placed') outcome = 'unknown';
+        if (outcome === 'placed') {
+            store.orderOutcomeUnknown.set(false);
+            store.orderPlaced.set(true);
+            return 'placed-unconfirmed';
+        }
+        store.isPlacingOrder.set(false);
+        if (outcome === 'not-placed') {
+            store.orderOutcomeUnknown.set(false);
+            store.globalError.set(t('Hyperion_Checkout::order_not_placed_network'));
+            return null;
+        }
+        store.orderOutcomeUnknown.set(true);
+        store.globalError.set(t('Hyperion_Checkout::order_outcome_unknown'));
+        return null;
+    }
+
+    async function placeOrder(): Promise<PlaceOrderOutcome> {
+        if (store.isPlacingOrder.get() || store.orderPlaced.get()) return null;
+        // The form holds an address the quote does not: no order request
+        // may leave until a shipping save confirmed it.
+        if (!store.isVirtual.get() && store.shippingDirty.get()) return null;
+
+        if (store.orderOutcomeUnknown.get()) {
+            // An earlier attempt may have placed the order: ask the quote
+            // before sending anything.
+            store.isPlacingOrder.set(true);
+            store.globalError.set(null);
+            const outcome = await probeOrderOutcome();
+            if (outcome === 'placed') {
+                store.orderOutcomeUnknown.set(false);
+                store.orderPlaced.set(true);
+                return 'placed-unconfirmed';
+            }
+            store.isPlacingOrder.set(false);
+            if (outcome === 'unknown') {
+                store.globalError.set(t('Hyperion_Checkout::order_outcome_unknown'));
+                return null;
+            }
+            store.orderOutcomeUnknown.set(false);
+        }
+
         if (billingNeedsOwnSync() && !store.billingSynced.get()) {
             await syncBillingAddress();
             if (!store.billingSynced.get()) return null;
@@ -443,12 +689,16 @@ export function createFlowActions(): FlowActions {
             const orderId = isGuest()
                 ? await placeGuestOrder(resolveGuestId() ?? '', request, recaptchaToken)
                 : await placeCustomerOrder(request, recaptchaToken);
+            // Terminal: the loading state holds until the browser leaves.
+            store.orderPlaced.set(true);
             return orderId;
         } catch (err) {
+            if (err instanceof NetworkError) {
+                return resolveLostAnswer(err instanceof RequestTimeoutError);
+            }
+            store.isPlacingOrder.set(false);
             store.globalError.set(extractMessage(err));
             return null;
-        } finally {
-            store.isPlacingOrder.set(false);
         }
     }
 
@@ -471,6 +721,9 @@ export function createFlowActions(): FlowActions {
 
     return {
         estimateShipping,
+        scheduleShippingEstimate,
+        estimateShippingNow,
+        settleShipping,
         saveShippingAndEstimateTotals,
         applyCoupon,
         removeCoupon,
@@ -506,8 +759,16 @@ export function reconcilePaymentSelection(
     return methods.find((m) => isSafeForGeneric(m.code))?.code ?? null;
 }
 
+function outcomeOfActiveFlag(isActive: unknown): OrderOutcome {
+    if (isActive === true) return 'not-placed';
+    if (isActive === false) return 'placed';
+    return 'unknown';
+}
+
 function extractMessage(err: unknown): string {
     if (err instanceof MagentoApiError) return err.message;
+    // The browser's own text ("Failed to fetch") says nothing to a shopper.
+    if (err instanceof NetworkError) return t('Hyperion_Checkout::error_network');
     if (err instanceof Error) return err.message;
     return t('Hyperion_Checkout::unexpected_error');
 }
@@ -530,4 +791,6 @@ export function flowActions(): FlowActions {
 
 export function resetFlowActionsForTests(): void {
     singleton = null;
+    pendingShipping = null;
+    pendingBilling = null;
 }

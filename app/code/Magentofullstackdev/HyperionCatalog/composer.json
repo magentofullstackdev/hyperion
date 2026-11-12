@@ -3,7 +3,7 @@
     "description": "Hyperion Catalog: PLP/PDP blocks, HTMX fragment controllers, swatch configuration",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.4",
+    "version": "0.9.0-beta.5",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {
@@ -19,7 +19,7 @@
     },
     "require": {
         "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
-        "magento/framework": "^103.0.6",
+        "magento/framework": "^103.0.8",
         "magento/module-catalog": "*",
         "magento/module-eav": "*",
         "magento/module-configurable-product": "*",
@@ -48,6 +48,7 @@
         }
     },
     "suggest": {
-        "magento/module-msrp": "Minimum advertised price (click for price) support in the Hyperion catalog"
+        "magento/module-msrp": "Minimum advertised price (click for price) support in the Hyperion catalog",
+        "mage-os/module-seo": "Mage-OS SEO: when it is enabled with its Open Graph tags on, it owns the Open Graph output and Hyperion stands down"
     }
 }

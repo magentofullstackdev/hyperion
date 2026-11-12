@@ -121,3 +121,4 @@ disabled,disabled
 "store value","store value"
 "this store only","this store only"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it."
+"The item does not belong to this menu.","The item does not belong to this menu."

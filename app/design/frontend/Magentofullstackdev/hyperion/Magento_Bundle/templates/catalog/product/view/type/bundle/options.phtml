@@ -33,6 +33,14 @@ $inputClass = 'w-full px-4 py-2.5 text-sm border border-subtle rounded-lg bg-sur
 // (an empty list filled on upgrade shifted the add to cart row by 52px).
 $summaryLines = [];
 $qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.');
+// A product name may carry HTML entities ("Lumaflex&trade;"): `data-name` is read as plain text by
+// the component (textContent), so it gets the decoded characters; the visible labels keep the
+// entity, which escapeHtml() leaves alone.
+$plainName = static fn ($selection): string => html_entity_decode(
+    (string) $selection->getName(),
+    ENT_QUOTES | ENT_HTML5,
+    'UTF-8'
+);
 ?>
 <hyperion-bundle-options class="block space-y-5"
                          data-base-price="<?= $escaper->escapeHtmlAttr((string) $basePrice) ?>"
@@ -106,7 +114,7 @@ $qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 4, 
                         <option value="<?= (int) $selection->getSelectionId() ?>"
                                 data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
                                 data-qty="<?= $escaper->escapeHtmlAttr((string) ((float) $selection->getSelectionQty() ?: 1)) ?>"
-                                data-name="<?= $escaper->escapeHtmlAttr((string) $selection->getName()) ?>"
+                                data-name="<?= $escaper->escapeHtmlAttr($plainName($selection)) ?>"
                                 <?= /* @noEscape -- constant attribute text */ $isChosen($selection) ? 'selected' : '' ?>>
                             <?= $escaper->escapeHtml((string) $selection->getName()) ?>
                             <?= $escaper->escapeHtml('+ ' . $vm->format($price)) ?>
@@ -134,7 +142,7 @@ $qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 4, 
                                    value="<?= (int) $selection->getSelectionId() ?>"
                                    data-price="<?= $escaper->escapeHtmlAttr((string) $price) ?>"
                                    data-qty="<?= $escaper->escapeHtmlAttr((string) ((float) $selection->getSelectionQty() ?: 1)) ?>"
-                                   data-name="<?= $escaper->escapeHtmlAttr((string) $selection->getName()) ?>"
+                                   data-name="<?= $escaper->escapeHtmlAttr($plainName($selection)) ?>"
                                    class="accent-primary"
                                    <?= /* @noEscape -- constant attribute text */ $isChosen($selection) ? 'checked' : '' ?>
                                    <?= /* @noEscape -- constant attribute text */ $required && !$isCheckbox ? 'required' : '' ?>>

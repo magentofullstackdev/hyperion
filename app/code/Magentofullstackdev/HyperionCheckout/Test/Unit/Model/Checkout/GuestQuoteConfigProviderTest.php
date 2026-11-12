@@ -125,9 +125,6 @@ class GuestQuoteConfigProviderTest extends TestCase
         self::assertSame('Austin', $guest['billingAddress']['city']);
     }
 
-    /**
-     * @dataProvider blankCountries
-     */
     #[DataProvider('blankCountries')]
     public function testAnAddressWithoutACountryIsNotEmitted(?string $country): void
     {

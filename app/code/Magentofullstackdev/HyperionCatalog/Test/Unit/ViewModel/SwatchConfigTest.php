@@ -31,6 +31,16 @@ class SwatchConfigTest extends TestCase
     private float $threshold = 0.0;
     /** @var Product[] */
     private array $children = [];
+    private const PRICE_FORMAT = [
+        'pattern' => '%s €',
+        'precision' => 2,
+        'requiredPrecision' => 2,
+        'decimalSymbol' => ',',
+        'groupSymbol' => '.',
+        'groupLength' => 3,
+        'integerRequired' => false,
+    ];
+
     private array $superAttribute = [];
 
     public function testStockNoticesListTheVariantsWithinTheThreshold(): void
@@ -51,6 +61,31 @@ class SwatchConfigTest extends TestCase
         $config = $this->decode($this->viewModel($this->stockStub())->getSerializedConfig($this->configurable()));
 
         self::assertSame(['regularPrice' => 'Regular Price', 'clickForPrice' => 'Click for price'], $config['labels']);
+    }
+
+    /**
+     * The component rewrites a server-rendered price: it needs core's number
+     * format of the store view, on the product page and on the tiles.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('configModes')]
+    public function testThePriceFormatOfTheStoreViewIsForwarded(bool $compact): void
+    {
+        $this->children = [$this->child(11)];
+
+        $config = $this->decode(
+            $this->viewModel($this->stockStub())->getSerializedConfig($this->configurable(), $compact)
+        );
+
+        self::assertSame(self::PRICE_FORMAT, $config['priceFormat']);
+        self::assertSame('%s €', $config['currencyFormat']);
+    }
+
+    /**
+     * @return array<string, array{bool}>
+     */
+    public static function configModes(): array
+    {
+        return ['product page' => [false], 'tile' => [true]];
     }
 
     public function testNoThresholdEmitsNothingAndReadsNoStock(): void
@@ -115,7 +150,8 @@ class SwatchConfigTest extends TestCase
             'optionPrices' => [],
             'images' => [],
             'index' => [],
-            'currencyFormat' => '$%s',
+            'currencyFormat' => '%s €',
+            'priceFormat' => self::PRICE_FORMAT,
         ]));
         $block->method('getJsonSwatchConfig')->willReturn('{}');
         $block->method('getAllowProducts')->willReturnCallback(fn (): array => $this->children);

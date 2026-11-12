@@ -90,6 +90,40 @@ class FilterGuardPluginTest extends TestCase
         self::assertSame('page', $this->plugin($guard, $limiter)->aroundExecute($this->action(), static fn () => 'page'));
     }
 
+    public function testACategoryPageThatOnlyNeededToolbarNormalizationIsCounted(): void
+    {
+        $this->route('catalog_category_view');
+        $guard = $this->guardMock();
+        $guard->method('stripUnknown')->willReturn([]);
+        $guard->method('activeFilters')->willReturn([]);
+        $guard->expects(self::once())->method('normalizeToolbar')->with($this->request)->willReturn(['product_list_order']);
+        $limiter = $this->createMock(RateLimiter::class);
+        $limiter->expects(self::once())->method('hit')->with('category_filter')->willReturn(false);
+
+        self::assertSame($this->refusal, $this->plugin($guard, $limiter)->aroundExecute($this->action(), static fn () => 'never'));
+    }
+
+    public function testTheToolbarIsNormalizedBeforeThePageIsClamped(): void
+    {
+        $this->route('hyperion_category_filter');
+        $calls = [];
+        $this->guard->method('stripUnknown')->willReturn([]);
+        $this->guard->method('activeFilters')->willReturn([]);
+        $this->guard->method('normalizeToolbar')->willReturnCallback(function () use (&$calls): array {
+            $calls[] = 'normalize';
+
+            return ['product_list_limit'];
+        });
+        $this->guard->method('clampPage')->willReturnCallback(function () use (&$calls): ?int {
+            $calls[] = 'clamp';
+
+            return null;
+        });
+
+        self::assertSame('fragment', $this->plugin->aroundExecute($this->action(), static fn () => 'fragment'));
+        self::assertSame(['normalize', 'clamp'], $calls);
+    }
+
     public function testThePageNumberIsClampedOnEveryGuardedRoute(): void
     {
         $this->route('catalogsearch_result_index');

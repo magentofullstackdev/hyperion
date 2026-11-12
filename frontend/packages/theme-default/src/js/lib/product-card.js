@@ -7,7 +7,9 @@
 // ProductSummary); the markup mirrors the server-rendered tiles of
 // Magento_CatalogWidget::product/widget/content/grid.phtml. Forms carry the
 // same HTMX attributes as the tiles (toast target, out-of-band header
-// fragments); the caller runs `htmx.process()` and `ensureFormKey()` on
+// fragments, a second submit dropped while the first is in flight); the
+// Add to Cart button carries the busy state markup of the tiles
+// (`data-hyperion-atc`, styled in _components.css). The caller runs `htmx.process()` and `ensureFormKey()` on
 // the rendered root.
 
 import { html, nothing } from 'lit';
@@ -30,7 +32,7 @@ const secondaryButton = 'inline-flex w-full items-center justify-center gap-1 ro
 /** HTMX POST form that only shows the toast (the fragments ride out of band). */
 export function toastForm(action, fields, formKey, content, extra = {}) {
     return html`<form action=${action} method="post" hx-post=${action} hx-target=${TOAST_TARGET}
-                      hx-swap="outerHTML" hx-select=${TOAST_TARGET} class=${extra.class || 'flex'}
+                      hx-swap="outerHTML" hx-select=${TOAST_TARGET} hx-sync="this:drop" class=${extra.class || 'flex'}
                       hx-confirm=${extra.confirm || nothing}>
         ${formKeyInput(formKey)}
         ${Object.entries(fields).map(([name, value]) => html`<input type="hidden" name=${name} value=${value} />`)}
@@ -41,7 +43,7 @@ export function toastForm(action, fields, formKey, content, extra = {}) {
 /**
  * @param {object} item product record
  * @param {object} o options: mode, showImage, showName, showPrice, showMore, canCart, cartUrl,
- *   wishlistEnabled, wishlistUrl, compareEnabled, compareUrl, labels {cart, options, wishlist, compare, more}, formKey
+ *   wishlistEnabled, wishlistUrl, compareEnabled, compareUrl, labels {cart, adding, options, wishlist, compare, more}, formKey
  */
 export function renderProductCard(item, o) {
     const labels = o.labels || {};
@@ -54,7 +56,7 @@ export function renderProductCard(item, o) {
         : nothing;
     const cart = o.canCart && item.saleable
         ? (item.buy_from_list
-            ? toastForm(o.cartUrl, { product: item.id, qty: 1 }, o.formKey, html`<button type="submit" class=${primaryButton}>${cartIcon()}<span>${labels.cart || 'Add to Cart'}</span></button>`)
+            ? toastForm(o.cartUrl, { product: item.id, qty: 1 }, o.formKey, html`<button type="submit" data-hyperion-atc class=${primaryButton}>${cartIcon()}<span data-hyperion-atc-label>${labels.cart || 'Add to Cart'}</span><span data-hyperion-atc-busy aria-hidden="true">${labels.adding || 'Adding to cart...'}</span></button>`)
             : html`<a href=${item.url} class=${primaryButton}>${labels.options || 'Select Options'}</a>`)
         : nothing;
     const wishlist = o.wishlistEnabled

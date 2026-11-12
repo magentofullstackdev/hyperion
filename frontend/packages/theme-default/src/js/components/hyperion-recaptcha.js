@@ -21,7 +21,9 @@
  * without a token the event is canceled, the token is fetched, and the
  * form is re-submitted with `requestSubmit()`. That works for native
  * forms and for HTMX forms alike (HTMX listens to the same event and
- * sees the second submission only).
+ * sees the second submission only). When no token can be had (Google's
+ * script blocked or failing), the form is submitted once without one and
+ * the server reports the failure; the next attempt tries Google again.
  */
 
 import { LitElement, nothing } from 'lit';
@@ -35,8 +37,8 @@ const loaders = new Map();
 
 function loadApi(url) {
     if (!loaders.has(url)) {
-        loaders.set(url, new Promise((resolve, reject) => {
-            const script = document.createElement('script');
+        const script = document.createElement('script');
+        const loader = new Promise((resolve, reject) => {
             script.src = url;
             script.async = true;
             script.defer = true;
@@ -49,7 +51,13 @@ function loadApi(url) {
             };
             script.onerror = () => reject(new Error('reCAPTCHA API failed to load'));
             document.head.appendChild(script);
-        }));
+        });
+        loaders.set(url, loader);
+        // A failed load is not cached: the next attempt gets a fresh script element.
+        loader.catch(() => {
+            if (loaders.get(url) === loader) loaders.delete(url);
+            script.remove();
+        });
     }
     return loaders.get(url);
 }
@@ -78,6 +86,7 @@ export class HyperionRecaptcha extends LitElement {
         this._input = null;
         this._widgetId = null;
         this._pendingResolve = null;
+        this._bypassOnce = false;
         this._viewportObserver = null;
         this._onSubmit = this._onSubmit.bind(this);
         this._onWarmup = this._onWarmup.bind(this);
@@ -187,6 +196,11 @@ export class HyperionRecaptcha extends LitElement {
     }
 
     _onSubmit(event) {
+        if (this._bypassOnce) {
+            // The re-submission after a failed token: it goes through as it is.
+            this._bypassOnce = false;
+            return;
+        }
         if (this._input.value) {
             // Token present: let the submission through, then forget the
             // token so the next attempt mints a fresh one (tokens are single
@@ -206,9 +220,13 @@ export class HyperionRecaptcha extends LitElement {
             this._form.requestSubmit(submitter);
         }).catch((err) => {
             this._report(err);
-            // Do not strand the shopper: submit anyway and let the server
-            // report the reCAPTCHA failure.
+            // Do not strand the shopper: submit once without a token and let
+            // the server report the reCAPTCHA failure.
+            this._bypassOnce = true;
             this._form.requestSubmit(submitter);
+            // The submit event is dispatched synchronously; a form that failed
+            // its validation dispatched none and must not keep the bypass.
+            this._bypassOnce = false;
         });
     }
 

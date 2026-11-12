@@ -158,3 +158,14 @@ To,A
 Total,Totale
 Tax,Imposte
 Discount,Sconto
+"Your order is being updated. Try again in a moment.","Stiamo aggiornando il tuo ordine. Riprova tra un momento."
+"We could not reach the store. Your order was not placed. Please try again.","Impossibile raggiungere il negozio. Il tuo ordine non è stato effettuato. Riprova."
+"We could not confirm whether your order was placed. Please wait a moment and press Place Order again; we will check before sending anything.","Non siamo riusciti a confermare se il tuo ordine è stato effettuato. Attendi un momento e premi di nuovo Effettua l'ordine: verificheremo prima di inviare qualsiasi dato."
+"The store is temporarily unavailable. Please try again in a moment.","Il negozio è temporaneamente non disponibile. Riprova tra un momento."
+"Too many requests. Please wait a moment and try again.","Troppe richieste. Attendi un momento e riprova."
+"Your request was blocked. Please reload the page and try again.","La tua richiesta è stata bloccata. Ricarica la pagina e riprova."
+"We could not reach the store. Check your connection and try again.","Impossibile raggiungere il negozio. Controlla la connessione e riprova."
+"Enter the purchase order number.","Inserisci il numero dell'ordine d'acquisto."
+"Make Check payable to:","Intestare l'assegno a:"
+"Send Check to:","Inviare l'assegno a:"
+"Your cart contains downloadable products, which require a customer account.","Il carrello contiene prodotti scaricabili, che richiedono un account cliente."

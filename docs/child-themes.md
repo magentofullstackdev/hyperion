@@ -36,7 +36,7 @@ It writes `app/design/frontend/Vendor/Theme/`:
 | `registration.php` | registers `frontend/Vendor/Theme` |
 | `theme.xml` | title "Theme by Vendor", parent `Magentofullstackdev/hyperion` |
 | `package.json` | private package with `@magentofullstackdev/hyperion-shared` and `@magentofullstackdev/hyperion-theme` at `^<hyperion version>` and `lit` (declared directly so pnpm resolves it too), Vite, Tailwind, PostCSS; scripts `build` and `dev` (`vite build --watch`); `pnpm.onlyBuiltDependencies: ["esbuild"]` so pnpm 10 runs esbuild's binary install without a prompt or an "Ignored build scripts" notice (no other dependency script is enabled) |
-| `vite.config.js` | builds `src/js/entry.js` into `web/assets/` with fixed file names (`entry.js`, `entry.css`), `base: './'`, source maps, no manifest |
+| `vite.config.js` | builds `src/js/entry.js` into `web/assets/`: `entry.js` and `entry.css` under fixed names, every other chunk and asset with a hash in its name (`<name>.<hash>.js`), `base: './'`, source maps, no manifest |
 | `tailwind.config.js` | Hyperion preset; scans this theme's `*/templates/**/*.phtml`, `*/layout/**/*.xml` and `src/**/*.{js,ts}` only |
 | `postcss.config.js` | Tailwind + autoprefixer |
 | `src/js/entry.js` | imports `../css/entry.css`; add your components here |
@@ -56,8 +56,6 @@ cd - && bin/magento setup:upgrade && bin/magento cache:flush
 
 Assign "Theme by Vendor" in Content > Design > Configuration. In production
 mode run `bin/magento setup:static-content:deploy` after every build.
-Scaffolding a child theme and building it from the packed npm tarballs were
-verified for this release.
 
 ## How the assets are linked
 
@@ -84,6 +82,42 @@ the fold of one of those pages should ship their rules in the child's own
 sheet, or map the handle back to the synchronous mode with an empty
 `critical_css_type` on the `hyperion.head.scripts` block in the child's layout
 file for that handle.
+
+### Minification
+
+Magento's JS and CSS minification renames the files it processes to
+`.min.js` / `.min.css`. That is harmless for the two entry files, because
+the template links them through `getViewFileUrl()`, which adds `.min` by
+itself; it would break every other chunk, because the entry imports those
+by the file name Vite wrote. `HyperionCore` therefore excludes from
+Magento's minification every hashed file directly under an `assets/`
+directory (`name.<8 characters>.js`, `name-<8 characters>.js` and the `.css`
+twins; see [Install](./install.md#production-checklist)), and the scaffold
+writes exactly that shape:
+
+```js
+output: {
+    entryFileNames: '[name].js',
+    chunkFileNames: '[name].[hash].js',
+    assetFileNames: (asset) => (isEntryStylesheet(asset) ? '[name][extname]' : '[name].[hash][extname]'),
+},
+```
+
+- Do not change `chunkFileNames` / `assetFileNames` to unhashed names.
+- A theme scaffolded before `0.9.0-beta.5` has `chunkFileNames: '[name].js'`.
+  It keeps working while the build has a single chunk. As soon as it uses a
+  dynamic `import()` and JS minification is on, the chunk is published as
+  `<name>.min.js` while the entry still imports `./<name>.js` (a 404): copy
+  the three `output` lines (and the `isEntryStylesheet` helper) from a fresh
+  scaffold into your `vite.config.js`, or add a `minify_exclude` entry of
+  your own.
+- A file placed outside `web/assets/`, or in a subdirectory of it, is not
+  covered by the exclude and is minified and renamed by Magento like any
+  other static file.
+- The entry files themselves are still processed by Magento's minifier when
+  it is on. A deploy of a child theme under JS minification was not part of
+  the test runs of this release: check your storefront once after the first
+  production deploy.
 
 ## Design tokens
 
@@ -162,6 +196,21 @@ markup must keep the skeleton (or render the component's final size some
 other way); `node e2e/pw-cls.mjs <baseUrl>` from `frontend/` measures the
 result.
 
+**Add to Cart.** Every Add to Cart form carries `hx-sync="this:drop"` (a
+second submit while the first is in flight is dropped), no `hx-disabled-elt`
+and no `hx-indicator`. Its submit button is `data-hyperion-atc` and holds two
+sibling spans as direct children, after the optional icon:
+`<span data-hyperion-atc-label>` with the label and
+`<span data-hyperion-atc-busy aria-hidden="true">` with the busy text
+("Adding to cart..."). The parent's `_components.css` lays the button out as
+a grid in which the busy text overlays the row of the icon and the label, so
+the button has the size of the larger state from the first paint, and swaps
+them while the form has htmx's `htmx-request` class. An override of a tile, of the product page or of
+`product/view/addtocart.phtml` copies that markup; without the spans the
+form still works and only the busy text is missing. The wish list and
+compare forms carry `hx-sync="this:drop"` too. The former
+`#hyperion-add-to-cart-indicator` element no longer exists.
+
 **Listings and Load more.** `product/list.phtml` wraps its shell in
 `if (!$append)` and marks the tiles list `data-hyperion-tiles`: an append
 request (`append=1` on the fragment URL) answers with the tiles `<li>` only
@@ -172,7 +221,15 @@ parent's `listing-load-more.js` moves the keyboard focus to after the swap.
 An override of `list.phtml` must keep the `$append` branches, the
 `data-hyperion-tiles` attribute and the `load_more` child; the toolbar and
 pager share `HyperionCatalog\ViewModel\Listing`, which decides the mode and
-the fragment URL.
+builds every fragment URL (`getStateFragmentUrl()` for sort, direction, mode,
+page size and the pager, `getAppendFragmentUrl()` for Load more): both carry
+the active layered navigation filters, so never concatenate a query string
+in a template. The grid root and the layered navigation carry
+`hx-sync="#<grid id>:replace"`, which makes the listing controls one request
+queue (a newer request aborts the one in flight); a form of your own inside
+the grid needs its own `hx-sync`, or it joins that queue. Back and Forward
+reload the public URL (htmx keeps no history snapshot), so a component must
+not rely on `htmx:historyRestore`.
 
 **Navigation and mega menu.** The top menu (category tree or mega menu
 group) is one markup contract: `[data-hyperion-topmenu]` on the root list,
@@ -234,6 +291,49 @@ form:
 Body classes: one `<attribute name="class" value="..."/>` per class; Magento
 joins a multi-word value into a single hyphenated token.
 
+### Removing a head block
+
+The theme renders `head.additional`, so a head block of any module reaches
+the page. Core's own children that only feed RequireJS (the analytics and
+Ads tags, the form key provider, the SRI hashes, the translation config)
+and core's Open Graph block are removed by name in the parent's
+`Magento_Theme/layout/default.xml`. To remove one more, for example a
+third-party block that only prints `x-magento-init` (nothing processes it
+on this theme), add to your theme's `Magento_Theme/layout/default.xml`:
+
+```xml
+<referenceBlock name="the.block.name" remove="true"/>
+```
+
+A removal in the `default` handle also removes a block that a page-specific
+handle declares.
+
+### Footer links
+
+The footer's Customer service column lists four designed entries (contact,
+orders and returns, privacy, terms) and then every link modules add to
+core's `footer_links` block, which the theme keeps under `hyperion.footer`:
+Advanced Search, Search Terms when `catalog/seo/search_terms` is on, RSS
+when `rss/config/active` is on, third-party links. A link to one of the four
+designed pages is dropped as a duplicate.
+
+- Remove a link by the name of its block:
+  `<referenceBlock name="catalog-search-advanced-link" remove="true"/>`.
+- Add one the core way, with a `Magento\Framework\View\Element\Html\Link\Current`
+  block inside `<referenceBlock name="footer_links">`.
+- An override of `Magento_Theme::html/footer.phtml` calls
+  `$block->getServiceLinks()` (rows of `label` and `url`) to keep them.
+
+### Brand name and footer text
+
+The wordmark of the header and of the footer, and the accessible name of
+the logo link, print the store's name: Store Information > Store Name, then
+the store group name, the website name, the host
+(`HyperionNavigation\Model\StoreBrand`). Nothing in the theme prints
+"Hyperion". The paragraph under the footer logo is the optional CMS block
+`hyperion-footer-about`; create it in the admin, no template override is
+needed.
+
 Template-side logic: prefer a view model passed as a layout argument (every
 Hyperion `.phtml` also receives `$viewModels`, a registry provided by
 `HyperionCore`) over block subclasses.
@@ -283,7 +383,7 @@ add a second one.
 
 All three are published as source (`src/`, `tailwind.config.ts`, README,
 LICENSE); a TypeScript-aware bundler such as Vite is required. Versions move
-together with the Composer packages (`0.9.0-beta.4`).
+together with the Composer packages (`0.9.0-beta.5`).
 
 | Package | Contents | Exports |
 |---|---|---|

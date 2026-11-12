@@ -13,8 +13,8 @@
  *      all (otherwise the row explains that Google Pay is not available in
  *      this browser).
  *   2. A click checks the same gate as the checkout's own button (email,
- *      addresses, shipping method, agreements, totals) and opens the Google
- *      Pay sheet with the base grand total, the base currency and the cart
+ *      addresses, the shipping method the server confirmed, agreements,
+ *      totals that are not being refreshed) and opens the Google Pay sheet with the base grand total, the base currency and the cart
  *      lines as display items.
  *   3. Google's response is parsed into a Braintree nonce. A card that is
  *      not network tokenized goes through 3D Secure under the usual rules;
@@ -267,6 +267,8 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             const data = await this._collectPaymentData(config, instance, paymentData);
             authorized = data;
             store.paymentMethodData.set({ ...store.paymentMethodData.get(), [this.code]: data });
+            // A number, or the marker of an order the quote confirmed after
+            // its answer was lost: both continue on the success page.
             const orderId = await flowActions().placeOrder();
             if (orderId !== null) {
                 navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
@@ -277,7 +279,9 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             authorized = null;
             this._message = (err as Error).message || t('Hyperion_Checkout::braintree_googlepay_failed');
         } finally {
-            if (this.isConnected) {
+            // Once the order exists the button stays busy until the
+            // browser leaves the page.
+            if (this.isConnected && !store.orderPlaced.get()) {
                 this._paying = false;
                 this._placing = false;
             }

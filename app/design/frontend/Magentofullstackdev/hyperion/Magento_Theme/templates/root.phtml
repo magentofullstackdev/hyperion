@@ -5,16 +5,12 @@
  * Page root. Same as the core root template without the `loaderAjax` /
  * `loader` data-mage-init on <body>, which only RequireJS could run.
  *
- * `$headCritical` and `$headAssets` exist from Magento 2.4.8 / Mage-OS 2
- * on (critical CSS and page assets moved out of `$headContent`); on 2.4.7
- * they are undefined, hence the null coalescing.
- *
  * @var string $htmlAttributes
  * @var string $headAttributes
  * @var string $requireJs
  * @var string $headContent
- * @var string|null $headCritical
- * @var string|null $headAssets
+ * @var string $headCritical
+ * @var string $headAssets
  * @var string $headAdditional
  * @var string $bodyAttributes
  * @var string $layoutContent
@@ -25,8 +21,8 @@
     <head <?= /* @noEscape */ $headAttributes ?>>
         <?= /* @noEscape */ $requireJs ?>
         <?= /* @noEscape */ $headContent ?>
-        <?= /* @noEscape */ $headCritical ?? '' ?>
-        <?= /* @noEscape */ $headAssets ?? '' ?>
+        <?= /* @noEscape */ $headCritical ?>
+        <?= /* @noEscape */ $headAssets ?>
         <?= /* @noEscape */ $headAdditional ?>
     </head>
     <body data-container="body" <?= /* @noEscape */ $bodyAttributes ?>>

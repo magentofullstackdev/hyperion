@@ -5,6 +5,8 @@
 //   php /tmp/sprint3-fixtures.php /var/www/html page            creates the CMS page /hyperion-history-check with the
 //                                                               Recently Viewed (grid) and Recently Compared (sidebar) widgets
 //   php /tmp/sprint3-fixtures.php /var/www/html comment <id>    adds a storefront-visible status comment to order <increment id>
+//   php /tmp/sprint3-fixtures.php /var/www/html po <id>         prints the purchase order number stored on the payment of
+//                                                               order <increment id> (read only; an empty line when it has none)
 //   php /tmp/sprint3-fixtures.php /var/www/html remove          deletes the CMS page
 declare(strict_types=1);
 $root = $argv[1] ?? '/var/www/html';
@@ -23,6 +25,19 @@ if ($action === 'remove') {
         $pageRepo->delete($page);
     }
     echo "page removed\n";
+    exit(0);
+}
+if ($action === 'po') {
+    $incrementId = $argv[3] ?? '';
+    $orders = $om->get(\Magento\Sales\Api\OrderRepositoryInterface::class)
+        ->getList($om->get(\Magento\Framework\Api\SearchCriteriaBuilder::class)->addFilter('increment_id', $incrementId)->create())
+        ->getItems();
+    $order = reset($orders);
+    if (!$order) {
+        echo "order $incrementId not found\n";
+        exit(1);
+    }
+    echo (string) $order->getPayment()?->getPoNumber(), "\n";
     exit(0);
 }
 if ($action === 'comment') {

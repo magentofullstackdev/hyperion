@@ -34,9 +34,6 @@ class ConversionServiceTest extends TestCase
         $service->dispatch(self::SOURCE);
     }
 
-    /**
-     * @dataProvider queueModes
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('queueModes')]
     public function testDispatchPublishesInQueueMode(string $mode): void
     {

@@ -31,6 +31,7 @@ class RateLimiterTest extends TestCase
         $cache->method('load')->willReturnCallback(fn (string $id) => $this->store[$id] ?? false);
         $cache->method('save')->willReturnCallback(function (string $data, string $id, array $tags, $lifetime): bool {
             self::assertSame(RateLimiter::WINDOW_SECONDS * 2, $lifetime);
+            self::assertSame([], $tags, 'a counter expires on its own and carries no cache tag');
             $this->store[$id] = $data;
             return true;
         });

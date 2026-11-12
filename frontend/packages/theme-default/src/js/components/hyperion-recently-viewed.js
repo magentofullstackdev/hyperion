@@ -14,7 +14,7 @@
  * show-attributes (name,image,price,learn_more), show-buttons
  * (add_to_cart,add_to_wishlist,add_to_compare), cart-url, wishlist-url,
  * compare-url, can-cart, wishlist-enabled, compare-enabled and the labels
- * cart-label, options-label, wishlist-label, compare-label, more-label.
+ * cart-label, adding-label, options-label, wishlist-label, compare-label, more-label.
  */
 import { html, nothing } from 'lit';
 import { HyperionLightElement } from '@magentofullstackdev/hyperion-shared/lit';
@@ -40,6 +40,7 @@ export class HyperionRecentlyViewed extends HyperionLightElement {
         wishlistEnabled: { type: Boolean, attribute: 'wishlist-enabled' },
         compareEnabled: { type: Boolean, attribute: 'compare-enabled' },
         cartLabel: { type: String, attribute: 'cart-label' },
+        addingLabel: { type: String, attribute: 'adding-label' },
         optionsLabel: { type: String, attribute: 'options-label' },
         wishlistLabel: { type: String, attribute: 'wishlist-label' },
         compareLabel: { type: String, attribute: 'compare-label' },
@@ -63,6 +64,7 @@ export class HyperionRecentlyViewed extends HyperionLightElement {
         this.wishlistEnabled = false;
         this.compareEnabled = false;
         this.cartLabel = 'Add to Cart';
+        this.addingLabel = 'Adding to cart...';
         this.optionsLabel = 'Select Options';
         this.wishlistLabel = 'Add to Wish List';
         this.compareLabel = 'Add to Compare';
@@ -111,7 +113,7 @@ export class HyperionRecentlyViewed extends HyperionLightElement {
             wishlistUrl: this.wishlistUrl,
             compareEnabled: this.compareEnabled && buttons.includes('add_to_compare'),
             compareUrl: this.compareUrl,
-            labels: { cart: this.cartLabel, options: this.optionsLabel, wishlist: this.wishlistLabel, compare: this.compareLabel, more: this.moreLabel },
+            labels: { cart: this.cartLabel, adding: this.addingLabel, options: this.optionsLabel, wishlist: this.wishlistLabel, compare: this.compareLabel, more: this.moreLabel },
             formKey: getCachedFormKey() || '',
         };
         const listClass = this.mode === 'sidebar'

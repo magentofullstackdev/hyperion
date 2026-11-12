@@ -26,7 +26,6 @@ class RateLimiter
     public const WINDOW_SECONDS = 10;
     public const XML_PATH_ENABLED = 'hyperion/security/rate_limit_enabled';
     private const CACHE_PREFIX = 'hyperion_rate_';
-    private const CACHE_TAG = 'HYPERION_RATE_LIMIT';
 
     /**
      * @param CacheInterface $cache
@@ -61,8 +60,9 @@ class RateLimiter
         $window = intdiv(time(), self::WINDOW_SECONDS);
         $key = self::CACHE_PREFIX . hash('xxh3', $group . '|' . $client . '|' . $window);
         $count = (int) $this->cache->load($key) + 1;
-        // Two windows of lifetime: the key is never reused and expires on its own.
-        $this->cache->save((string) $count, $key, [self::CACHE_TAG], self::WINDOW_SECONDS * 2);
+        // Two windows of lifetime: the key is never reused and expires on its own, so it
+        // carries no tag (a tagged entry costs the backend a tag index nothing ever cleans by).
+        $this->cache->save((string) $count, $key, [], self::WINDOW_SECONDS * 2);
 
         return $count <= $limit;
     }

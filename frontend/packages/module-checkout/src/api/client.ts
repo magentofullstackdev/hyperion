@@ -29,13 +29,16 @@
  *   - 200 + JSON body  -> return parsed T
  *   - 200 + empty body -> return undefined as T (some DELETE endpoints)
  *   - 4xx/5xx + JSON error body -> throw MagentoApiError
- *   - 4xx/5xx + non-JSON body (nginx page) -> throw MagentoApiError with
- *     httpStatus + fallback message
- *   - network / CORS / timeout -> throw NetworkError
+ *   - 4xx/5xx + non-JSON body (a proxy's page) -> throw MagentoApiError
+ *     with httpStatus + a translated message for the status class; the
+ *     body itself never becomes the message
+ *   - network / CORS -> throw NetworkError
+ *   - no answer within `options.timeoutMs` -> throw RequestTimeoutError
+ *     (a NetworkError)
  *   - aborted through `options.signal` -> the AbortError is rethrown as is
  */
 import type { CheckoutConfig } from '../types/config.js';
-import { isAbortError, NetworkError, normaliseMagentoError } from './errors.js';
+import { isAbortError, NetworkError, normalizeMagentoError, RequestTimeoutError } from './errors.js';
 
 export type AuthMode = 'customer' | 'guest' | 'none';
 
@@ -65,6 +68,12 @@ export interface ApiFetchOptions {
      * storefront key check is enabled (e.g. checkout, login).
      */
     recaptchaToken?: string;
+    /**
+     * Give up after this many milliseconds and reject with
+     * `RequestTimeoutError`. Unset: the request waits as long as the
+     * browser does.
+     */
+    timeoutMs?: number;
 }
 
 export interface ClientConfig {
@@ -137,7 +146,7 @@ function buildHeaders(
         }
         // else: rely on PHPSESSID cookie (Q11 path 1).
     }
-    // Magento only honours the session cookie on web API calls that declare
+    // Magento only honors the session cookie on web API calls that declare
     // themselves as AJAX (Magento\Webapi\Model\Plugin\Authorization\
     // CustomerSessionUserContext); without it every `carts/mine` call of a
     // customer who signed in on the storefront answers 401.
@@ -150,16 +159,79 @@ function buildHeaders(
     return headers;
 }
 
-async function parseResponseBody(res: Response): Promise<unknown> {
+type ParsedBody = { json: unknown } | { text: string };
+
+/** The body as JSON when it parses (`undefined` for an empty one), as text otherwise. */
+async function parseResponseBody(res: Response): Promise<ParsedBody> {
     const text = await res.text();
     if (text.length === 0) {
-        return undefined;
+        return { json: undefined };
     }
     try {
-        return JSON.parse(text);
+        return { json: JSON.parse(text) as unknown };
     } catch {
-        return { message: text };
+        return { text };
     }
+}
+
+/**
+ * The value of an answer, or the error it stands for. A body that is not
+ * JSON (a proxy's error page, a firewall's challenge) is never data and
+ * never a message: the error is built from the status alone.
+ */
+function unwrapResponse<T>(res: Response, body: ParsedBody): T {
+    if ('text' in body) {
+        if (import.meta.env.DEV) {
+            console.warn(`[hyperion-checkout] HTTP ${res.status} with a body that is not JSON:`, body.text.slice(0, 200));
+        }
+        throw normalizeMagentoError(res.status, undefined);
+    }
+    if (!res.ok) {
+        throw normalizeMagentoError(res.status, body.json);
+    }
+    return body.json as T;
+}
+
+interface TimedSignal {
+    signal: AbortSignal | undefined;
+    /** True once the time limit, not the caller, ended the request. */
+    timedOut: () => boolean;
+    dispose: () => void;
+}
+
+/**
+ * The signal a request runs under: the caller's own, cut short after
+ * `timeoutMs` when one is given. The limit covers the body read too, so it
+ * stays armed until `dispose()`.
+ */
+function withTimeout(callerSignal: AbortSignal | undefined, timeoutMs: number | undefined): TimedSignal {
+    if (timeoutMs === undefined) {
+        return { signal: callerSignal, timedOut: () => false, dispose: () => undefined };
+    }
+    const controller = new AbortController();
+    let timedOut = false;
+    const onCallerAbort = (): void => controller.abort(callerSignal?.reason);
+    if (callerSignal?.aborted) {
+        onCallerAbort();
+    } else {
+        callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+    }
+    const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort(new DOMException('The request timed out.', 'TimeoutError'));
+    }, timeoutMs);
+    return {
+        signal: controller.signal,
+        timedOut: () => timedOut,
+        dispose: () => {
+            clearTimeout(timer);
+            callerSignal?.removeEventListener('abort', onCallerAbort);
+        },
+    };
+}
+
+function isTimeoutError(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'TimeoutError';
 }
 
 async function fetchOnce<T>(
@@ -177,29 +249,31 @@ async function fetchOnce<T>(
         headers,
         credentials: 'same-origin',
     };
-    if (options.signal) {
-        init.signal = options.signal;
+    const timed = withTimeout(options.signal, options.timeoutMs);
+    if (timed.signal) {
+        init.signal = timed.signal;
     }
     if (options.body !== undefined) {
         init.body = JSON.stringify(options.body);
     }
 
     let res: Response;
+    let body: ParsedBody;
     try {
         const fetchImpl = cfg.fetch ?? globalThis.fetch.bind(globalThis);
         res = await fetchImpl(url, init);
+        body = await parseResponseBody(res);
     } catch (err) {
+        // The time limit is not a cancellation by the caller: it is
+        // reported as a transport failure of its own kind.
+        if (timed.timedOut() || isTimeoutError(err)) throw new RequestTimeoutError(err);
         if (isAbortError(err)) throw err;
         throw new NetworkError(err);
+    } finally {
+        timed.dispose();
     }
 
-    if (!res.ok) {
-        const body = await parseResponseBody(res);
-        throw normaliseMagentoError(res.status, body);
-    }
-
-    const body = await parseResponseBody(res);
-    return body as T;
+    return unwrapResponse<T>(res, body);
 }
 
 export async function apiFetch<T>(
@@ -260,11 +334,7 @@ export async function storefrontPostJson<T>(
         if (isAbortError(err)) throw err;
         throw new NetworkError(err);
     }
-    const parsed = await parseResponseBody(res);
-    if (!res.ok) {
-        throw normaliseMagentoError(res.status, parsed);
-    }
-    return parsed as T;
+    return unwrapResponse<T>(res, await parseResponseBody(res));
 }
 
 /**
@@ -288,4 +358,4 @@ export function buildClientConfig(
 }
 
 // Re-export the error types so callers only need one import.
-export { isAbortError, MagentoApiError, NetworkError } from './errors.js';
+export { isAbortError, MagentoApiError, NetworkError, RequestTimeoutError } from './errors.js';

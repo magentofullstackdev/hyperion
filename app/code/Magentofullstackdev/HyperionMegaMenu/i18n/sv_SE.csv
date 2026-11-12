@@ -121,3 +121,4 @@
 "store value","butiksvärde"
 "this store only","endast den här butiken"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} ersätts med butiksvyns bas-URL; en sökväg utan schema är relativ till den."
+"The item does not belong to this menu.","Objektet tillhör inte den här menyn."

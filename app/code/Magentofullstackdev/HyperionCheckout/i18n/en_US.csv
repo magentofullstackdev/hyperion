@@ -160,3 +160,14 @@ To,To
 Total,Total
 Tax,Tax
 Discount,Discount
+"Your order is being updated. Try again in a moment.","Your order is being updated. Try again in a moment."
+"We could not reach the store. Your order was not placed. Please try again.","We could not reach the store. Your order was not placed. Please try again."
+"We could not confirm whether your order was placed. Please wait a moment and press Place Order again; we will check before sending anything.","We could not confirm whether your order was placed. Please wait a moment and press Place Order again; we will check before sending anything."
+"The store is temporarily unavailable. Please try again in a moment.","The store is temporarily unavailable. Please try again in a moment."
+"Too many requests. Please wait a moment and try again.","Too many requests. Please wait a moment and try again."
+"Your request was blocked. Please reload the page and try again.","Your request was blocked. Please reload the page and try again."
+"We could not reach the store. Check your connection and try again.","We could not reach the store. Check your connection and try again."
+"Enter the purchase order number.","Enter the purchase order number."
+"Make Check payable to:","Make Check payable to:"
+"Send Check to:","Send Check to:"
+"Your cart contains downloadable products, which require a customer account.","Your cart contains downloadable products, which require a customer account."

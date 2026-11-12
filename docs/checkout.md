@@ -32,7 +32,7 @@ One page, in this order:
    for logged-in customers. The inline sign-in goes through the storefront's
    own AJAX login (`customer/ajax/login`): the customer session starts, core
    merges the guest cart into the customer's cart, and the checkout reloads
-   as the logged-in customer. On Magento 2.4.7 and later the email check that
+   as the logged-in customer. The email check that
    reveals the password field answers only when Stores > Configuration >
    Sales > Checkout > Checkout Options > "Enable Guest Checkout Login"
    (`checkout/options/enable_guest_checkout_login`) is Yes; it is No by
@@ -48,8 +48,12 @@ One page, in this order:
    `general/country/optional_zip_countries`; the format patterns of
    `zip_codes.xml` only produce a warning with the examples under the field
    (like core's checkout), the address stays complete and the value is sent
-   as typed. The whole section is skipped for virtual quotes (downloadable
-   and virtual products only).
+   as typed. A carrier's error rate is listed as a disabled notice (carrier
+   title and message) and never selected; the first available rate is
+   preselected when the quote has no method yet; the in-store pickup rate
+   (`instore` / `pickup`) is not listed, because the checkout has no pickup
+   location step. The whole section is skipped for virtual quotes
+   (downloadable and virtual products only).
 3. Payment methods, billing address, coupon form, checkout agreements.
 4. Order summary with items (options and downloadable links as text), totals
    and the Place Order button.
@@ -59,6 +63,42 @@ offers its own gift message editor (see Gift messages) and no coupon form on
 the PayPal review page. When the merchant enables the shipping policy
 (`shipping/shipping_policy/*`) the shipping step shows a "See our shipping
 policy" button that opens the text in a dialog.
+
+## Order safety
+
+Place Order never sends an order the server has not confirmed the inputs of:
+
+- **The form and the quote must agree.** An edit of the shipping address or
+  of the method marks the shipping step as ahead of the quote until the
+  estimate and the shipping save for the current values came back. A press
+  of Place Order first waits for that pending work (the typing pause is cut
+  short, the requests in flight are awaited) and only then reads whether the
+  order can be placed; while something is still missing the button says what
+  (the hint names the address, the shipping method, the payment or the
+  purchase order number). A press after a failed estimate or shipping save
+  sends it again, once; there is no background retry.
+- **One order.** From the server's answer to the order request until the
+  success page loads, the overlay stays and the button stays locked; a
+  checkout page restored from the browser's back / forward cache reloads.
+- **A lost answer is resolved, not guessed.** The order request has a 60
+  second limit and is never retried automatically. When its answer does not
+  arrive, the checkout reads the cart: the cart is gone or inactive (the
+  order was placed: the shopper goes to the success page), the cart is still
+  active after a connection failure (not placed: the error says so and the
+  button opens again), or the outcome cannot be told (the message says so,
+  and the next press reads the cart again before it sends anything). A
+  timeout with a cart that is still active is reported as unknown, because
+  the server may still be working on the order.
+- **An HTML error body is never shown.** A response that is not JSON (a
+  proxy or web server error page) is neither data nor a message; the
+  checkout prints its own text for the status.
+- **Wallets use the same gate.** PayPal Express and Google Pay refuse to
+  start while a shipping save or a totals refresh is in flight
+  (`payment-renderers/checkout-gate.ts`), and PayPal saves a billing address
+  entered on its own before it opens.
+
+The limits of this recovery are listed in
+[Known limitations](./known-limitations.md#checkout-and-cart-behavior-to-know).
 
 ## REST API usage
 
@@ -83,19 +123,24 @@ therefore visible to the checkout.
 
 | Method code | Renderer | Status |
 |---|---|---|
-| `checkmo`, `banktransfer`, `cashondelivery`, `free` | `payment-offline` (instructions text) | verified on three platforms, guest and customer orders |
-| `purchaseorder` | `payment-offline` with a required PO number field | verified |
-| `paypal_express`, in-context (`payment/paypal_express/in_context = 1`) | `payment-paypal-express`: smart button, Pay Later message, owns Place Order | verified with real sandbox payments (guest, customer, from the cart, mini-cart and product page) |
+| `checkmo`, `banktransfer`, `cashondelivery`, `free` | `payment-offline`: the method's instructions (`banktransfer`, `cashondelivery`), and for `checkmo` the "Make Check payable to" and "Send Check to" details | orders verified as a guest and as a customer; the instructions under the selected method and on the order pages verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9) |
+| `purchaseorder` | `payment-offline` with a required PO number field; the number travels as `paymentMethod.po_number` | verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9): Place Order stays closed without the number, a guest order is placed and the order carries the typed number |
+| `paypal_express`, in-context (`payment/paypal_express/in_context = 1`) | `payment-paypal-express`: smart button, Pay Later message, owns Place Order | verified with real sandbox payments (guest, customer, from the cart, mini-cart and product page) on a platform now in "Previously tested" ([Compatibility](./compatibility.md#previously-tested)) |
 | `paypal_express` redirect flow (`in_context = 0`), `payflow_express` | same renderer, redirect flow | reaches PayPal with the token; completion of the payment not verified; `payflow_express` unit tested only |
-| `braintree` | `payment-braintree-card`: hosted fields, device data, 3D Secure (frictionless and challenge) | verified against a Braintree sandbox: approved, declined, 3D Secure |
+| `braintree` | `payment-braintree-card`: hosted fields, device data, 3D Secure (frictionless and challenge) | verified against a Braintree sandbox: approved, declined, 3D Secure (on a platform now in "Previously tested") |
 | `braintree_cc_vault`, `braintree_paypal_vault` | `payment-braintree-vault` and the `*_vault` token list (`vault-tokens.ts`) | vault with and without CVV verified against the same sandbox |
 | `braintree_paypal` | `payment-braintree-paypal` | not tested (no PayPal account linked to the sandbox) |
-| `braintree_googlepay` | `payment-braintree-googlepay`: Google Pay button (Braintree `google-payment` + Google's `pay.js`, loaded on selection), owns Place Order, 3D Secure for cards that are not network tokenized, vault choice; `braintree_googlepay_vault` tokens through the card vault adapter | button and sheet request verified against the Braintree sandbox in `TEST` environment; the payment itself needs a Google account in a real browser and was not completed by the automated checks |
+| `braintree_googlepay` | `payment-braintree-googlepay`: Google Pay button (Braintree `google-payment` + Google's `pay.js`, loaded on selection), owns Place Order, 3D Secure for cards that are not network tokenized, vault choice; `braintree_googlepay_vault` tokens through the card vault adapter | button verified against the Braintree sandbox (`TEST` environment, sheet request included); payment not verified (it needs a Google account in a real browser) |
 | any other code | `payment-generic` | listed disabled with "Not supported by this checkout yet" |
 
-Hosted Pro, Payflow Pro / Link / Advanced, PayPal billing agreements,
-Payment Services (Adobe), Apple Pay, Venmo, ACH and local payment methods
-have no renderer. Google Pay is supported through Braintree only. With Hosted Pro active, `payment/hosted_pro/display_ec`
+The renderers are exactly the rows above: the offline methods, PayPal
+Express (`paypal_express`, `payflow_express`), Braintree card, Braintree
+PayPal, Braintree Google Pay and the three Braintree vault codes
+(`braintree_cc_vault`, `braintree_paypal_vault`, `braintree_googlepay_vault`).
+Nothing else has a renderer: Hosted Pro, Payflow Pro / Link / Advanced,
+PayPal billing agreements, Payment Services (Adobe), Apple Pay, Venmo, ACH
+and local payment methods are listed as not supported when a store enables
+them. Google Pay is supported through Braintree only. With Hosted Pro active, `payment/hosted_pro/display_ec`
 must be 1 for PayPal Express to be offered at all (core rule).
 
 Gateway renderers are loaded on demand: the offline renderer ships in the
@@ -118,6 +163,7 @@ export interface PaymentRenderer {
     beforePlaceOrder?: () => Promise<Record<string, unknown>>;
     isReady?: () => boolean;
     afterPlaceOrderFailed?: () => void;
+    notReadyMessage?: () => string;
     ownsPlaceOrder?: () => boolean;
     placeOrder?: () => Promise<string | null>;
 }
@@ -132,6 +178,7 @@ registerPaymentRenderer(renderer);
 | `isAvailable(cfg)` | listing | Optional runtime gate on top of the method appearing in the available methods (for example "no saved agreements"). Omitted = available. |
 | `isReady()` | continuously | Optional gate read by the `canPlaceOrder` selector. It must read signals only, so the Place Order button follows it (PayPal stays locked until the shopper authorized the payment). |
 | `beforePlaceOrder()` | before the payment-information POST | Returns the `additional_data` object for the payment (nonce, device data, PO number). A rejection aborts the order and its (translated) message lands in the global error banner. Runs even when `placeOrder` is set. |
+| `notReadyMessage()` | while `isReady()` is false | Optional text for the Place Order hint (the purchase order renderer names its missing number); without it the hint is the generic payment one. |
 | `afterPlaceOrderFailed()` | after a failed order POST | For renderers holding single-use gateway state (a consumed nonce) that must be reset before a retry. |
 | `ownsPlaceOrder()` | render | `true` when the renderer completes the order with a control of its own (the PayPal smart button). The checkout's Place Order button is not rendered while that method is selected. |
 | `placeOrder()` | instead of the order POST | For methods whose order is placed elsewhere (redirect gateways). Resolves with the same-origin URL the shopper continues on, or `null` when it failed and already reported why in the global error. Redirect targets are validated against the store origin (`safe-redirect.ts`). |
@@ -239,7 +286,11 @@ replaces the line in place and returns to the cart. The
 summary card carries "Estimate Shipping and Tax": country, region and
 postcode go to `hyperion/cart/estimate`, which puts them on the quote's
 shipping address, collects the rates and applies the chosen one, so the
-totals show shipping and destination taxes before the checkout. While
+totals show shipping and destination taxes before the checkout. The rates
+are shown in the display currency and follow `tax/display/shipping`
+(including, excluding or both); a carrier's error rate is a text notice
+without a radio button and cannot be posted, and choosing another method
+replaces the stored one. While
 the quote has no destination yet, a logged-in customer sees the panel
 prefilled with the default shipping address and its rates (collected in
 memory, nothing is written to the quote until a rate is picked). The
@@ -251,7 +302,13 @@ carries the quote item's error as the error toast, and the cart page and
 the drawer print the same message under the line. Fixed
 Product Tax lines render under the items (mini-cart, cart, checkout
 summary) and as an "FPT" totals row when it is not included in the
-subtotal.
+subtotal. Each cart line prints a unit price and a row total in the tax
+display of `tax/cart_display/price` (including, excluding, or both with an
+"Excl. Tax" line); the mini-cart row total follows the same setting. The
+quantity inputs of the cart and of the mini-cart carry the product's `min`,
+`max` and `step` (quantity increments, decimal quantities), the mini-cart
+stepper sends one update after a short pause instead of one per tap, and
+the header count follows `checkout/cart_link/use_qty`.
 
 ## Name fields
 
@@ -271,7 +328,9 @@ a physical quote when "same as shipping" is unchecked) and the payment
 methods and totals are read again for it; Place Order waits for that. The cart
 and the order summary list downloadable links and bundle selections as
 text. Guest checkout with downloadable products follows core's
-`catalog/downloadable/disable_guest_checkout` guard through the controller.
+`catalog/downloadable/disable_guest_checkout` guard through the controller
+(on by default in core): the guest is sent to the login page with a notice
+that names the downloadable products as the reason.
 Verified end to end on Magento 2.4.8 (category, product page, cart, virtual
 checkout, order, invoice, download).
 

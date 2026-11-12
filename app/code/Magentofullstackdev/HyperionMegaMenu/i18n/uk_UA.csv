@@ -121,3 +121,4 @@
 "store value","значення магазину"
 "this store only","лише цей магазин"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} замінюється базовим URL представлення магазину; шлях без схеми є відносним щодо нього."
+"The item does not belong to this menu.","Елемент не належить до цього меню."

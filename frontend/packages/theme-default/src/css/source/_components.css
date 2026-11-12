@@ -462,6 +462,56 @@ hyperion-mini-cart:not(:defined) {
     opacity: 0.7;
 }
 
+/* --- Add to Cart busy state ---------------------------------------- */
+/* An Add to Cart submit button (`data-hyperion-atc`) holds its label and a
+   busy text as two sibling spans, after an optional icon. The button is a
+   four column grid: the icon and the label sit side by side in the two
+   middle tracks, centered by the flexible tracks around them, exactly where
+   the flex layout put them; the busy text spans every track of the same
+   row. Its width only feeds the flexible tracks and its height the row, so
+   the button is as wide and as tall as the larger of the two texts from the
+   first paint and swapping them moves nothing. The gap to the icon is a
+   margin, so a hidden or absent icon leaves an empty track of no width.
+   `button[...]` outranks the `inline-flex` and `gap-*` utilities, which come
+   later in the sheet. */
+button[data-hyperion-atc] {
+    display: inline-grid;
+    grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr);
+    column-gap: 0;
+    align-items: center;
+}
+
+button[data-hyperion-atc] > svg {
+    grid-area: 1 / 2;
+    margin-inline-end: 0.5rem;
+}
+
+[data-hyperion-atc] > [data-hyperion-atc-label] {
+    grid-area: 1 / 3;
+}
+
+[data-hyperion-atc] > [data-hyperion-atc-busy] {
+    grid-area: 1 / 1 / 2 / -1;
+    justify-self: center;
+    visibility: hidden;
+}
+
+/* htmx puts `htmx-request` on the form while its request runs. The button
+   stays enabled and clickable, so it keeps the focus under the keyboard and
+   under a double click; a second submit is dropped by the form's `hx-sync`. */
+form.htmx-request [data-hyperion-atc] {
+    cursor: progress;
+}
+
+form.htmx-request [data-hyperion-atc] > svg,
+form.htmx-request [data-hyperion-atc] > [data-hyperion-atc-label] {
+    visibility: hidden;
+}
+
+form.htmx-request [data-hyperion-atc] > [data-hyperion-atc-busy] {
+    visibility: visible;
+}
+
 /* --- Swatch skeleton (no layout shift) ----------------------------- */
 /* <hyperion-swatches> ships a server rendered skeleton with the final
    geometry of its rows (product/swatches/skeleton.phtml): visible while

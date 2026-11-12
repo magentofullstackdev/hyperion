@@ -6,7 +6,7 @@
 // A guest puts a product in the cart, opens the checkout, types the sample
 // customer's email, signs in with the inline password field: the page must reload
 // as a logged-in customer (storefront session), keep the guest item (quote merged
-// by core) and show the saved addresses. Magento 2.4.7+ answers the email check
+// by core) and show the saved addresses. Core answers the email check
 // only when "Enable Guest Checkout Login" (checkout/options/enable_guest_checkout_login)
 // is on: the script turns it on for the run and restores it. Clear the customer_login reCAPTCHA type for the run beforehand (see docs/development.md),
 // as for pw-suite.mjs. Exit code 1 on any failure.
@@ -14,6 +14,7 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -39,16 +40,13 @@ function compose(service, cmd, user) {
 }
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
-const previousOption = sql(`select value from core_config_data where scope = 'default' and scope_id = 0 and path = '${LOGIN_OPTION}'`);
+const { configSnapshot, restoreConfig, describe } = makeConfigSnapshot(sql);
+const previousOption = configSnapshot(LOGIN_OPTION);
 magento(`config:set ${LOGIN_OPTION} 1`);
 magento('cache:flush');
-console.log(`${LOGIN_OPTION} set to 1 on ${slot} (was ${previousOption === '' ? '(unset)' : previousOption})`);
+console.log(`${LOGIN_OPTION} set to 1 on ${slot} (was ${describe(previousOption)})`);
 function restoreOption() {
-    if (previousOption === '') {
-        sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = '${LOGIN_OPTION}'`);
-    } else {
-        magento(`config:set ${LOGIN_OPTION} ${previousOption}`);
-    }
+    restoreConfig(LOGIN_OPTION, previousOption);
     magento('cache:flush');
     console.log(`${LOGIN_OPTION} restored`);
 }

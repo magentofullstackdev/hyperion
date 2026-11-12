@@ -3,7 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const placeOrder = vi.fn<() => Promise<number | null>>();
+const placeOrder = vi.fn<() => Promise<number | 'placed-unconfirmed' | null>>();
 vi.mock('../../../../store/flow-actions.js', () => ({
     flowActions: () => ({ placeOrder }),
 }));
@@ -69,8 +69,23 @@ describe('<payment-braintree-googlepay>', () => {
         setActiveCatalogForTests(enUS);
         installCheckoutConfig();
         store = installStore();
+        // The quote carries a confirmed flat rate and offers Google Pay: the gate is open.
+        store.availableShippingMethods.set([{
+            carrier_code: 'flatrate',
+            method_code: 'flatrate',
+            carrier_title: 'Flat Rate',
+            method_title: 'Fixed',
+            amount: 5,
+            base_amount: 5,
+            available: true,
+            error_message: '',
+            price_excl_tax: 5,
+            price_incl_tax: 5,
+        }]);
         store.selectedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
         store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        store.availablePaymentMethods.set([{ code: 'braintree_googlepay', title: 'Google Pay' }]);
+        store.selectedPaymentMethod.set('braintree_googlepay');
         resetFlowSelectorsForTests();
         sdk = installBraintreeDouble();
         sdk.googlePayment.parseResponse.mockResolvedValue({
@@ -268,5 +283,50 @@ describe('<payment-braintree-googlepay>', () => {
         expect(sdk.googlePay.environment).toBe('PRODUCTION');
         expect(sdk.googlePayButton.options?.buttonColor).toBe('black');
         expect(sdk.googlePay.loadPaymentData.mock.calls[0]?.[0]).toMatchObject({ merchantInfo: { merchantId: 'BCR2DN4T' } });
+    });
+
+    it('keeps the button busy once the order exists, and releases it when the order failed', async () => {
+        placeOrder.mockImplementationOnce(async () => null);
+        const el = await mountReady(sdk);
+        await pay(sdk);
+        await vi.waitFor(() => expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('false'));
+
+        placeOrder.mockImplementationOnce(async () => {
+            store.isPlacingOrder.set(true);
+            store.orderPlaced.set(true);
+            return 42;
+        });
+        sdk.googlePayButton.element.click();
+        await vi.waitFor(() => expect(navigateTo).toHaveBeenCalledTimes(1));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+
+        expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('continues on the success page for an order the quote confirmed after its answer was lost', async () => {
+        placeOrder.mockResolvedValue('placed-unconfirmed');
+        await mountReady(sdk);
+        await pay(sdk);
+
+        await vi.waitFor(() => expect(navigateTo).toHaveBeenCalledTimes(1));
+    });
+
+    it('does not open the sheet while the order is being updated and says so', async () => {
+        await mountReady(sdk);
+        store.isRefreshingTotals.set(true);
+
+        sdk.googlePayButton.element.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
+        expect(store.globalError.get()).toBe('Your order is being updated. Try again in a moment.');
+
+        store.isRefreshingTotals.set(false);
+        store.isSavingShipping.set(true);
+        sdk.googlePayButton.element.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
+        expect(placeOrder).not.toHaveBeenCalled();
     });
 });

@@ -17,7 +17,10 @@
  *     in the global error banner.
  *   - `isReady`: optional gate read by the `canPlaceOrder` selector.
  *     It must read signals only, so the Place Order button follows it
- *     (PayPal stays locked until the shopper authorised the payment).
+ *     (PayPal stays locked until the shopper authorized the payment).
+ *   - `notReadyMessage`: optional, what the shopper has to do while
+ *     `isReady` is false (translated); the generic "select a payment
+ *     method" line is used without it.
  *   - `afterPlaceOrderFailed`: optional hook invoked when the order
  *     POST failed, for renderers holding single-use gateway state.
  *   - `ownsPlaceOrder`: true when the renderer completes the order with
@@ -46,6 +49,7 @@ export interface PaymentRenderer {
     isAvailable?: (cfg: PaymentMethodConfig) => boolean;
     beforePlaceOrder?: () => Promise<Record<string, unknown>>;
     isReady?: () => boolean;
+    notReadyMessage?: () => string;
     afterPlaceOrderFailed?: () => void;
     ownsPlaceOrder?: () => boolean;
     placeOrder?: () => Promise<string | null>;

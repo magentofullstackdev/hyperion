@@ -31,7 +31,6 @@ class FulltextIndexerPluginTest extends TestCase
 
     /**
      * @param array<int, mixed> $arguments
-     * @dataProvider hookProvider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('hookProvider')]
     public function testEveryIndexRunFlushesTheSuggestCacheOnce(string $hook, array $arguments): void
@@ -47,7 +46,6 @@ class FulltextIndexerPluginTest extends TestCase
 
     /**
      * @param array<int, mixed> $arguments
-     * @dataProvider hookProvider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('hookProvider')]
     public function testAThrowingCacheIsLoggedAndNeverFailsTheIndexer(string $hook, array $arguments): void

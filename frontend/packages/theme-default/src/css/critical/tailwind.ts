@@ -31,9 +31,10 @@ const MODULES = `${REPO}/app/code/Magentofullstackdev`;
 const SRC = '../..';
 
 /**
- * The page chrome every typed page paints first: header, menus, breadcrumbs,
- * title, and the footer, which is inside the fold of a short page (a CMS
- * page of a few paragraphs, a category with a handful of products).
+ * The page chrome every typed page paints first: the global notice bars,
+ * header, menus, breadcrumbs, title, and the footer, which is inside the fold
+ * of a short page (a CMS page of a few paragraphs, a category with a handful
+ * of products).
  */
 export const FOLD_COMMON: string[] = [
     `${THEME}/Magento_Theme/templates/root.phtml`,
@@ -42,6 +43,7 @@ export const FOLD_COMMON: string[] = [
     `${THEME}/Magento_Theme/templates/html/topmenu.phtml`,
     `${THEME}/Magento_Theme/templates/html/breadcrumbs.phtml`,
     `${THEME}/Magento_Theme/templates/html/title.phtml`,
+    `${THEME}/Magento_Theme/templates/html/notices.phtml`,
     `${THEME}/Magento_Theme/templates/html/notifications.phtml`,
     `${THEME}/Magento_Theme/templates/html/footer.phtml`,
     `${THEME}/Magento_Theme/layout/default.xml`,

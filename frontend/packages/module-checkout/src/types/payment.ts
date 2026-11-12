@@ -23,7 +23,7 @@ import type { ExtensionAttributes } from './common.js';
 /**
  * Configuration descriptor (the "available method" shape). Bundles
  * method-specific data from `checkoutConfig.payment[code]` under
- * `additional_data` when a method reserves an initialisation blob
+ * `additional_data` when a method reserves an initialization blob
  * (e.g. Stripe publishable key).
  */
 export interface PaymentMethodConfig {
@@ -63,6 +63,12 @@ export interface PaymentMethodConfig {
  */
 export interface PaymentMethodPayload {
     method: string;
+    /**
+     * Purchase order number. Core reads it only as a top-level field of the
+     * payment (`Magento\OfflinePayments\Model\Purchaseorder::assignData()`),
+     * never from `additional_data`.
+     */
+    po_number?: string;
     additional_data?: Record<string, unknown>;
     extension_attributes?: {
         agreement_ids?: readonly string[];
@@ -80,7 +86,7 @@ export interface PaymentInformationRequest {
  * `POST payment-information` returns the numeric order ID as a bare
  * number in the body (no wrapper object). When a gateway requires a
  * redirect (paypal_express, 3DS flows), the response shape can
- * differ per module -- we normalise to `PlaceOrderResult`.
+ * differ per module -- we normalize to `PlaceOrderResult`.
  */
 export type PlaceOrderResult =
     | { kind: 'ok'; orderId: number }

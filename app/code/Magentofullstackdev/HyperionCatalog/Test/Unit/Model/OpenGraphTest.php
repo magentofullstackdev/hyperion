@@ -7,11 +7,15 @@ namespace Magentofullstackdev\HyperionCatalog\Test\Unit\Model;
 
 use Magento\Catalog\Helper\Image as ImageHelper;
 use Magento\Catalog\Model\Product;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Escaper;
+use Magento\Framework\Module\Manager as ModuleManager;
+use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use Magentofullstackdev\HyperionCatalog\Model\OpenGraph;
 use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -20,6 +24,16 @@ class OpenGraphTest extends TestCase
     private OpenGraph $openGraph;
 
     protected function setUp(): void
+    {
+        $this->openGraph = $this->createOpenGraph(false, false);
+    }
+
+    /**
+     * @param bool $seoModuleEnabled Whether MageOS_Seo is an enabled module
+     * @param bool $seoModuleOpenGraph The module's Open Graph option of the store
+     * @return OpenGraph
+     */
+    private function createOpenGraph(bool $seoModuleEnabled, bool $seoModuleOpenGraph): OpenGraph
     {
         $imageHelper = $this->createStub(ImageHelper::class);
         $imageHelper->method('init')->willReturnSelf();
@@ -35,7 +49,51 @@ class OpenGraphTest extends TestCase
         $escaper = $this->createStub(Escaper::class);
         $escaper->method('escapeHtml')->willReturnCallback(static fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
         $escaper->method('escapeUrl')->willReturnCallback(static fn ($value) => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
-        $this->openGraph = new OpenGraph($imageHelper, $summary, $storeManager, $escaper, $this->createStub(LoggerInterface::class));
+        $moduleManager = $this->createStub(ModuleManager::class);
+        $moduleManager->method('isEnabled')->willReturnCallback(
+            static fn ($module): bool => $module === 'MageOS_Seo' && $seoModuleEnabled
+        );
+        $scopeConfig = $this->createStub(ScopeConfigInterface::class);
+        $scopeConfig->method('isSetFlag')->willReturnCallback(
+            static fn ($path, $scopeType = null): bool => $path === 'mageos_seo_general/og_tags/enabled'
+                && $scopeType === ScopeInterface::SCOPE_STORE
+                && $seoModuleOpenGraph
+        );
+
+        return new OpenGraph(
+            $imageHelper,
+            $summary,
+            $storeManager,
+            $escaper,
+            $this->createStub(LoggerInterface::class),
+            $moduleManager,
+            $scopeConfig
+        );
+    }
+
+    /**
+     * @return array<string, array{bool, bool, bool}>
+     */
+    public static function ownershipProvider(): array
+    {
+        return [
+            'no SEO module: Hyperion owns the tags' => [false, false, false],
+            'no SEO module, a leftover option value is ignored' => [false, true, false],
+            'SEO module with its Open Graph option on owns the tags' => [true, true, true],
+            'SEO module with its Open Graph option off: Hyperion owns the tags' => [true, false, false],
+        ];
+    }
+
+    #[DataProvider('ownershipProvider')]
+    public function testTheSeoModuleOwnsTheTagsOnlyWhileItsOpenGraphOptionIsOn(
+        bool $seoModuleEnabled,
+        bool $seoModuleOpenGraph,
+        bool $expected
+    ): void {
+        $this->assertSame(
+            $expected,
+            $this->createOpenGraph($seoModuleEnabled, $seoModuleOpenGraph)->isOwnedExternally()
+        );
     }
 
     public function testTagsOfAProductPage(): void

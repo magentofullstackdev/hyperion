@@ -1,6 +1,6 @@
 {
     "name": "@magentofullstackdev/hyperion-checkout",
-    "version": "0.9.0-beta.4",
+    "version": "0.9.0-beta.5",
     "description": "Hyperion one-step Magento 2 checkout: Lit + Tailwind, signal-based store, REST-driven. Replacement for the Luma Knockout/jQuery checkout.",
     "license": "MIT",
     "author": "Sergiu Ro <sergiu.ro@magentofullstack.dev>",

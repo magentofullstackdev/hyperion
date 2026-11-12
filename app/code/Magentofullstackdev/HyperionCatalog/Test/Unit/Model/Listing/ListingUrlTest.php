@@ -91,7 +91,6 @@ class ListingUrlTest extends TestCase
 
     /**
      * @param array<string, mixed> $query
-     * @dataProvider withQueryProvider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('withQueryProvider')]
     public function testWithQuery(string $base, array $query, string $expected): void

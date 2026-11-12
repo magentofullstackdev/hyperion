@@ -42,7 +42,7 @@
         renders its own accessible heading.
 
     NOT removed - checkout.cart.extra_actions:
-        This name does not appear in the Magento 2.4.7 core
+        This name does not appear in the core
         vendor/magento/module-checkout/view/frontend/layout/checkout_cart_index.xml.
         Adding a referenceBlock remove for a non-existent name emits a
         layout processing warning in developer mode; skipped intentionally.
@@ -63,7 +63,7 @@
         <referenceContainer name="checkout.cart.methods" remove="true"/>
         <!--
             checkout.cart.extra_actions: SKIPPED. This block name does not
-            exist in the Magento 2.4.7 core checkout_cart_index.xml tree.
+            exist in the core checkout_cart_index.xml tree.
             A referenceBlock remove for a non-existent name emits a layout
             processing warning in developer mode.
         -->

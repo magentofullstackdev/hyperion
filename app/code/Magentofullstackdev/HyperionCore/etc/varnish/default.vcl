@@ -59,7 +59,6 @@ backend default {
         .interval = 5s;
         .window = 10;
         .threshold = 5;
-        .initial = 2;
     }
 }
 
@@ -135,8 +134,8 @@ sub vcl_recv {
     set req.url = regsub(req.url, "^http[s]?://", "");
     std.collect(req.http.Cookie);
 
-    if (req.url ~ "(\?|&)(gclid|cx|ie|cof|siteurl|zanpid|origin|fbclid|mc_[a-z]+|utm_[a-z]+|_bta_[a-z]+)=") {
-        set req.url = regsuball(req.url, "(gclid|cx|ie|cof|siteurl|zanpid|origin|fbclid|mc_[a-z]+|utm_[a-z]+|_bta_[a-z]+)=[-_A-z0-9+()%.]+&?", "");
+    if (req.url ~ "(\?|&)(gad_source|gad_campaignid|gbraid|wbraid|_gl|dclid|gclsrc|srsltid|msclkid|gclid|ttclid|twclid|li_fat_id|igshid|epik|yclid|cx|_kx|ie|cof|siteurl|zanpid|origin|fbclid|mc_[a-z]+|utm_[a-z]+|_bta_[a-z]+)=") {
+        set req.url = regsuball(req.url, "(gad_source|gad_campaignid|gbraid|wbraid|_gl|dclid|gclsrc|srsltid|msclkid|gclid|ttclid|twclid|li_fat_id|igshid|epik|yclid|cx|_kx|ie|cof|siteurl|zanpid|origin|fbclid|mc_[a-z]+|utm_[a-z]+|_bta_[a-z]+)=[-_A-z0-9+()%.]+&?", "");
         set req.url = regsub(req.url, "[?|&]+$", "");
     }
 

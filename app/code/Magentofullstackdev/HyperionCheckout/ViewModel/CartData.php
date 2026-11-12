@@ -7,6 +7,7 @@ namespace Magentofullstackdev\HyperionCheckout\ViewModel;
 
 use Magento\Catalog\Helper\Image;
 use Magento\Catalog\Helper\Product\ConfigurationPool;
+use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Checkout\Model\Session;
 use Magento\Customer\Model\Address as CustomerAddress;
 use Magento\Customer\Model\Session as CustomerSession;
@@ -15,9 +16,13 @@ use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
+use Magento\Quote\Model\Cart\ShippingMethodConverter;
+use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Model\Quote\Item as QuoteItem;
+use Magento\Quote\Model\Quote\Item\Option as QuoteItemOption;
 use Magento\Store\Model\ScopeInterface;
+use Magento\Tax\Helper\Data as TaxHelper;
 use Magento\Tax\Model\Config as TaxConfig;
 use Magentofullstackdev\HyperionCheckout\Model\WeeeBridge;
 use Magentofullstackdev\HyperionCore\Model\Purchase\Availability;
@@ -28,6 +33,9 @@ class CartData implements ArgumentInterface
     private const WISHLIST_MODULE = 'Magento_Wishlist';
     private const WISHLIST_ACTIVE_PATH = 'wishlist/general/active';
     private const DEFAULT_COUNTRY_PATH = 'general/country/default';
+    private const CART_LINK_USE_QTY_PATH = 'checkout/cart_link/use_qty';
+    /** The smallest quantity a decimal product without a minimum or an increment accepts. */
+    private const DECIMAL_QTY_MIN = 0.0001;
 
     /**
      * Set once a read of the quote or of its totals failed in this request:
@@ -50,6 +58,9 @@ class CartData implements ArgumentInterface
      * @param ModuleManager $moduleManager
      * @param ScopeConfigInterface $scopeConfig
      * @param Availability $availability
+     * @param ShippingMethodConverter $shippingMethodConverter
+     * @param TaxHelper $taxHelper
+     * @param StockRegistryInterface $stockRegistry
      */
     public function __construct(
         private readonly Session $checkoutSession,
@@ -63,7 +74,10 @@ class CartData implements ArgumentInterface
         private readonly CustomerSession $customerSession,
         private readonly ModuleManager $moduleManager,
         private readonly ScopeConfigInterface $scopeConfig,
-        private readonly Availability $availability
+        private readonly Availability $availability,
+        private readonly ShippingMethodConverter $shippingMethodConverter,
+        private readonly TaxHelper $taxHelper,
+        private readonly StockRegistryInterface $stockRegistry
     ) {
     }
 
@@ -185,12 +199,23 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * @return int
+     * The cart count the header and the mini-cart show, like core's cart
+     * link: the sum of the quantities when `checkout/cart_link/use_qty` is on
+     * (at most two decimals, a whole sum is an int), the number of lines
+     * otherwise.
+     *
+     * @return float|int
      */
-    public function getItemCount(): int
+    public function getItemCount(): float|int
     {
         try {
-            return (int) $this->checkoutSession->getQuote()->getItemsQty();
+            $quote = $this->checkoutSession->getQuote();
+            if (!$this->scopeConfig->isSetFlag(self::CART_LINK_USE_QTY_PATH, ScopeInterface::SCOPE_STORE)) {
+                return (int) $quote->getItemsCount();
+            }
+            $qty = round((float) $quote->getItemsQty(), 2);
+
+            return $qty === floor($qty) ? (int) $qty : $qty;
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getItemCount -- ' . $e->getMessage());
@@ -199,12 +224,14 @@ class CartData implements ArgumentInterface
     }
 
     /**
+     * The count as text without trailing zeros, empty for an empty cart.
+     *
      * @return string
      */
     public function getItemCountDisplay(): string
     {
         $count = $this->getItemCount();
-        return $count === 0 ? '' : (string) $count;
+        return $count > 0 ? (string) $count : '';
     }
 
     /**
@@ -348,7 +375,7 @@ class CartData implements ArgumentInterface
                 $rows[] = $this->row('discount', (string) __('Discount'), $discount, 'discount', (string) $quote->getCouponCode());
             }
 
-            if (!$quote->isVirtual() && $address->getShippingMethod()) {
+            if (!$quote->isVirtual() && $address->getShippingMethod() && !$this->carriesErrorRate($address)) {
                 $this->addExclInclRows(
                     $rows,
                     'shipping',
@@ -476,9 +503,11 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * Quote amounts (totals, row totals, shipping rates) are already stored in
+     * Quote amounts (totals, item prices and row totals) are already stored in
      * the quote currency, so they are formatted without conversion; the
      * pricing helper's currency() would convert base to display a second time.
+     * A shipping rate carries a BASE currency price: it is converted first
+     * (see getShippingRates()) and only then formatted here.
      *
      * @param float $amount
      * @return string
@@ -520,6 +549,8 @@ class CartData implements ArgumentInterface
     {
         try {
             $quote = $this->checkoutSession->getQuote();
+            $store = $quote->getStore();
+            $priceMode = $this->cartPriceMode($store);
             $items = [];
 
             foreach ($quote->getAllVisibleItems() as $item) {
@@ -573,7 +604,9 @@ class CartData implements ArgumentInterface
                         'image_url' => $imageUrl,
                         'product_url' => (string) $product->getProductUrl(),
                         'row_total' => (float) $item->getRowTotal(),
-                        'row_total_display' => $this->formatCurrency((float) $item->getRowTotal()),
+                        'row_total_incl' => (float) $item->getRowTotalInclTax(),
+                        ...$this->itemPrices($item, $priceMode),
+                        ...$this->quantityRules($item, $quote),
                         'options' => $options,
                         'messages' => $this->itemMessages($item),
                         'remove_url' => (string) $this->urlBuilder->getUrl(
@@ -597,6 +630,124 @@ class CartData implements ArgumentInterface
             $this->logger->error('CartData::getItems -- ' . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * How the cart shows item prices (`tax/cart_display/price`).
+     *
+     * @param mixed $store
+     * @return string `incl`, `both` or `excl`
+     */
+    private function cartPriceMode($store): string
+    {
+        if ($this->taxConfig->displayCartPricesBoth($store)) {
+            return 'both';
+        }
+
+        return $this->taxConfig->displayCartPricesInclTax($store) ? 'incl' : 'excl';
+    }
+
+    /**
+     * Unit price and row total of a line the way the cart is configured to
+     * show them: including tax, excluding tax, or including tax with the
+     * excluding amounts beside them. FPT is added when the store shows cart
+     * prices including it (see WeeeBridge::getIncludedInPrice()).
+     *
+     * @param QuoteItem $item
+     * @param string $mode `incl`, `both` or `excl`
+     * @return array{
+     *     price_display: string,
+     *     price_display_excl: string|null,
+     *     row_total_display: string,
+     *     row_total_display_excl: string|null
+     * }
+     */
+    private function itemPrices(QuoteItem $item, string $mode): array
+    {
+        $fpt = $this->weee->getIncludedInPrice($item);
+        $priceExcl = (float) $item->getCalculationPrice() + ($fpt['unit'] ?? 0.0);
+        $rowExcl = (float) $item->getRowTotal() + ($fpt['row'] ?? 0.0);
+        if ($mode === 'excl') {
+            return [
+                'price_display' => $this->formatCurrency($priceExcl),
+                'price_display_excl' => null,
+                'row_total_display' => $this->formatCurrency($rowExcl),
+                'row_total_display_excl' => null,
+            ];
+        }
+        $priceIncl = (float) $item->getPriceInclTax() + ($fpt['unit_incl_tax'] ?? 0.0);
+        $rowIncl = (float) $item->getRowTotalInclTax() + ($fpt['row_incl_tax'] ?? 0.0);
+        $both = $mode === 'both';
+
+        return [
+            'price_display' => $this->formatCurrency($priceIncl),
+            'price_display_excl' => $both ? $this->formatCurrency($priceExcl) : null,
+            'row_total_display' => $this->formatCurrency($rowIncl),
+            'row_total_display_excl' => $both ? $this->formatCurrency($rowExcl) : null,
+        ];
+    }
+
+    /**
+     * What the quantity input of a line accepts, from the stock item of the
+     * product that is sold (the chosen variant of a configurable line).
+     * `qty_step` is the quantity increment when increments are on, otherwise
+     * 1 for a whole-unit product and `any` for a decimal one; `qty_min` is
+     * the minimum sale quantity (raised to the first increment), `qty_max`
+     * the maximum sale quantity or null. A stock item that cannot be read
+     * leaves the whole-unit defaults.
+     *
+     * @param QuoteItem $item
+     * @param Quote $quote
+     * @return array{is_qty_decimal: bool, qty_step: float|int|string, qty_min: float|int, qty_max: float|int|null}
+     */
+    private function quantityRules(QuoteItem $item, Quote $quote): array
+    {
+        $rules = ['is_qty_decimal' => false, 'qty_step' => 1, 'qty_min' => 1, 'qty_max' => null];
+        try {
+            $variant = $item->getOptionByCode('simple_product');
+            $variantProduct = $variant instanceof QuoteItemOption ? $variant->getProduct() : null;
+            $productId = (int) ($variantProduct?->getId() ?: $item->getData('product_id'));
+            if ($productId <= 0) {
+                return $rules;
+            }
+            $stockItem = $this->stockRegistry->getStockItem($productId, $quote->getStore()->getWebsiteId());
+            $decimal = (bool) $stockItem->getIsQtyDecimal();
+            $increment = (float) $stockItem->getQtyIncrements();
+            $min = (float) $stockItem->getMinSaleQty();
+            $max = (float) $stockItem->getMaxSaleQty();
+
+            if ($increment > 0) {
+                // The browser counts steps from `min`: keep it on the increment grid.
+                $min = max(1, (int) ceil(round($min / $increment, 4))) * $increment;
+            } elseif ($min <= 0) {
+                $min = $decimal ? self::DECIMAL_QTY_MIN : 1.0;
+            } elseif (!$decimal) {
+                $min = max(1.0, ceil($min));
+            }
+
+            $rules = [
+                'is_qty_decimal' => $decimal,
+                'qty_step' => $increment > 0 ? $this->plainNumber($increment) : ($decimal ? 'any' : 1),
+                'qty_min' => $this->plainNumber($min),
+                'qty_max' => $max > 0 && $max >= $min ? $this->plainNumber($max) : null,
+            ];
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                'CartData::quantityRules stock item unavailable for item id=' . $item->getId()
+                . ' -- ' . $e->getMessage()
+            );
+        }
+
+        return $rules;
+    }
+
+    /**
+     * A whole number as int, anything else as float, so the templates print
+     * `2` and `1.5`, never `2.0`.
+     */
+    private function plainNumber(float $value): float|int
+    {
+        return $value === floor($value) ? (int) $value : $value;
     }
 
     /**
@@ -696,10 +847,23 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * Shipping rates collected for the quote's shipping address. Used by
-     * the checkout fragment to render the shipping-methods radio list.
+     * Shipping rates collected for the quote's shipping address, for the cart
+     * estimator. Each rate goes through core's converter (the object the REST
+     * estimate returns): the amounts are in the quote currency, with and
+     * without tax, and the shipping tax display setting picks the one shown
+     * (`formatted_price_excl` is set only when both are shown). A rate the
+     * carrier answered with an error stays in the list as `available = false`
+     * with its `error_message` and no price: it is information, not a choice.
      *
-     * @return array<int,array{code:string,title:string,price:float,formatted_price:string}>
+     * @return array<int, array{
+     *     code: string,
+     *     title: string,
+     *     price: float,
+     *     formatted_price: string,
+     *     formatted_price_excl: string|null,
+     *     available: bool,
+     *     error_message: string
+     * }>
      */
     public function getShippingRates(): array
     {
@@ -730,17 +894,26 @@ class CartData implements ArgumentInterface
                 }
             }
             $rates = [];
+            $currencyCode = (string) $quote->getQuoteCurrencyCode();
+            $both = $this->taxHelper->displayShippingBothPrices();
+            $inclTax = $both || $this->taxHelper->displayShippingPriceIncludingTax();
             foreach ($grouped as $carrierRates) {
                 foreach ($carrierRates as $rate) {
-                    $price = (float) $rate->getPrice();
+                    $method = $this->shippingMethodConverter->modelToDataObject($rate, $currencyCode);
+                    $available = (bool) $method->getAvailable() && (string) $rate->getMethod() !== '';
+                    $excl = (float) $method->getPriceExclTax();
+                    $price = $inclTax ? (float) $method->getPriceInclTax() : $excl;
                     $rates[] = [
                         'code' => (string) $rate->getCode(),
                         'title' => trim(
                             (string) $rate->getCarrierTitle() . ' -- ' . (string) $rate->getMethodTitle(),
                             ' --'
                         ),
-                        'price' => $price,
-                        'formatted_price' => $this->formatCurrency($price),
+                        'price' => $available ? $price : 0.0,
+                        'formatted_price' => $available ? $this->formatCurrency($price) : '',
+                        'formatted_price_excl' => $available && $both ? $this->formatCurrency($excl) : null,
+                        'available' => $available,
+                        'error_message' => $available ? '' : (string) ($method->getErrorMessage() ?: ''),
                     ];
                 }
             }
@@ -750,6 +923,25 @@ class CartData implements ArgumentInterface
             $this->logger->error('CartData::getShippingRates -- ' . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Whether the method applied to the address is a rate the carrier
+     * answered with an error (a quote saved before such rates were refused):
+     * its 0.00 amount is not a shipping cost to show.
+     */
+    private function carriesErrorRate(Address $address): bool
+    {
+        $method = (string) $address->getShippingMethod();
+        foreach ((array) $address->getGroupedAllShippingRates() as $carrierRates) {
+            foreach ($carrierRates as $rate) {
+                if ((string) $rate->getCode() === $method) {
+                    return (string) $rate->getErrorMessage() !== '';
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -64,6 +64,22 @@ class Search implements HttpGetActionInterface
         } catch (\Throwable $e) {
             $this->logger->error('Hyperion Search fragment: unexpected failure -- ' . $e->getMessage());
 
+            return $this->degraded('search-result');
+        }
+    }
+
+    /**
+     * The listing could not be rendered (in practice: the search engine did
+     * not answer): the shopper gets the "try again" message in place of the
+     * grid, and no cache keeps it. An empty 500 only as the last resort.
+     */
+    private function degraded(string $fragmentName): Raw
+    {
+        try {
+            return $this->fragmentResponse->buildDegraded($fragmentName);
+        } catch (\Throwable $e) {
+            $this->logger->error('Hyperion listing fragment: degraded answer failed -- ' . $e->getMessage());
+
             return $this->rawFactory->create()->setHttpResponseCode(500)->setContents('');
         }
     }

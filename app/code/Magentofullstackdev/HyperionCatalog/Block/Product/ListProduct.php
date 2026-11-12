@@ -58,6 +58,11 @@ class ListProduct extends \Magento\Catalog\Block\Product\ListProduct
      * listing attribute, so it is added to the select before the
      * collection loads (core loads it in `_beforeToHtml`).
      *
+     * A load that throws (the search engine does not answer) is turned into
+     * the `has_error` flag here as well, for the core versions whose block
+     * does not catch it: the grid template then prints "try again" and the
+     * request is not stored, instead of the whole page failing.
+     *
      * @return $this
      */
     protected function _beforeToHtml()
@@ -73,10 +78,22 @@ class ListProduct extends \Magento\Catalog\Block\Product\ListProduct
             $this->logger->error('Magentofullstackdev\Catalog ListProduct: list mode attributes -- ' . $e->getMessage());
         }
 
-        return parent::_beforeToHtml();
+        try {
+            return parent::_beforeToHtml();
+        } catch (\Throwable $e) {
+            $this->logger->error('Magentofullstackdev\Catalog ListProduct: listing load failed -- ' . $e->getMessage());
+            $this->setData('has_error', true);
+
+            return $this;
+        }
     }
 
     /**
+     * The loaded collection of the listing. A load that fails here sets the
+     * same `has_error` flag core's block sets when the search engine does not
+     * answer, which the grid template prints as "try again" instead of as an
+     * empty listing.
+     *
      * @return Collection
      */
     public function getProductCollection(): Collection
@@ -93,6 +110,7 @@ class ListProduct extends \Magento\Catalog\Block\Product\ListProduct
             $this->logger->error(
                 'Magentofullstackdev\Catalog ListProduct: collection load failed -- ' . $e->getMessage()
             );
+            $this->setData('has_error', true);
         }
 
         return $this->getLayer()->getProductCollection()->setPageSize(0);
@@ -163,7 +181,10 @@ class ListProduct extends \Magento\Catalog\Block\Product\ListProduct
 
     /**
      * Block cache varies by: parent info + category id + page/limit/sort/dir
-     * + active filter params + the HTTP context vary string (currency,
+     * (validated by the filter guard before the action runs, so no junk
+     * value reaches the key) + every active filter of the layer state (the
+     * toolbar, pager and Load more URLs inside the grid carry them) + the
+     * HTTP context vary string (currency,
      * customer group, logged-in state: the same set the full page cache
      * varies on, so prices rendered for one currency or customer group never
      * reach another). Without these fields the Magento block cache pins the
@@ -203,7 +224,15 @@ class ListProduct extends \Magento\Catalog\Block\Product\ListProduct
         try {
             $state = $this->getLayer()->getState();
             foreach ($state->getFilters() as $filter) {
-                $context[] = $filter->getFilter()->getRequestVar() . '=' . $filter->getValueString();
+                $requestVar = (string) $filter->getFilter()->getRequestVar();
+                $entry = $requestVar . '=' . $filter->getValueString();
+                // A range filter keeps the parsed pair; the URLs inside the
+                // grid carry the request's own form of it (ViewModel\Listing).
+                if (is_array($filter->getData('value'))) {
+                    $requested = $this->getRequest()->getParam($requestVar);
+                    $entry .= '|' . (is_scalar($requested) ? (string) $requested : hash('xxh3', (string) json_encode($requested)));
+                }
+                $context[] = $entry;
             }
         } catch (\Throwable $e) {
             $this->logger->error(

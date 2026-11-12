@@ -14,6 +14,7 @@ use Magento\Framework\Api\FilterBuilder;
 use Magento\Framework\Api\Search\SearchCriteriaBuilderFactory;
 use Magento\Framework\Api\SortOrder;
 use Magento\Search\Api\SearchInterface;
+use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary;
 use Psr\Log\LoggerInterface;
 
@@ -23,7 +24,9 @@ use Psr\Log\LoggerInterface;
  * tolerance, SKU weight, promoted SKUs, synonyms and stop words apply), the
  * ids hydrated in one collection load and returned in relevance order as
  * ProductSummary records. An engine failure is logged and yields nothing:
- * the storefront never breaks because the engine is down.
+ * the storefront never breaks because the engine is down. It also marks the
+ * request as degraded, so "nothing" is shown once and no cache keeps it as
+ * the answer for the query.
  */
 class ProductProvider
 {
@@ -37,7 +40,8 @@ class ProductProvider
         private readonly ProductCollectionFactory $productCollectionFactory,
         private readonly CatalogConfig $catalogConfig,
         private readonly ProductSummary $productSummary,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly DegradedResponse $degradedResponse
     ) {
     }
 
@@ -78,6 +82,7 @@ class ProductProvider
             return ['ids' => $ids, 'total' => max((int) $result->getTotalCount(), count($ids))];
         } catch (\Throwable $e) {
             $this->logger->error('Hyperion search: engine query failed: ' . $e->getMessage());
+            $this->degradedResponse->mark();
             return ['ids' => [], 'total' => 0];
         }
     }

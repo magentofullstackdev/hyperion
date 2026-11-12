@@ -1,6 +1,6 @@
 # Hyperion
 
-> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.4 (beta). Supports Magento 2.4.7 to 2.4.9 and Mage-OS, PHP 8.3 to 8.5.
+> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.5 (beta). Supported platforms and their tiers: see docs/compatibility.md (Magento Open Source and Mage-OS, PHP 8.3 to 8.5).
 
 Website: https://hyperionfront.dev
 Live demo: https://demo.hyperionfront.dev
@@ -11,10 +11,10 @@ npm packages: @magentofullstackdev/hyperion-shared, @magentofullstackdev/hyperio
 ## Start here
 
 - [README](README.md): what you get, requirements, quick install, status, limitations in short
-- [Install](docs/install.md): Composer repository, minimum-stability beta, the modules and the theme, image cache commands, the checkout flag
+- [Install](docs/install.md): Composer repository, minimum-stability beta, the modules and the theme, image cache commands, the checkout flag, the production checklist (minification)
 - [Configuration](docs/configuration.md): every Hyperion setting in the admin, languages, images, search, mega menu
 - [Known limitations](docs/known-limitations.md): what the beta does not cover
-- [Compatibility](docs/compatibility.md): tested platforms, PHP versions, test counts
+- [Compatibility](docs/compatibility.md): support policy (tiers), tested platforms with dates, PHP versions, test counts
 - [CHANGELOG](CHANGELOG.md): releases
 
 ## Build on it

@@ -82,7 +82,28 @@ foreach ($product->getOptions() ?: [] as $customOption) {
 // The fallback <img> shows BEFORE <hyperion-gallery> upgrades -- use
 // the cache-resized medium URL (~700 px) so LCP stays under control
 // even if the merchant uploaded a 4 MB original.
-$mainImage = $galleryImages[0]['img'] ?? '';
+$mainEntry = $galleryImages[0] ?? [];
+$mainImage = (string) ($mainEntry['img'] ?? '');
+// The large cache file of the same image is the second `srcset` candidate
+// (a dense phone screen or a wide column picks it). The width descriptors
+// are the real pixel widths of the two cache files: the resize keeps the
+// aspect ratio inside the box of etc/view.xml, so they depend on the upload.
+// Without both sizes the image keeps its single candidate.
+$largeImage = (string) ($mainEntry['full'] ?? '');
+$mainSize = $mainImage !== '' ? $imageCfg?->getIntrinsicSize($mainImage) : null;
+$largeSize = $largeImage !== '' ? $imageCfg?->getIntrinsicSize($largeImage) : null;
+$hasLargeCandidate = $mainSize !== null && $largeSize !== null && $largeSize[0] > $mainSize[0];
+$mainSrcset = static fn (string $medium, string $large): string
+    => $escaper->escapeUrl($medium) . ' ' . $mainSize[0] . 'w, ' . $escaper->escapeUrl($large) . ' ' . $largeSize[0] . 'w';
+// The width of the media column: the product section is a container inside
+// the page container (2rem of padding in all), and from lg the column is
+// half of it minus half of the 3rem gap.
+$mainSizes = '(min-width: 1536px) 712px, (min-width: 1280px) 584px, (min-width: 1024px) 456px, '
+    . '(min-width: 768px) 704px, (min-width: 640px) 576px, calc(100vw - 4rem)';
+$mainAvif = (string) ($mainEntry['imgAvif'] ?? '');
+$mainWebp = (string) ($mainEntry['imgWebp'] ?? '');
+$largeAvif = (string) ($mainEntry['fullAvif'] ?? '');
+$largeWebp = (string) ($mainEntry['fullWebp'] ?? '');
 // `data-hyperion-product-meta` is the record lib/product-history.js stores
 // as "recently viewed" (and as "recently compared" when the compare toggle
 // below succeeds); the GA4 `view_item` record feeds <hyperion-gtag>. Both are
@@ -203,13 +224,32 @@ try {
                            <hyperion-gallery> Lit element upgrades. Wrap it in <picture> so
                            browsers fetch the WebP/AVIF companion when available -- saving up
                            to ~30% on the largest image of the page. */ ?>
-                    <?php if ($mainImage !== '' && $imageCfg !== null && $imageCfg->hasAvifCompanion($mainImage)): ?>
-                        <source type="image/avif" srcset="<?= $escaper->escapeUrl($imageCfg->getAvifUrl($mainImage)) ?>">
+                    <?php /* A format lists both widths only when both of its companions exist. */ ?>
+                    <?php if ($hasLargeCandidate && $mainAvif !== '' && $largeAvif !== ''): ?>
+                        <source type="image/avif"
+                                srcset="<?= /* @noEscape -- each URL escaped by the closure */ $mainSrcset($mainAvif, $largeAvif) ?>"
+                                sizes="<?= $escaper->escapeHtmlAttr($mainSizes) ?>">
+                    <?php elseif ($mainAvif !== ''): ?>
+                        <source type="image/avif" srcset="<?= $escaper->escapeUrl($mainAvif) ?>">
                     <?php endif; ?>
-                    <?php if ($mainImage !== '' && $imageCfg !== null && $imageCfg->hasWebpCompanion($mainImage)): ?>
-                        <source type="image/webp" srcset="<?= $escaper->escapeUrl($imageCfg->getWebpUrl($mainImage)) ?>">
+                    <?php if ($hasLargeCandidate && $mainWebp !== '' && $largeWebp !== ''): ?>
+                        <source type="image/webp"
+                                srcset="<?= /* @noEscape -- each URL escaped by the closure */ $mainSrcset($mainWebp, $largeWebp) ?>"
+                                sizes="<?= $escaper->escapeHtmlAttr($mainSizes) ?>">
+                    <?php elseif ($mainWebp !== ''): ?>
+                        <source type="image/webp" srcset="<?= $escaper->escapeUrl($mainWebp) ?>">
                     <?php endif; ?>
+                    <?php /* `width` / `height` are the intrinsic size of the medium file; the box on
+                             the page comes from `w-full aspect-square` (and the reset's `height: auto`). */ ?>
                     <img src="<?= $escaper->escapeUrl($mainImage) ?>"
+                         <?php if ($hasLargeCandidate): ?>
+                             srcset="<?= /* @noEscape -- each URL escaped by the closure */ $mainSrcset($mainImage, $largeImage) ?>"
+                             sizes="<?= $escaper->escapeHtmlAttr($mainSizes) ?>"
+                         <?php endif; ?>
+                         <?php if ($mainSize !== null): ?>
+                             width="<?= (int) $mainSize[0] ?>"
+                             height="<?= (int) $mainSize[1] ?>"
+                         <?php endif; ?>
                          alt="<?= /* @noEscape -- escaped above */ $productNameAttr ?>"
                          class="block w-full aspect-square object-contain rounded-2xl bg-surface-raised"
                          loading="eager"
@@ -346,7 +386,7 @@ try {
                           hx-target="#hyperion-notification"
                           hx-swap="outerHTML"
                           hx-select="#hyperion-notification"
-                          hx-indicator="#hyperion-add-to-cart-indicator"
+                          hx-sync="this:drop"
                       <?php endif; ?>
                       class="space-y-4"
                       novalidate>
@@ -399,7 +439,10 @@ try {
                         </p>
                     <?php endif; ?>
 
+                    <?php /* While the add runs the busy text replaces the icon and the label (same grid
+                             row, `_components.css`); the button stays enabled and keeps the focus. */ ?>
                     <button type="submit"
+                            <?php if (!$isCartConfigure): ?>data-hyperion-atc<?php endif; ?>
                             class="inline-flex w-full items-center justify-center gap-2
                                    px-6 py-3 rounded-lg font-bold uppercase tracking-wider
                                    bg-primary text-on-primary shadow-sm
@@ -411,12 +454,10 @@ try {
                             <path stroke-linecap="round" stroke-linejoin="round"
                                   d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
                         </svg>
-                        <span><?= $escaper->escapeHtml($isCartConfigure ? __('Update Cart') : __('Add to Cart')) ?></span>
-                        <?php if (!$isCartConfigure): ?>
-                            <span id="hyperion-add-to-cart-indicator"
-                                  class="htmx-indicator"
-                                  aria-live="polite"
-                                  aria-label="<?= $escaper->escapeHtmlAttr(__('Adding to cart...')) ?>"></span>
+                        <?php if ($isCartConfigure): ?>
+                            <span><?= $escaper->escapeHtml(__('Update Cart')) ?></span>
+                        <?php else: ?>
+                            <span data-hyperion-atc-label><?= $escaper->escapeHtml(__('Add to Cart')) ?></span><span data-hyperion-atc-busy aria-hidden="true"><?= $escaper->escapeHtml(__('Adding to cart...')) ?></span>
                         <?php endif; ?>
                     </button>
                 </form>
@@ -462,7 +503,8 @@ try {
                       hx-include="#product_addtocart_form"
                       hx-target="#hyperion-notification"
                       hx-swap="outerHTML"
-                      hx-select="#hyperion-notification">
+                      hx-select="#hyperion-notification"
+                      hx-sync="this:drop">
                     <?= $block->getBlockHtml('formkey') ?>
                     <input type="hidden" name="product" value="<?= (int) $productId ?>">
                     <button type="submit"
@@ -492,7 +534,8 @@ try {
                       hx-post="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare/add')) ?>"
                       hx-target="#hyperion-notification"
                       hx-swap="outerHTML"
-                      hx-select="#hyperion-notification">
+                      hx-select="#hyperion-notification"
+                      hx-sync="this:drop">
                     <?= $block->getBlockHtml('formkey') ?>
                     <input type="hidden" name="product" value="<?= (int) $productId ?>">
                     <button type="submit"

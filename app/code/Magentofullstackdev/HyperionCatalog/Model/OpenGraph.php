@@ -7,7 +7,10 @@ namespace Magentofullstackdev\HyperionCatalog\Model;
 
 use Magento\Catalog\Helper\Image as ImageHelper;
 use Magento\Catalog\Model\Product;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Escaper;
+use Magento\Framework\Module\Manager as ModuleManager;
+use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary;
 use Psr\Log\LoggerInterface;
@@ -15,28 +18,60 @@ use Psr\Log\LoggerInterface;
 /**
  * Open Graph and product meta tags of a product page.
  *
- * Core emits them from a block in `head.additional`, which the theme
- * removes (it is where every RequireJS head script lands). The tags are
- * appended to the rendered head content by
+ * Core emits a smaller set from the `opengraph.general` block of
+ * `head.additional`, which the theme removes by name. The tags are appended
+ * to the rendered head content by
  * Plugin\Framework\View\Page\Config\RendererPlugin on product pages, so
- * they work on every Magento version the theme supports.
+ * they work on every Magento version the theme supports. One source per
+ * page: when an SEO module emits the product tags itself, Hyperion emits
+ * none (see isOwnedExternally()).
  */
 class OpenGraph
 {
+    /**
+     * The Mage-OS SEO module, by name only: it is optional and never a dependency.
+     */
+    private const SEO_MODULE = 'MageOS_Seo';
+
+    /**
+     * The module's "Enable OG Tags" option (store scope, on by default).
+     */
+    private const XML_PATH_SEO_MODULE_OPEN_GRAPH = 'mageos_seo_general/og_tags/enabled';
+
     /**
      * @param ImageHelper $imageHelper
      * @param ProductSummary $productSummary
      * @param StoreManagerInterface $storeManager
      * @param Escaper $escaper
      * @param LoggerInterface $logger
+     * @param ModuleManager $moduleManager
+     * @param ScopeConfigInterface $scopeConfig
      */
     public function __construct(
         private readonly ImageHelper $imageHelper,
         private readonly ProductSummary $productSummary,
         private readonly StoreManagerInterface $storeManager,
         private readonly Escaper $escaper,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly ModuleManager $moduleManager,
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
+    }
+
+    /**
+     * Whether another module emits the product Open Graph tags of the current store.
+     *
+     * True when MageOS_Seo is enabled and its Open Graph option is on: its head block then
+     * prints the same properties (plus the locale and the X card), and a second set would hand
+     * a crawler two values of each. With the option off the merchant switched off the module's
+     * output, not Open Graph as such, so Hyperion's tags stay.
+     *
+     * @return bool
+     */
+    public function isOwnedExternally(): bool
+    {
+        return $this->moduleManager->isEnabled(self::SEO_MODULE)
+            && $this->scopeConfig->isSetFlag(self::XML_PATH_SEO_MODULE_OPEN_GRAPH, ScopeInterface::SCOPE_STORE);
     }
 
     /**

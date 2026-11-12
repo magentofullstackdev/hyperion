@@ -97,9 +97,6 @@ class CheckoutGuardPluginTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider routeProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('routeProvider')]
     public function testOnlyGuardedRoutesAreBlocked(string $fullAction, bool $guarded): void
     {

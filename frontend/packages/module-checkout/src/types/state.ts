@@ -58,6 +58,7 @@ export interface CheckoutState {
     isLoadingShippingMethods: boolean;
     appliedShippingMethod: SelectedShippingMethod | null;
     isSavingShipping: boolean;
+    shippingDirty: boolean;
     isSavingBilling: boolean;
     billingSynced: boolean;
 
@@ -72,9 +73,12 @@ export interface CheckoutState {
 
     // Totals
     totals: Totals | null;
+    isRefreshingTotals: boolean;
 
     // UI
     isPlacingOrder: boolean;
+    orderPlaced: boolean;
+    orderOutcomeUnknown: boolean;
     globalError: string | null;
     fieldErrors: Readonly<Record<string, string>>;
 

@@ -11,6 +11,8 @@ declare(strict_types=1);
  * destination (country, region, postcode through <hyperion-region-select>)
  * and, once rates are collected, the chosen method as a radio. Picking a
  * radio submits at once; the Estimate button submits the destination.
+ * A rate the carrier answered with an error is a line of text (carrier and
+ * message) without a radio or a price.
  * Without JavaScript the same form posts and the controller redirects back.
  *
  * @var \Magento\Framework\View\Element\Template $block
@@ -31,6 +33,7 @@ $formKey = $viewModels->require(FormKey::class)->getFormKey();
 $estimate = $cartData->getEstimateAddress();
 $rates = $cartData->getShippingRates();
 $selected = $cartData->getSelectedShippingMethod();
+$hasAvailableRate = array_filter($rates, static fn (array $rate): bool => $rate['available']) !== [];
 $countryId = $estimate['country_id'];
 $regionsForCountry = $addressForm->getRegionsForCountry($countryId);
 $requiredCountries = $addressForm->getCountriesWithRequiredStates();
@@ -142,6 +145,14 @@ $labelClass = 'block text-xs font-medium text-muted mb-1';
                     <?= $escaper->escapeHtml(__('Shipping method')) ?>
                 </legend>
                 <?php foreach ($rates as $rate): ?>
+                    <?php if (!$rate['available']): ?>
+                        <?php /* A rate the carrier answered with an error: information, never a choice. */ ?>
+                        <p class="text-xs text-muted" data-hyperion-cart-estimate-unavailable>
+                            <?= $escaper->escapeHtml($rate['title']) ?>:
+                            <?= $escaper->escapeHtml($rate['error_message']) ?>
+                        </p>
+                        <?php continue; ?>
+                    <?php endif; ?>
                     <label class="flex items-center justify-between gap-3 text-sm text-secondary cursor-pointer">
                         <span class="flex items-center gap-2">
                             <input type="radio"
@@ -151,9 +162,22 @@ $labelClass = 'block text-xs font-medium text-muted mb-1';
                                    class="text-primary focus:ring-primary">
                             <span><?= $escaper->escapeHtml($rate['title']) ?></span>
                         </span>
-                        <span class="font-medium"><?= $escaper->escapeHtml($rate['formatted_price']) ?></span>
+                        <span class="font-medium text-right" data-hyperion-cart-estimate-price>
+                            <span data-hyperion-cart-estimate-amount><?= $escaper->escapeHtml($rate['formatted_price']) ?></span>
+                            <?php if ($rate['formatted_price_excl'] !== null): ?>
+                                <span class="block text-xs font-normal text-muted">
+                                    (<?= $escaper->escapeHtml(__('Excl. Tax')) ?>:
+                                    <?= $escaper->escapeHtml($rate['formatted_price_excl']) ?>)
+                                </span>
+                            <?php endif; ?>
+                        </span>
                     </label>
                 <?php endforeach; ?>
+                <?php if (!$hasAvailableRate): ?>
+                    <p class="text-xs text-muted" data-hyperion-cart-estimate-empty>
+                        <?= $escaper->escapeHtml(__('Sorry, no quotes are available for this order at this time.')) ?>
+                    </p>
+                <?php endif; ?>
             </fieldset>
         <?php elseif ($countryId !== '' && $estimate['postcode'] !== ''): ?>
             <p class="text-xs text-muted" data-hyperion-cart-estimate-empty>

@@ -7,19 +7,34 @@
     Magentofullstackdev_HyperionSampleData
 
     Optional helper for stores that installed the Magento (Luma) sample
-    data. The sample data binds every widget instance and its layout
+    data. The sample data binds its widget instances and their layout
     links to the Magento/luma theme, so on a Hyperion storefront the home
     page promo grid, the category banners and the other CMS blocks never
-    render. This module rebinds them to Magentofullstackdev/hyperion on
-    every `setup:upgrade` (see Setup/RecurringData.php).
+    render. On `setup:upgrade` (Setup/RecurringData.php) this module:
+
+      - rebinds the widget instances the sample data created (matched by
+        type and title, while Magento_WidgetSampleData is enabled) and
+        their layout links to Magentofullstackdev/hyperion; any other
+        widget or layout update bound to Luma is not touched;
+      - replaces the sample data pub/media/styles.css (recognized by its
+        selectors, the original is kept as styles.css.luma.bak) and
+        removes its link from design/head/includes for the store views
+        that run Hyperion or a child theme of it;
+      - adds three sample products (bundle, virtual, customizable
+        options) when the Luma sample catalog is present.
+
+    Every step is idempotent and logs instead of failing the upgrade.
 
     Not required by the theme package on purpose: install it only when
-    you want the Luma sample content on Hyperion.
+    you want the Luma sample content on Hyperion. On a production store
+    that serves Luma and Hyperion side by side, read the notes on the
+    shared media stylesheet in the documentation first.
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
     <module name="Magentofullstackdev_HyperionSampleData">
         <sequence>
+            <module name="Magento_Store"/>
             <module name="Magento_Theme"/>
             <module name="Magento_Widget"/>
             <module name="Magento_Cms"/>

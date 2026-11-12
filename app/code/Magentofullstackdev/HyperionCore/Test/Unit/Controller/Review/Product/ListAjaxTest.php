@@ -120,7 +120,6 @@ class ListAjaxTest extends TestCase
     }
 
     /**
-     * @dataProvider hiddenProductProvider
      * @param int[] $websiteIds
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('hiddenProductProvider')]

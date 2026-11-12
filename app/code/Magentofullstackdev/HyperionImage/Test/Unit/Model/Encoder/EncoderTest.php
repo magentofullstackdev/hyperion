@@ -86,9 +86,6 @@ class EncoderTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testOversizedHeaderIsRefusedBeforeDecoding(string $kind): void
     {
@@ -109,9 +106,6 @@ class EncoderTest extends TestCase
         self::assertFileDoesNotExist($target . '.tmp');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testBudgetFollowsTheConfiguration(string $kind): void
     {
@@ -124,9 +118,6 @@ class EncoderTest extends TestCase
         $encoder->encode($source, $this->path('medium.png.webp'), $this->webp, 80);
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testZeroBudgetDisablesTheCheck(string $kind): void
     {
@@ -140,9 +131,6 @@ class EncoderTest extends TestCase
         self::assertFileDoesNotExist($target . '.tmp');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testTinyImageWithinTheDefaultBudgetIsEncoded(string $kind): void
     {
@@ -156,9 +144,6 @@ class EncoderTest extends TestCase
         self::assertFileDoesNotExist($target . '.tmp');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testTruncatedFileIsRefused(string $kind): void
     {
@@ -176,9 +161,6 @@ class EncoderTest extends TestCase
         self::assertFileDoesNotExist($target . '.tmp');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testMissingSourceIsRefused(string $kind): void
     {
@@ -189,9 +171,6 @@ class EncoderTest extends TestCase
         $encoder->encode($this->path('absent.png'), $this->path('absent.png.webp'), $this->webp, 80);
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testNoTempFileSurvivesAnUnwritableTarget(string $kind): void
     {
@@ -212,9 +191,6 @@ class EncoderTest extends TestCase
         self::assertFileDoesNotExist($target . '.tmp');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testNoTempFileSurvivesARefusedRename(string $kind): void
     {
@@ -236,9 +212,6 @@ class EncoderTest extends TestCase
         self::assertFileExists($target . '/keep');
     }
 
-    /**
-     * @dataProvider encoders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('encoders')]
     public function testAMaxWidthScalesTheImageDownKeepingTheRatio(string $kind): void
     {

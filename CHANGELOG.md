@@ -6,9 +6,111 @@ All notable changes to Hyperion are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0-beta.5] - 2026-11-12
+
+A correctness release: listings, the checkout's order safety, cart prices under tax display settings, the mega menu admin and the sample data module. Read the upgrade notes at the end of this section before you update.
+
+### Fixed
+
+**Listings**
+- Sort, direction, grid / list, page size, the pager, "Load more" and the automatic loading keep the active layered navigation filters: their URLs come from one place (`HyperionCatalog\ViewModel\Listing::getStateFragmentUrl()` / `getAppendFragmentUrl()`), which carries the filters of the layer state. Before, a sort or a page change on a filtered listing answered the unfiltered one.
+- A listing URL with a page size the store does not offer (`product_list_limit=1&p=9000`) answered HTTP 500 from the search engine window. Toolbar parameters are validated before the layer runs: a sort order, direction, mode or page size the store does not offer is dropped, and the page clamp uses the page size the toolbar will really apply.
+- A search engine outage is no longer cached. With the engine down the category list block saved core's empty error state in the block cache and Varnish kept an empty listing after the engine came back. A listing that cannot load now says "We can't load the products right now. Please try again in a moment.", marks the request degraded (no block cache entry, private response, no pushed URL), the listing fragments answer that message instead of an error, and the search autocomplete does not store an answer computed during the outage.
+- Two quick clicks on listing controls (two filters, a filter then a sort) ended in whichever answer arrived last. The grid and the layered navigation share one request queue (`hx-sync` on the grid, `replace`): a newer request aborts the one in flight.
+- Back and Forward across a listing change, or an account page change, restored a DOM snapshot that htmx had saved in `sessionStorage` (stale prices, stale session state, components upgraded twice). htmx now keeps no history snapshot (`historyCacheSize: 0`, `refreshOnHistoryMiss: true`): Back and Forward request the public URL again, served from the edge cache.
+- The Varnish tags of a listing fragment come from the list block's identities, so the category's product tag (`cat_c_p_<id>`) is part of them and a change of the category's product assignment purges the fragments as it purges the page.
+- Session messages (for example "You added ... to your comparison list" after a redirect) show on category pages: the theme removed the container that holds them there.
+- The wish list and compare labels of the tiles were escaped twice (a product name with an apostrophe or an ampersand read as entity text to screen readers).
+- Marketing parameters (`gclid`, `utm_*`, ...) on a category URL never count against the filter rate limit; the PHP guard and the VCL read one list.
+
+**Add to Cart, wish list, compare**
+- A double click or a double tap on Add to Cart added the product twice. Every Add to Cart, wish list and compare form drops a second submit while the first is in flight (`hx-sync="this:drop"`); the button shows "Adding to cart..." in place of its label without changing size and keeps the keyboard focus.
+- Mini-cart quantity stepper: rapid taps lost steps or ended at a wrong quantity. Steps are accumulated and sent as one update after a short pause; a tap during a request is followed by exactly one more request with the final quantity.
+
+**Checkout**
+- An order could be placed against the previous shipping address or shipping method when Place Order was pressed right after an edit. Place Order now waits for the pending address estimate and save, and never sends the order while the form is ahead of what the server confirmed. A press after a failed shipping save sends the save again, once.
+- Place Order could be pressed a second time after a successful order while the browser was still on its way to the success page. The button stays locked from the server's answer until the success page loads, and a checkout page restored from the back / forward cache reloads.
+- A lost answer to the order request (timeout after 60 seconds, connection dropped) left the shopper with a generic error and an order that might exist. The checkout now reads the cart: the order was placed (the shopper is sent to the success page), it was not placed (the error says so and the button opens again), or the outcome is unknown (the message says so and the next press checks again before sending anything). A timeout with a cart that is still active is reported as unknown, because the server may still be working on the order.
+- An error page of a proxy or of the web server (an HTML body) was shown as the error message. A body that is not JSON is never data and never a message; the checkout shows its own text for the status.
+- Shipping methods: a carrier's error rate ("This shipping method is not available...") was selectable and could be preselected. Error rates are listed as disabled notices, the first available rate is preselected, and the in-store pickup rate is not listed (the checkout has no pickup location step).
+- Purchase Order: the number typed in the checkout did not reach the order. It travels as `paymentMethod.po_number`, the field is required, and an early press names it.
+- Bank transfer and cash on delivery instructions, and the "Make Check payable to" / "Send Check to" details of Check / Money Order, render under the selected method.
+- PayPal Express and Google Pay refuse to start while a shipping save or a totals refresh is in flight (one gate, shared with Place Order); PayPal saves a separately entered billing address before it opens.
+- reCAPTCHA at Place Order: a failed load of Google's script was cached, so every later press failed until a reload. A failed load is retried on the next press.
+- A guest whose cart holds a downloadable product is sent to the sign in page by core's "Disable Guest Checkout if Cart Contains Downloadable Items" (`catalog/downloadable/disable_guest_checkout`, on by default), and the notice read "Guest checkout is disabled." even with guest checkout allowed. The notice now names the downloadable products when they are the reason.
+
+**Cart and prices**
+- Cart lines ignored the cart tax display: with prices shown including tax (`tax/cart_display/price`) the row totals were the amounts excluding tax and did not add up to the subtotal. The cart now prints a unit price and a row total per line in the configured display (including, excluding, or both), the mini-cart row total follows the same rule, and Fixed Product Tax is part of the line price when `tax/weee/display_sales` says so.
+- Cart estimator: the rates were shown in the base currency beside totals in the display currency. Rates are converted to the quote currency and follow `tax/display/shipping`; a carrier's error rate is listed as a notice and cannot be selected or posted.
+- Cart estimator: choosing a second shipping method showed the new totals while the quote kept the previous method. The newly selected method is the one stored.
+- Decimal quantities (products with "Qty Uses Decimals") were truncated in the cart and the mini-cart. Both quantity inputs carry the product's `step`, `min` and `max` (quantity increments included) and accept decimals; the header count follows `checkout/cart_link/use_qty`.
+- Product widget tiles and cart cross-sells showed the price excluding tax whatever `tax/display/type` said, and a grouped product's "Starting at" amount was converted twice in a non-base currency. Those prices come from the product's price info now, with the excluding amount beside them in the "both" display; a configurable tile no longer loads its children.
+- Bundle options: the option prices and the "Price as configured" total ignored the catalog tax display, and were converted twice in a non-base currency. A selection name with an HTML entity (`&trade;`) printed the entity in the summary.
+- Configurable products: after a swatch pick the price was formatted with a dot and two decimals on every store view. It uses the store view's number format (decimal comma, grouping, precision).
+
+**Mega menu admin**
+- An item added in a store view scope was saved twice (once as a shared item); it is saved once, as an item of that store view.
+- A store view could not override the target of a shared item: the form printed two "Use Default Value" boxes with one name. There is one box, and the override shows after a reload.
+- Deselecting every customer group or every store view of an item did not clear the restriction.
+- An item could be saved through the URL of another menu group; the save is refused.
+
+**Sample data** (`Magentofullstackdev_HyperionSampleData`)
+- The widget rebind moved every Luma widget of the store to Hyperion on each `setup:upgrade`. It now moves only the 17 CMS block widgets the Luma sample data creates (matched by type and title, and only while `Magento_WidgetSampleData` is enabled) and their layout links.
+- `pub/media/styles.css` is replaced only when it is the Luma sample stylesheet, and the original is kept as `styles.css.luma.bak`; a merchant's own file is left alone and reported in the log.
+- The `{{MEDIA_URL}}styles.css` link is removed from `design/head/includes` only for store views that run Hyperion or a child theme; a row shared with a store view on another theme stays.
+- The sample products are created on any `setup:upgrade` when the Luma catalog is present, and a failure is logged instead of aborting the deploy.
+- Two data patches keep the look of the sample store now that the brand and the footer text come from the store: the store name `HYPERION` when the store has none (the wordmark), and the CMS block `hyperion-footer-about` with the former footer sentence, translated through the module's `i18n/` files.
+
+**Forms and messages**
+- A form protected by reCAPTCHA resubmitted itself without end when Google's script was blocked or failed (content blocker, network). The form is submitted once without a token, the server answers with its reCAPTCHA message, and the next attempt asks Google again.
+- A storefront message set while the landing page comes from the page cache (for example a reCAPTCHA refusal of the footer newsletter form) showed on the next page the shopper opened. It now shows on the page it belongs to: `<hyperion-messages>` reads the message cookie again after each htmx request.
+- Registration form with address fields: the VAT number field was printed twice.
+- The header search field aborts the previous autocomplete request when a newer one starts.
+
+**Platform**
+- Magento's JS and CSS minification (`dev/js/minify_files`, `dev/css/minify_files`) broke the storefront in production mode: Magento renamed the build output to `.min` files that the manifest and the chunks' own imports did not know (404 for the stylesheet, htmx and every component). `HyperionCore` ships `minify_exclude` defaults for the build output of the theme and of the checkout, which Vite already minifies; see [Install](./docs/install.md#production-checklist).
+- Image cache flush: the plugin that removes leftover WebP / AVIF companions when the catalog image cache is flushed was declared on a class that has no such method and never ran. It targets `Magento\Catalog\Model\Product\Image::clearCache()`.
+- Varnish: the backend probe no longer sets `.initial = 2`, which marked the backend sick for about 10 seconds after every VCL load (503 answers); one good poll marks it healthy.
+- Varnish: the list of marketing parameters stripped from the cache key follows core 2.4.9 and adds `gad_campaignid`, `ttclid`, `twclid`, `li_fat_id`, `igshid`, `epik` and `yclid`.
+- The rate limiter's counters are saved without a cache tag: nothing ever cleaned by that tag, and the counters expire on their own after the window.
+- Persistent Shopping Cart: core's "remember me" configuration script (RequireJS only) is not printed on guest pages.
+- A long store name in the header wordmark made the page scroll sideways on narrow phones: the wordmark truncates.
+- Core's local storage notice (`web/browser_capabilities/local_storage`) printed a RequireJS script, a page error on this theme; the theme does not render that notice.
+
 ### Changed
+- `head.additional` renders again. The theme used to remove the whole container; it now removes by name the core children that only feed RequireJS (`google_analytics`, `google_gtag_analytics`, `gtag_google_adwords`, `form_key_provider`, `csp.sri.hashes`, `translate-config`) and core's `opengraph.general`, so a head block of another module reaches the page as that module wrote it.
+- Open Graph on Mage-OS 4.0: when `MageOS_Seo` is enabled with its Open Graph tags on (`mageos_seo_general/og_tags/enabled`), that module is the one source of the tags and Hyperion emits none; with the option off Hyperion emits its product tags as before. See [Compatibility](./docs/compatibility.md#mage-os-40-seo-module).
+- Footer: the Customer service column lists the links modules add to core's `footer_links` block (Advanced Search, Search Terms, RSS, third-party links) after the four designed entries, without duplicates; a `referenceBlock remove` of one link is respected.
+- Brand: the header and footer wordmark and the logo link's accessible name use the store's name (Stores > Configuration > General > Store Information > Store Name, then the store group name, the website name, the host), never "Hyperion". The footer tagline is gone; the paragraph under the footer logo is the optional CMS block `hyperion-footer-about`.
+- Guest order lookup: the Invoices, Shipments and Refunds tabs render in the same shell as the guest order view (info card, items, totals, print links), and the tabs are styled.
+- The demo store notice (`design/head/demonotice`) and the "JavaScript disabled" notice are styled bars above the header, without a layout shift.
+- Product page: the first gallery image carries `srcset`, `sizes`, `width` and `height` (medium and large cache files), so a high density phone gets the large file and everything else the medium one.
 - PayPal placements (the product page buttons, the Pay Later messages) request the PayPal SDK only after a sign of the shopper on the page (a pointer move, a scroll, a touch, a key), on top of the placement being near the viewport and the page idle. About 450 KB of script in three frames no longer runs on a page nobody interacts with, and a lab measurement of the product page (PageSpeed) no longer counts its long tasks; a shopper sees the buttons as before, the placement keeps its reserved height.
 - The product history write of the product page runs in an idle slot; the product carousel measures its track from the resize observer's first report instead of forcing a layout right after its first render.
+- Composer: `magento/framework ^103.0.8` in every package (was `^103.0.6`); `HyperionImage` requires `magento/module-catalog >=104.0.8` and `magento/module-media-storage >=100.4.7`; `mage-os/module-seo` is a `suggest` of `HyperionCatalog`.
+- Child theme scaffold (`hyperion create`): the generated Vite config keeps `entry.js` and `entry.css` under fixed names and writes every other chunk and asset with a hash in its name, the shape the minification excludes match.
+- Unit tests: data providers carry the `#[DataProvider]` attribute only (PHPUnit 10 and 12); the `@dataProvider` annotations are gone.
+- End-to-end scripts: `pw-listing-state.mjs` is new; the scripts that change configuration snapshot the stored state of each setting and restore exactly that (`e2e/lib/config-snapshot.mjs`), instead of writing fixed defaults.
+- CI: the PHP workflow gates on Mage-OS 4.0 with PHP 8.4 and 8.5; PHP 8.3 on Mage-OS 4.0, Mage-OS 3.6 and a nightly run on the newest Mage-OS are informative. Every leg checks that each plugin method targets an existing public method (`.github/scripts/check-plugin-targets.php`); the gate legs validate the twelve Composer manifests and check that the fifteen version fields agree.
+
+### Removed
+- Platform support for Magento Open Source 2.4.7 and Mage-OS 2.x. `0.9.0-beta.4` is the last release whose notes mention them; those rows were last verified on 2026-10-29. Magento 2.4.7 (`magento/framework` 103.0.7) no longer resolves this release and keeps `0.9.0-beta.4`. The supported platforms and their tiers are in [Compatibility](./docs/compatibility.md#support-policy).
+- The code paths kept for those platforms: the `$headCritical` / `$headAssets` fallback of `root.phtml`, the PHPUnit 9 `@dataProvider` annotations.
+
+### Upgrade notes
+1. **Requirements.** `magento/framework ^103.0.8`: Magento Open Source 2.4.8 and 2.4.9, Mage-OS 3.6 and 4.0. A Magento 2.4.7 project keeps resolving `0.9.0-beta.4`. Mage-OS 2.3 still resolves (it replaces `magento/framework` 103.0.8) but is not supported.
+2. **Commands.** `composer update "magentofullstackdev/*"`, `bin/magento setup:upgrade`, `bin/magento setup:di:compile` (constructor signatures changed and a plugin moved; without the compile the storefront answers an error), `bin/magento setup:static-content:deploy -f`, `bin/magento cache:flush`. No new database table.
+3. **Varnish.** The shipped VCL changed (marketing parameters, backend probe). Regenerate your VCL from `HyperionCore/etc/varnish/default.vcl`, keeping your backend and purge ACL lines, and reload it. Until then URLs that carry the new marketing parameters get cache objects of their own, as before.
+4. **Caches.** Flush the full page cache and the block cache after the upgrade: the header and footer markup, the listing controls and the head output changed.
+5. **Head output.** `head.additional` renders again. A module that adds a script or a tag there now emits it; look at the page head once after the upgrade. A block that only prints `x-magento-init` does nothing on this theme: remove it by name in a child theme ([Child themes](./docs/child-themes.md#removing-a-head-block)).
+6. **Minification.** If JS or CSS minification is on, the static content deploy of step 2 is what applies the fix: the build output is excluded from Magento's minification and keeps its file names. HTML minification (`dev/template/minify_html`) is not supported in this release and must stay off ([Known limitations](./docs/known-limitations.md)).
+7. **Child themes scaffolded before this release** build unhashed chunk names. With a single chunk nothing changes; a theme that uses a dynamic `import()` needs the three `output` lines of a fresh scaffold when JS minification is on. See [Child themes](./docs/child-themes.md#minification).
+8. **Cart prices** follow `tax/cart_display/price`, the estimator follows `tax/display/shipping`. A store that displays prices including tax will see the cart lines change to match the subtotal.
+9. **Brand and footer.** The wordmark prints the store name: set Store Information > Store Name if the website name is not what you want to show. A store that relied on the footer tagline creates the CMS block `hyperion-footer-about`; `HyperionSampleData` sets the store name `HYPERION` (when none is set) and creates that block (when it does not exist) on its next `setup:upgrade`.
+10. **`HyperionSampleData`.** The widget rebind only touches the Luma sample widgets; a store that relied on it to move its own Luma widgets rebinds them by hand. Not for a store that serves Luma to customers ([Install](./docs/install.md)).
+11. **Mega menu.** No schema change, no data migration.
+12. **CI of a fork.** The checks of the PHP workflow have new names (`gate / Mage-OS 4.0.* / PHP 8.4`, `gate / Mage-OS 4.0.* / PHP 8.5`); a branch protection rule that lists required checks must name them.
+13. **Template and view model overrides.** `CartData::getItems()` rows: `row_total_display` is now the amount of the configured tax display (new keys `price_display`, `price_display_excl`, `row_total_display_excl`, `row_total_incl`, `is_qty_decimal`, `qty_step`, `qty_min`, `qty_max`); `CartData::getShippingRates()` rows may be unavailable (check `available` before rendering a radio); `CartData::getItemCount()` and `Minicart\Fragment::getItemCount()` return `float|int`; `BundleOptions::format()` formats without converting; the constructor of `HyperionCore\ViewModel\Pricing` changed. An override of a tile or of the product page copies the Add to Cart markup contract (`docs/child-themes.md`); the element `#hyperion-add-to-cart-indicator` is gone. An override of `footer.phtml` calls `$block->getServiceLinks()` to keep the extra links. Checkout bundle forks: `placeOrder()` of the flow actions can resolve with `'placed-unconfirmed'`, `normaliseMagentoError` is now `normalizeMagentoError`, `PaymentRenderer` gained the optional `notReadyMessage`.
 
 ## [0.9.0-beta.4] - 2026-11-09
 
@@ -283,5 +385,9 @@ First public beta. See the README for supported Magento versions and
   with an allowlist, htmx runs without eval or script tags.
 - Frontend toolchain: Vite 6.4.5, Vitest 3.2.7, happy-dom 21, jsdom 30 and `pnpm.overrides` for `source-map-js`, `postcss-selector-parser`, `tinypool` and `minimatch` 9 take the workspace from 5 critical and 7 high advisories to none (`pnpm audit --prod` is clean; the three moderate ones left are in the Vitest runner, not in any shipped asset). The `hyperion create` scaffold pins the same Vite and writes the same overrides (`overrides` for npm, `pnpm.overrides` for pnpm), so a new child theme audits clean too; the root `frontend/package.json` scripts run through `pnpm -r` and `pnpm --filter`.
 
-[Unreleased]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.1...HEAD
+[Unreleased]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.5...HEAD
+[0.9.0-beta.5]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.4...v0.9.0-beta.5
+[0.9.0-beta.4]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.3...v0.9.0-beta.4
+[0.9.0-beta.3]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.2...v0.9.0-beta.3
+[0.9.0-beta.2]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.1...v0.9.0-beta.2
 [0.9.0-beta.1]: https://github.com/magentofullstackdev/hyperion/releases/tag/v0.9.0-beta.1

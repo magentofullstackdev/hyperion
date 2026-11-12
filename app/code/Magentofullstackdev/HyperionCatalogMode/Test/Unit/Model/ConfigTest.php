@@ -28,7 +28,6 @@ class ConfigTest extends TestCase
     }
 
     /**
-     * @dataProvider allowedGroupsProvider
      * @param string|null $raw
      * @param int[] $expected
      */

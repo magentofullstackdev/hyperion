@@ -64,6 +64,9 @@ class ItemSaver
     {
         $itemId = (int) ($post['item_id'] ?? 0);
         $item = $this->load($itemId);
+        if ($item !== null && $item->getGroupId() !== (int) ($post['group_id'] ?? 0)) {
+            throw new LocalizedException(__('The item does not belong to this menu.'));
+        }
         if ($item === null) {
             $groupId = (int) ($post['group_id'] ?? 0);
             if ($groupId <= 0) {
@@ -87,10 +90,20 @@ class ItemSaver
                 'is_active' => 1,
             ]);
             if ($storeId > 0) {
-                $post['store_ids'] = [$storeId];
+                // An item added from a store view belongs to that store view alone.
+                $item->setData('store_ids', [$storeId]);
             }
         }
         if ($this->ownsItem($item, $storeId)) {
+            if ($storeId > 0) {
+                $post['store_ids'] = [$storeId];
+            } elseif (array_key_exists('title', $post)) {
+                // The item form always posts the title; a multiselect with nothing selected posts no key at all.
+                $post['store_ids'] ??= [];
+            }
+            if (array_key_exists('title', $post)) {
+                $post['customer_group_ids'] ??= [];
+            }
             foreach (self::STRUCTURE_FIELDS as $field) {
                 if (array_key_exists($field, $post)) {
                     $item->setData($field, $post[$field]);

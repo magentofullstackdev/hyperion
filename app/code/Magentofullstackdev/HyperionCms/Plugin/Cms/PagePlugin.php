@@ -11,8 +11,8 @@ use Magento\Cms\Model\Page;
  * Coerce `cms_page.content` NULL values to an empty string.
  *
  * Why this plugin exists:
- *   Magento 2.4.7 tightened the signature of
- *   \Magento\Framework\Filter\Template::filter() to reject non-string
+ *   Core rejects a NULL content:
+ *   \Magento\Framework\Filter\Template::filter() throws on non-string
  *   values. The CMS Page block renders its body via
  *   `$filter->filter($page->getContent())` -- so when the admin leaves
  *   the "Content" field empty and delivers the page body through

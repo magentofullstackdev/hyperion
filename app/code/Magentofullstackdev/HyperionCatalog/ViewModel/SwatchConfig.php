@@ -146,6 +146,10 @@ class SwatchConfig implements ArgumentInterface
                 'productId' => (string) $product->getId(),
                 'sku' => (string) $product->getSku(),
                 'currencyFormat' => (string) ($config['currencyFormat'] ?? ''),
+                // Core's number format of the store view and currency (pattern, decimal and group
+                // symbols, precision): the component rewrites a server-rendered price and must print
+                // it the way PHP did.
+                'priceFormat' => is_array($config['priceFormat'] ?? null) ? $config['priceFormat'] : null,
                 'attributes' => $config['attributes'] ?? [],
                 'optionPrices' => $config['optionPrices'] ?? [],
                 'images' => $compact ? $this->mainImagesOnly($config['images'] ?? []) : ($config['images'] ?? []),
@@ -181,7 +185,7 @@ class SwatchConfig implements ArgumentInterface
     /**
      * Options preselected by a buy request, `{attributeId: optionId}`.
      *
-     * A product initialised with a buy request (wish list item edit) carries
+     * A product initialized with a buy request (wish list item edit) carries
      * its options as preconfigured values; core's configurable block adds
      * them to its JSON config as `defaultValues`, the buy request itself is
      * the fallback. <hyperion-swatches> applies them on first render.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('../../api/shipping.js', () => ({
     estimateGuestShippingMethods: vi.fn(),
@@ -28,6 +28,8 @@ vi.mock('../../api/coupon.js', () => ({
 vi.mock('../../api/cart.js', () => ({
     getGuestTotals: vi.fn(),
     getCustomerTotals: vi.fn(),
+    getGuestCartState: vi.fn(),
+    getCustomerCartState: vi.fn(),
 }));
 vi.mock('../../components/hyperion-recaptcha.js', () => ({
     executeRecaptcha: vi.fn().mockResolvedValue(null),
@@ -36,18 +38,21 @@ vi.mock('../../components/hyperion-recaptcha.js', () => ({
 import * as shippingApi from '../../api/shipping.js';
 import * as paymentApi from '../../api/payment.js';
 import * as couponApi from '../../api/coupon.js';
+import * as cartApi from '../../api/cart.js';
+import { MagentoApiError, NetworkError, RequestTimeoutError } from '../../api/client.js';
 import { setCheckoutConfig } from '../../bootstrap-config.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import type { Address } from '../../types/address.js';
 import type { PaymentDetails, ShippingMethod } from '../../types/shipping.js';
 import type { Totals } from '../../types/totals.js';
 import { createStore, setStoreForTests, type Store } from '../index.js';
-import { createFlowActions, reconcilePaymentSelection, type FlowActions } from '../flow-actions.js';
+import { createFlowActions, isPickupRate, reconcilePaymentSelection, type FlowActions } from '../flow-actions.js';
 import { createSelectors, expectedAgreements } from '../selectors.js';
 
 const shippingMocks = vi.mocked(shippingApi);
 const paymentMocks = vi.mocked(paymentApi);
 const couponMocks = vi.mocked(couponApi);
+const cartMocks = vi.mocked(cartApi);
 
 interface Deferred<T> {
     promise: Promise<T>;
@@ -83,6 +88,22 @@ function method(carrier: string, code: string, amount = 5): ShippingMethod {
         error_message: '',
         price_excl_tax: amount,
         price_incl_tax: amount,
+    };
+}
+
+/** A rate as a carrier answers it when it does not serve the address. */
+function errorRate(carrier: string, message: string): ShippingMethod {
+    return {
+        carrier_code: carrier,
+        method_code: null as unknown as string,
+        carrier_title: carrier,
+        method_title: null as unknown as string,
+        amount: 0,
+        base_amount: 0,
+        available: false,
+        error_message: message,
+        price_excl_tax: 0,
+        price_incl_tax: 0,
     };
 }
 
@@ -499,8 +520,9 @@ describe('flow actions', () => {
             expect(request.billingAddress).not.toHaveProperty('telephone');
 
             store.billingAddress.set({ ...address, telephone: '', save_in_address_book: false });
-            await flow.placeOrder();
-            const [, second] = paymentMocks.placeGuestOrder.mock.calls[1]!;
+            paymentMocks.setGuestPaymentInformation.mockResolvedValue(true);
+            await flow.savePaymentInformation();
+            const [, second] = paymentMocks.setGuestPaymentInformation.mock.calls[0]!;
             expect(second.billingAddress.save_in_address_book).toBe(0);
         });
     });
@@ -903,6 +925,600 @@ describe('flow actions', () => {
             await second;
             expect(store.billingSynced.get()).toBe(true);
             expect(store.isSavingBilling.get()).toBe(false);
+        });
+    });
+
+    describe('shipping form ahead of the quote', () => {
+        const FLATRATE = { carrier_code: 'flatrate', method_code: 'flatrate' };
+
+        /** A quote confirmed for the first address: the gate is open. */
+        async function openGate(): Promise<void> {
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([method('flatrate', 'flatrate')]);
+            shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('57.00'));
+            store.selectedPaymentMethod.set('checkmo');
+            await flow.estimateShipping();
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+            vi.clearAllMocks();
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([method('flatrate', 'flatrate')]);
+            shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('57.00'));
+        }
+
+        beforeEach(() => { vi.useFakeTimers(); });
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('an address edit closes the gate at once and Place Order before the pause ends sends no order request', async () => {
+            await openGate();
+
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            flow.scheduleShippingEstimate();
+
+            expect(store.shippingDirty.get()).toBe(true);
+            expect(selectors.shippingReady.get()).toBe(false);
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+            // The quote still carries the old address and its confirmed method.
+            expect(store.appliedShippingMethod.get()).toEqual(FLATRATE);
+            expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
+            expect(store.isPlacingOrder.get()).toBe(false);
+        });
+
+        it('the estimate starts once the typing pauses, and only the save that carried the address reopens the gate', async () => {
+            await openGate();
+            const save = deferred<PaymentDetails>();
+            shippingMocks.saveGuestShippingInformation.mockReturnValue(save.promise);
+
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            flow.scheduleShippingEstimate();
+            await vi.advanceTimersByTimeAsync(300);
+            store.shippingAddress.set({ ...address, street: ['12 New Street'] });
+            flow.scheduleShippingEstimate();
+            await vi.advanceTimersByTimeAsync(499);
+            expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(1);
+            expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(1);
+            expect(store.shippingDirty.get()).toBe(true);
+
+            save.resolve(details('57.00'));
+            await vi.advanceTimersByTimeAsync(0);
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+        });
+
+        it('a save answered after another edit leaves the form marked as ahead of the quote', async () => {
+            await openGate();
+            const save = deferred<PaymentDetails>();
+            shippingMocks.saveGuestShippingInformation.mockReturnValueOnce(save.promise);
+
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            const first = flow.estimateShippingNow();
+            await vi.advanceTimersByTimeAsync(0);
+            store.shippingAddress.set({ ...address, street: ['2 Newer Street'] });
+            flow.scheduleShippingEstimate();
+            save.resolve(details('57.00'));
+            await first;
+
+            expect(store.shippingDirty.get()).toBe(true);
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+        });
+
+        it('a failed save and an address without rates both leave the form marked as ahead of the quote', async () => {
+            await openGate();
+            shippingMocks.saveGuestShippingInformation.mockRejectedValueOnce(new Error('Carrier unavailable'));
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            await flow.estimateShippingNow();
+            expect(store.shippingDirty.get()).toBe(true);
+
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValueOnce([]);
+            store.shippingAddress.set({ ...address, street: ['2 New Street'] });
+            await flow.estimateShippingNow();
+            expect(store.shippingDirty.get()).toBe(true);
+            expect(store.selectedShippingMethod.get()).toBeNull();
+        });
+
+        it('Place Order pressed while the typing pause runs waits for the estimate and the save, then orders with the new address', async () => {
+            await openGate();
+            paymentMocks.placeGuestOrder.mockResolvedValue(77);
+
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            flow.scheduleShippingEstimate();
+            // What the button does on a press: settle, then decide.
+            await flow.settleShipping();
+
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+            expect(await flow.placeOrder()).toBe(77);
+
+            const [, saved] = shippingMocks.saveGuestShippingInformation.mock.calls[0]!;
+            expect(saved.addressInformation.shipping_address.street).toEqual(['1 New Street']);
+            expect(shippingMocks.estimateGuestShippingMethods.mock.invocationCallOrder[0]!)
+                .toBeLessThan(shippingMocks.saveGuestShippingInformation.mock.invocationCallOrder[0]!);
+            expect(shippingMocks.saveGuestShippingInformation.mock.invocationCallOrder[0]!)
+                .toBeLessThan(paymentMocks.placeGuestOrder.mock.invocationCallOrder[0]!);
+            expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(1);
+            // The scheduled run was consumed: nothing fires later.
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(1);
+        });
+
+        it('settling waits for a save that is already in flight and resolves at once when nothing is pending', async () => {
+            await openGate();
+            await flow.settleShipping();
+            expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
+
+            const save = deferred<PaymentDetails>();
+            shippingMocks.saveGuestShippingInformation.mockReturnValueOnce(save.promise);
+            void flow.saveShippingAndEstimateTotals();
+            let settled = false;
+            const settling = flow.settleShipping().then(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(settled).toBe(false);
+            save.resolve(details('57.00'));
+            await settling;
+            expect(store.isSavingShipping.get()).toBe(false);
+        });
+
+        it('a press after a failed shipping save sends the save again and, when it succeeds, places the order with the current address', async () => {
+            await openGate();
+            shippingMocks.saveGuestShippingInformation.mockRejectedValueOnce(new MagentoApiError(503, 'unknown', 'The store is temporarily unavailable.'));
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            await flow.estimateShippingNow();
+            expect(store.shippingDirty.get()).toBe(true);
+            expect(store.globalError.get()).toBe('The store is temporarily unavailable.');
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+            paymentMocks.placeGuestOrder.mockResolvedValue(91);
+
+            // The press: settle, then decide.
+            await flow.settleShipping();
+
+            expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(2);
+            const [, resent] = shippingMocks.saveGuestShippingInformation.mock.calls[1]!;
+            expect(resent.addressInformation.shipping_address.street).toEqual(['1 New Street']);
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(store.globalError.get()).toBeNull();
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+            expect(await flow.placeOrder()).toBe(91);
+        });
+
+        it('a press after a failed estimate asks for the rates again', async () => {
+            await openGate();
+            shippingMocks.estimateGuestShippingMethods.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            await flow.estimateShippingNow();
+            expect(store.shippingDirty.get()).toBe(true);
+
+            await flow.settleShipping();
+
+            expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(2);
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+        });
+
+        it('a press after a failed save that fails again places nothing and shows the error, with one attempt per press', async () => {
+            await openGate();
+            shippingMocks.saveGuestShippingInformation.mockRejectedValue(new MagentoApiError(503, 'unknown', 'The store is temporarily unavailable.'));
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            await flow.estimateShippingNow();
+            store.globalError.set(null);
+
+            await flow.settleShipping();
+
+            expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(2);
+            expect(store.shippingDirty.get()).toBe(true);
+            expect(store.globalError.get()).toBe('The store is temporarily unavailable.');
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+            expect(await flow.placeOrder()).toBeNull();
+            expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
+            // Nothing retries in the background.
+            await vi.advanceTimersByTimeAsync(5000);
+            expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(2);
+        });
+
+        it('settling gives the gate back when the new address has no rate', async () => {
+            await openGate();
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValueOnce([]);
+
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            flow.scheduleShippingEstimate();
+            await flow.settleShipping();
+
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+            expect(await flow.placeOrder()).toBeNull();
+            expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
+        });
+
+        it('no estimate and no save start while the order is being placed or once it exists', async () => {
+            await openGate();
+            store.isPlacingOrder.set(true);
+            store.shippingAddress.set({ ...address, street: ['1 New Street'] });
+            flow.scheduleShippingEstimate();
+            await vi.advanceTimersByTimeAsync(500);
+            await flow.estimateShipping();
+            await flow.saveShippingAndEstimateTotals();
+            expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+
+            store.isPlacingOrder.set(false);
+            store.orderPlaced.set(true);
+            await flow.estimateShippingNow();
+            expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('shipping save skipped for an incomplete billing address', () => {
+        it('is sent once the billing address syncs, and the server confirmed method ends equal to the selection', async () => {
+            store.billingSameAsShipping.set(false);
+            store.billingAddress.set(null);
+            store.selectedPaymentMethod.set('checkmo');
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([method('flatrate', 'flatrate')]);
+            shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('57.00'));
+            paymentMocks.assignGuestBillingAddress.mockResolvedValue(5);
+            paymentMocks.getGuestPaymentInformation.mockResolvedValue(details('52.00'));
+
+            await flow.estimateShippingNow();
+            expect(store.selectedShippingMethod.get()).toEqual({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+            expect(store.appliedShippingMethod.get()).toBeNull();
+            expect(store.shippingDirty.get()).toBe(true);
+
+            store.billingAddress.set({ ...address, firstname: 'Bill' });
+            await flow.syncBillingAddress();
+
+            expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(1);
+            const [, saved] = shippingMocks.saveGuestShippingInformation.mock.calls[0]!;
+            expect(saved.addressInformation.billing_address.firstname).toBe('Bill');
+            expect(paymentMocks.assignGuestBillingAddress.mock.invocationCallOrder[0]!)
+                .toBeLessThan(shippingMocks.saveGuestShippingInformation.mock.invocationCallOrder[0]!);
+            expect(store.appliedShippingMethod.get()).toEqual(store.selectedShippingMethod.get());
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(store.totals.get()?.grand_total).toBe('57.00');
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+        });
+
+        it('a billing sync sends no shipping save when the quote already carries the selection, or for a virtual quote', async () => {
+            store.availableShippingMethods.set([method('flatrate', 'flatrate')]);
+            store.selectedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.billingSameAsShipping.set(false);
+            store.billingAddress.set({ ...address, firstname: 'Bill' });
+            paymentMocks.assignGuestBillingAddress.mockResolvedValue(5);
+            paymentMocks.getGuestPaymentInformation.mockResolvedValue(details('57.00'));
+
+            await flow.syncBillingAddress();
+            expect(store.billingSynced.get()).toBe(true);
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+
+            store.isVirtual.set(true);
+            store.appliedShippingMethod.set(null);
+            await flow.syncBillingAddress();
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('order latch', () => {
+        beforeEach(() => {
+            store.selectedPaymentMethod.set('checkmo');
+        });
+
+        it('after a successful order the placing state stays, the order is marked placed and a second call sends nothing', async () => {
+            paymentMocks.placeGuestOrder.mockResolvedValue(1001);
+
+            expect(await flow.placeOrder()).toBe(1001);
+            expect(store.isPlacingOrder.get()).toBe(true);
+            expect(store.orderPlaced.get()).toBe(true);
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
+        });
+
+        it('two calls in the same tick send one order request', async () => {
+            const order = deferred<number>();
+            paymentMocks.placeGuestOrder.mockReturnValue(order.promise);
+
+            const first = flow.placeOrder();
+            const second = flow.placeOrder();
+            order.resolve(5);
+
+            expect(await second).toBeNull();
+            expect(await first).toBe(5);
+            expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
+        });
+
+        it('an order the server refused releases the placing state and shows the message of the server', async () => {
+            paymentMocks.placeGuestOrder.mockRejectedValue(new MagentoApiError(400, '400', 'The payment was declined.'));
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(store.isPlacingOrder.get()).toBe(false);
+            expect(store.orderPlaced.get()).toBe(false);
+            expect(store.globalError.get()).toBe('The payment was declined.');
+            expect(cartMocks.getGuestCartState).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('order request that lost its answer', () => {
+        const NOT_PLACED = 'We could not reach the store. Your order was not placed. Please try again.';
+        const UNKNOWN = 'We could not confirm whether your order was placed. Please wait a moment and press Place Order again; we will check before sending anything.';
+
+        beforeEach(() => {
+            store.selectedPaymentMethod.set('checkmo');
+            paymentMocks.placeGuestOrder.mockRejectedValue(new NetworkError(new TypeError('Failed to fetch')));
+            paymentMocks.placeCustomerOrder.mockRejectedValue(new NetworkError(new TypeError('Failed to fetch')));
+        });
+
+        it('guest: a cart answered as inactive means the order exists and the call resolves as placed', async () => {
+            cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: false });
+
+            expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            expect(cartMocks.getGuestCartState).toHaveBeenCalledWith('masked-1');
+            expect(store.orderPlaced.get()).toBe(true);
+            expect(store.isPlacingOrder.get()).toBe(true);
+            expect(store.globalError.get()).toBeNull();
+        });
+
+        it('guest: a cart that is gone (404) means the order exists', async () => {
+            cartMocks.getGuestCartState.mockRejectedValue(new MagentoApiError(404, '404', 'No such entity'));
+
+            expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            expect(store.orderPlaced.get()).toBe(true);
+        });
+
+        it('guest: a cart that is still active releases the placing state with the "not placed" message and keeps every input', async () => {
+            cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: true });
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(store.isPlacingOrder.get()).toBe(false);
+            expect(store.orderPlaced.get()).toBe(false);
+            expect(store.orderOutcomeUnknown.get()).toBe(false);
+            expect(store.globalError.get()).toBe(NOT_PLACED);
+            expect(store.selectedPaymentMethod.get()).toBe('checkmo');
+            expect(store.shippingAddress.get()).toBe(address);
+        });
+
+        it('a cart read that fails too marks the outcome unknown, and the next press reads the cart before it sends anything', async () => {
+            cartMocks.getGuestCartState.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(store.orderOutcomeUnknown.get()).toBe(true);
+            expect(store.isPlacingOrder.get()).toBe(false);
+            expect(store.globalError.get()).toBe(UNKNOWN);
+            expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
+
+            // Still unknown: nothing is sent.
+            cartMocks.getGuestCartState.mockRejectedValueOnce(new MagentoApiError(503, '503', 'unavailable'));
+            expect(await flow.placeOrder()).toBeNull();
+            expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
+            expect(store.orderOutcomeUnknown.get()).toBe(true);
+            expect(store.globalError.get()).toBe(UNKNOWN);
+
+            // The cart shows the order: success without a second request.
+            cartMocks.getGuestCartState.mockResolvedValueOnce({ id: 464, is_active: false });
+            expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
+            expect(store.orderPlaced.get()).toBe(true);
+            expect(store.orderOutcomeUnknown.get()).toBe(false);
+        });
+
+        it('after an unknown outcome, a cart that is still active lets the next press send the order again', async () => {
+            cartMocks.getGuestCartState.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
+            await flow.placeOrder();
+            expect(store.orderOutcomeUnknown.get()).toBe(true);
+
+            cartMocks.getGuestCartState.mockResolvedValueOnce({ id: 464, is_active: true });
+            paymentMocks.placeGuestOrder.mockResolvedValueOnce(88);
+            expect(await flow.placeOrder()).toBe(88);
+            expect(cartMocks.getGuestCartState.mock.invocationCallOrder[1]!)
+                .toBeLessThan(paymentMocks.placeGuestOrder.mock.invocationCallOrder[1]!);
+            expect(store.orderOutcomeUnknown.get()).toBe(false);
+            expect(store.orderPlaced.get()).toBe(true);
+        });
+
+        it('a timeout with a cart that is still active stays unknown: the server may still be working on the order', async () => {
+            paymentMocks.placeGuestOrder.mockRejectedValue(new RequestTimeoutError());
+            cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: true });
+
+            expect(await flow.placeOrder()).toBeNull();
+            expect(store.orderOutcomeUnknown.get()).toBe(true);
+            expect(store.globalError.get()).toBe(UNKNOWN);
+        });
+
+        describe('customer', () => {
+            beforeEach(() => {
+                store.isGuest.set(false);
+                store.quoteId.set('465' as never);
+            });
+
+            it('no active cart (404) means the order exists', async () => {
+                cartMocks.getCustomerCartState.mockRejectedValue(new MagentoApiError(404, '404', 'No such entity'));
+
+                expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+                expect(store.orderPlaced.get()).toBe(true);
+                expect(cartMocks.getGuestCartState).not.toHaveBeenCalled();
+            });
+
+            it('the quote of this checkout, still active, means no order: its id is compared as a number', async () => {
+                cartMocks.getCustomerCartState.mockResolvedValue({ id: 465, is_active: true });
+
+                expect(await flow.placeOrder()).toBeNull();
+                expect(store.globalError.get()).toBe(NOT_PLACED);
+                expect(store.isPlacingOrder.get()).toBe(false);
+            });
+
+            it('another active cart means the quote of this checkout was ordered', async () => {
+                cartMocks.getCustomerCartState.mockResolvedValue({ id: 470, is_active: true });
+
+                expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            });
+
+            it('a session that ended (401) decides nothing', async () => {
+                cartMocks.getCustomerCartState.mockRejectedValue(new MagentoApiError(401, '401', 'Not authorized'));
+
+                expect(await flow.placeOrder()).toBeNull();
+                expect(store.orderOutcomeUnknown.get()).toBe(true);
+                expect(store.globalError.get()).toBe(UNKNOWN);
+            });
+        });
+    });
+
+    describe('transport failures outside the order request', () => {
+        it('show a message about the connection, never the wording of the browser', async () => {
+            shippingMocks.estimateGuestShippingMethods.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
+
+            await flow.estimateShipping();
+
+            expect(store.globalError.get()).toBe('We could not reach the store. Check your connection and try again.');
+        });
+    });
+
+    describe('shipping rates that cannot be used', () => {
+        beforeEach(() => {
+            shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('57.00'));
+            store.selectedPaymentMethod.set('checkmo');
+        });
+
+        it('an error rate first in the list is never selected or saved: the first usable rate is', async () => {
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([
+                errorRate('freeshipping', 'This shipping method is not available.'),
+                method('flatrate', 'flatrate'),
+            ]);
+
+            await flow.estimateShipping();
+
+            expect(store.availableShippingMethods.get()).toHaveLength(2);
+            expect(store.selectedShippingMethod.get()).toEqual({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            const [, saved] = shippingMocks.saveGuestShippingInformation.mock.calls[0]!;
+            expect(saved.addressInformation.shipping_carrier_code).toBe('flatrate');
+            expect(saved.addressInformation.shipping_method_code).toBe('flatrate');
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+        });
+
+        it('a list of only error rates selects nothing, saves nothing and keeps the rows as the explanation', async () => {
+            store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([
+                errorRate('freeshipping', 'This shipping method is not available.'),
+                errorRate('ups', 'This shipping method is currently unavailable.'),
+            ]);
+
+            await flow.estimateShipping();
+
+            expect(store.selectedShippingMethod.get()).toBeNull();
+            expect(store.availablePaymentMethods.get()).toEqual([]);
+            expect(store.availableShippingMethods.get().map((m) => m.error_message)).toEqual([
+                'This shipping method is not available.',
+                'This shipping method is currently unavailable.',
+            ]);
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+        });
+
+        it('a hydrated selection that came back as an error row is replaced by a usable rate', async () => {
+            store.selectedShippingMethod.set({ carrier_code: 'tablerate', method_code: 'bestway' });
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([
+                { ...method('tablerate', 'bestway'), available: false, error_message: 'Not available for this address.' },
+                method('flatrate', 'flatrate'),
+            ]);
+
+            await flow.estimateShipping();
+
+            expect(store.selectedShippingMethod.get()).toEqual({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        });
+
+        it('a selection on a rate marked unavailable keeps Place Order closed', () => {
+            store.availableShippingMethods.set([{ ...method('flatrate', 'flatrate'), available: false }]);
+            store.selectedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.totals.set(totals('57.00'));
+            store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
+
+            expect(selectors.shippingReady.get()).toBe(false);
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+        });
+
+        it('the in-store pickup rate is absent from the store and never preselected', async () => {
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([
+                method('instore', 'pickup', 0),
+                method('flatrate', 'flatrate'),
+            ]);
+
+            await flow.estimateShipping();
+
+            expect(store.availableShippingMethods.get().map((m) => m.carrier_code)).toEqual(['flatrate']);
+            expect(store.selectedShippingMethod.get()).toEqual({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            expect(isPickupRate({ carrier_code: 'instore', method_code: 'pickup' })).toBe(true);
+            expect(isPickupRate({ carrier_code: 'flatrate', method_code: 'pickup' })).toBe(false);
+        });
+
+        it('an address served by pickup alone has no selectable rate', async () => {
+            store.selectedShippingMethod.set({ carrier_code: 'instore', method_code: 'pickup' });
+            shippingMocks.estimateGuestShippingMethods.mockResolvedValue([method('instore', 'pickup', 0)]);
+
+            await flow.estimateShipping();
+
+            expect(store.availableShippingMethods.get()).toEqual([]);
+            expect(store.selectedShippingMethod.get()).toBeNull();
+            expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('purchase order number', () => {
+        it('travels as a top-level field of the payment, trimmed, with no additional_data left', async () => {
+            store.selectedPaymentMethod.set('purchaseorder');
+            store.paymentMethodData.set({ purchaseorder: { po_number: '  HYP-PO-1  ' } });
+            paymentMocks.placeGuestOrder.mockResolvedValue(12);
+
+            await flow.placeOrder();
+
+            const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({ method: 'purchaseorder', po_number: 'HYP-PO-1' });
+            expect(request.paymentMethod).not.toHaveProperty('additional_data');
+        });
+
+        it('leaves the other keys of the method data in additional_data', async () => {
+            store.selectedPaymentMethod.set('purchaseorder');
+            store.paymentMethodData.set({ purchaseorder: { po_number: 'HYP-PO-2', reference: 'dept-7' } });
+            paymentMocks.setGuestPaymentInformation.mockResolvedValue(true);
+
+            await flow.savePaymentInformation();
+
+            const [, request] = paymentMocks.setGuestPaymentInformation.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({
+                method: 'purchaseorder',
+                po_number: 'HYP-PO-2',
+                additional_data: { reference: 'dept-7' },
+            });
+        });
+    });
+
+    describe('totals refresh', () => {
+        it('keeps Place Order closed while the payment information is being read again', async () => {
+            store.availableShippingMethods.set([method('flatrate', 'flatrate')]);
+            store.selectedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
+            store.selectedPaymentMethod.set('checkmo');
+            store.totals.set(totals('57.00'));
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+            const read = deferred<PaymentDetails>();
+            paymentMocks.getGuestPaymentInformation.mockReturnValue(read.promise);
+
+            const refresh = flow.refreshPaymentInformation();
+            expect(store.isRefreshingTotals.get()).toBe(true);
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+
+            read.resolve(details('47.00'));
+            await refresh;
+            expect(store.isRefreshingTotals.get()).toBe(false);
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+        });
+
+        it('a failed read releases the flag', async () => {
+            paymentMocks.getGuestPaymentInformation.mockRejectedValue(new MagentoApiError(500, '500', 'boom'));
+
+            await flow.refreshPaymentInformation();
+
+            expect(store.isRefreshingTotals.get()).toBe(false);
+            expect(store.globalError.get()).toBe('boom');
         });
     });
 });

@@ -39,9 +39,16 @@ async function newJourney(label) {
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 1000 } });
     const page = await ctx.newPage();
     const problems = [];
+    // URL fragments of the 5xx answers a check injects on purpose (one entry per answer).
+    const injected5xx = [];
     page.on('pageerror', (e) => problems.push(`pageerror ${page.url().replace(base, '')}: ${e.message.slice(0, 120)}`));
-    page.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`); });
-    return { ctx, page, problems, label };
+    page.on('response', (r) => {
+        if (r.status() < 500) return;
+        const expected = injected5xx.findIndex((fragment) => r.url().includes(fragment));
+        if (expected >= 0) { injected5xx.splice(expected, 1); return; }
+        problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`);
+    });
+    return { ctx, page, problems, injected5xx, label };
 }
 
 async function shot(page, name) {
@@ -59,8 +66,19 @@ async function toast(page) {
     });
 }
 
+// Pages whose <head> carries a RequireJS init script (the theme has no RequireJS to run it).
+const headInitPages = [];
+const headInitCount = (page) => page.evaluate(() => document.head.querySelectorAll('script[type="text/x-magento-init"]').length);
+
+// Accessible names of the tile controls that still show an HTML entity: a name escaped twice.
+const doubleEscapedTileLabels = (page) => page.evaluate(() => {
+    const labels = [...document.querySelectorAll('[data-hyperion-tiles] [aria-label]')].map((el) => el.getAttribute('aria-label') || '');
+    return { total: labels.length, bad: labels.filter((label) => label.includes('&#x') || label.includes('&amp;')) };
+});
+
 async function pageBasics(page, path, name) {
     const resp = await page.goto(base + path, { waitUntil: 'networkidle', timeout: 60000 });
+    if (await headInitCount(page) > 0) headInitPages.push(path);
     const info = await page.evaluate(() => ({
         undefinedEls: [...new Set([...document.querySelectorAll('*')].map((e) => e.localName)
             .filter((n) => n.startsWith('hyperion-') && !customElements.get(n)))],
@@ -109,7 +127,26 @@ async function selectSwatches(page) {
     const plp = await pageBasics(page, u('/women/tops-women.html'), 'category');
     check('category: product cards rendered', await page.locator('[data-product-id], article').count() > 0);
     await shot(page, 'category');
+    const categoryLabels = await doubleEscapedTileLabels(page);
+    check('category: no tile control name is escaped twice', categoryLabels.total > 0 && categoryLabels.bad.length === 0, `${categoryLabels.total} names; ${categoryLabels.bad.slice(0, 2).join(' | ')}`);
+
+    // The footer newsletter form posts natively and core redirects back to the
+    // category page: its message must show there, inside <hyperion-messages>.
+    const subscribed = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/newsletter/subscriber/new'), { timeout: 30000 }).catch(() => null);
+    await page.fill('#newsletter-subscribe', `suite.news.${Date.now()}@example.com`);
+    await page.click('#newsletter-validate-detail button[type="submit"]');
+    await subscribed;
+    await page.waitForFunction(() => !!document.querySelector('hyperion-messages [role="alert"]'), null, { timeout: 20000 }).catch(() => {});
+    const newsletter = await page.evaluate(() => ({
+        path: location.pathname,
+        alerts: [...document.querySelectorAll('hyperion-messages [role="alert"]')].map((a) => ({ tone: a.getAttribute('data-tone'), text: a.innerText.trim().replace(/\s+/g, ' ').slice(0, 100) })),
+    }));
+    check('category: the newsletter success message shows in <hyperion-messages> on the category page',
+        newsletter.path.includes('tops-women') && newsletter.alerts.some((a) => a.tone === 'success'), JSON.stringify(newsletter));
+
     await pageBasics(page, '/catalogsearch/result/?q=jacket', 'search');
+    const searchLabels = await doubleEscapedTileLabels(page);
+    check('search: no tile control name is escaped twice', searchLabels.total > 0 && searchLabels.bad.length === 0, `${searchLabels.total} names; ${searchLabels.bad.slice(0, 2).join(' | ')}`);
     await pageBasics(page, '/catalogsearch/advanced/result/?name=bag', 'advanced search result');
     await pageBasics(page, u('/juno-jacket.html'), 'configurable PDP');
     await shot(page, 'pdp-configurable');
@@ -158,6 +195,8 @@ async function selectSwatches(page) {
     if (!skipOrder) {
         await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
         await page.waitForSelector('checkout-app, hyperion-checkout', { timeout: 30000 }).catch(() => {});
+        const checkoutHead = { init: await headInitCount(page), sri: await page.evaluate(() => typeof window.sriHashes) };
+        check('guest checkout: no RequireJS init script in the head, window.sriHashes undefined', checkoutHead.init === 0 && checkoutHead.sri === 'undefined', JSON.stringify(checkoutHead));
         const fill = async (sel, value) => { const el = page.locator(sel).first(); if (await el.count()) await el.fill(value); };
         const guestEmail = `suite.${Date.now()}@example.com`;
         await fill('input[type="email"][name="email"], checkout-email input[type="email"]', guestEmail);
@@ -178,14 +217,46 @@ async function selectSwatches(page) {
         await page.waitForSelector('payment-method-row', { timeout: 40000 }).catch(() => {});
         check('guest checkout: payment methods loaded', await page.locator('payment-method-row').count() > 0);
         await shot(page, 'checkout-guest');
+
+        // A proxy or the origin answers the next shipping save with an HTML 503:
+        // the shopper reads a translated sentence, never the body, and the next
+        // address change saves again.
+        const shippingSave = (r) => r.request().method() === 'POST' && r.url().includes('/shipping-information');
+        const unavailable = 'The store is temporarily unavailable. Please try again in a moment.';
+        j.injected5xx.push('/shipping-information');
+        await page.route('**/shipping-information*', (route) => route.fulfill({
+            status: 503,
+            contentType: 'text/html',
+            body: '<html><body><h1>503 Service Unavailable</h1><p>Backend fetch failed</p></body></html>',
+        }), { times: 1 });
+        const refused = page.waitForResponse((r) => shippingSave(r) && r.status() === 503, { timeout: 30000 }).catch(() => null);
+        await fill('input[name="city"]', 'Calder City');
+        await page.locator('input[name="city"]').first().blur().catch(() => {});
+        await refused;
+        await page.locator('error-banner').filter({ hasText: unavailable }).first().waitFor({ timeout: 15000 }).catch(() => {});
+        const unavailableBanner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
+        check('guest checkout: an HTML 503 on the shipping save shows the translated unavailable message',
+            unavailableBanner.includes(unavailable) && !/Backend fetch failed|<h1>/.test(unavailableBanner), unavailableBanner.replace(/\s+/g, ' '));
+        const saved = page.waitForResponse((r) => shippingSave(r) && r.status() === 200, { timeout: 30000 }).catch(() => null);
+        await fill('input[name="city"]', 'Calder');
+        await page.locator('input[name="city"]').first().blur().catch(() => {});
+        check('guest checkout: the next address change saves the shipping information again', !!(await saved));
+
         const pay = page.locator('#hc-pay-checkmo');
         if (await pay.count()) await pay.click();
         await page.waitForTimeout(1500);
+        // The street changes and Place Order is pressed before the debounced
+        // estimate starts: the order must carry the street on the screen.
+        const editedStreet = `${String(Date.now()).slice(-4)} Edited Lane`;
+        await fill('input[name="street_0"]', editedStreet);
+        const editedAt = Date.now();
         await page.locator('place-order-button button').click().catch(() => {});
+        const pressedAfter = Date.now() - editedAt;
         await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
         const banner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
         check('guest checkout: order placed', page.url().includes('success'), banner || page.url());
         await shot(page, 'checkout-success');
+        const guestOrderNumber = await page.evaluate(() => (document.body.innerText.match(/#\s*(\d{6,})/) || [])[1] || '');
 
         // Guest "Create an Account" offer: core's checkout.registration block with Hyperion's template. The link
         // is core's checkout/account/delegateCreate, which seeds the registration form from the order.
@@ -209,8 +280,32 @@ async function selectSwatches(page) {
         } else {
             check('guest success: delegated registration form pre-filled', false, 'no offer card');
         }
+
+        // The order as the store holds it, through Orders and Returns.
+        // Its shipping address block (the whole page when the block is not found).
+        let guestOrderText = '';
+        if (guestOrderNumber) {
+            await page.goto(base + '/sales/guest/form/', { waitUntil: 'networkidle' });
+            await page.fill('form[name="guest_post"] [name="oar_order_id"]', guestOrderNumber);
+            await page.fill('form[name="guest_post"] [name="oar_billing_lastname"]', 'Tester');
+            await page.selectOption('form[name="guest_post"] [name="oar_type"]', 'email').catch(() => {});
+            await page.fill('form[name="guest_post"] [name="oar_email"]', guestEmail);
+            await page.click('form[name="guest_post"] button[type="submit"]');
+            await page.waitForURL((u) => u.toString().includes('/sales/guest/view'), { timeout: 30000 }).catch(() => {});
+            guestOrderText = page.url().includes('/sales/guest/view')
+                ? await page.evaluate(() => {
+                    const shipping = [...document.querySelectorAll('address')].find((a) => /shipping address/i.test(a.previousElementSibling?.textContent || ''));
+                    return (shipping || document.body).innerText;
+                })
+                : '';
+        }
+        check('guest checkout: a street edited right before Place Order is the shipping street of the order',
+            guestOrderText.includes(editedStreet) && !guestOrderText.includes('1 Test Street'),
+            `order ${guestOrderNumber || 'not found'}, pressed ${pressedAfter} ms after the edit, ${page.url().replace(base, '')}`);
     }
 
+    check('guest journey: no RequireJS init script in the head of any visited page', headInitPages.length === 0, headInitPages.join(' '));
+    headInitPages.length = 0;
     check('guest journey: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
     await j.ctx.close();
 }
@@ -255,7 +350,7 @@ async function selectSwatches(page) {
 
         await addToCartFromPdp(page, u('/fusion-backpack.html'), 'customer: simple product');
         await pageBasics(page, '/checkout/cart/', 'customer cart');
-        check('customer cart: not empty (depersonalisation guard)', !/no items in your shopping cart/i.test(await page.evaluate(() => document.body.innerText)));
+        check('customer cart: not empty (depersonalization guard)', !/no items in your shopping cart/i.test(await page.evaluate(() => document.body.innerText)));
 
         if (!skipOrder) {
             await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
@@ -265,12 +360,18 @@ async function selectSwatches(page) {
             const pay = page.locator('#hc-pay-checkmo');
             if (await pay.count()) await pay.click();
             await page.waitForTimeout(1500);
-            await page.locator('place-order-button button').click().catch(() => {});
+            // A double click: the second press must neither send a second order
+            // nor surface an error while the first one is on its way.
+            let orderPosts = 0;
+            page.on('request', (r) => { if (r.method() === 'POST' && /\/payment-information(\?|$)/.test(r.url())) orderPosts++; });
+            await page.locator('place-order-button button').dblclick().catch(() => {});
             await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
             const banner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
             check('customer checkout: order placed', page.url().includes('success'), banner || page.url());
+            check('customer checkout: a double click on Place Order sends one order and shows no error', page.url().includes('success') && orderPosts === 1 && banner.trim() === '', `${orderPosts} order requests; ${banner.replace(/\s+/g, ' ')}`);
         }
     }
+    check('customer journey: no RequireJS init script in the head of any visited page', headInitPages.length === 0, headInitPages.join(' '));
     check('customer journey: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
     await j.ctx.close();
 }

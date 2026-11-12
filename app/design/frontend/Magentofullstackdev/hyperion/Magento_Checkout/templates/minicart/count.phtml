@@ -35,4 +35,4 @@ $classes = $count > 0 ? $baseClasses : $baseClasses . ' hidden';
 <span id="hyperion-mini-cart-count"
       aria-live="polite"
       <?php if ($block->getData('oob')): ?>hx-swap-oob="outerHTML"<?php endif; ?>
-      class="<?= $escaper->escapeHtmlAttr($classes) ?>"><?= $count > 0 ? (int) $count : '' ?></span>
+      class="<?= $escaper->escapeHtmlAttr($classes) ?>"><?= $count > 0 ? $escaper->escapeHtml((string) $count) : '' ?></span>

@@ -27,7 +27,8 @@ if ($formKeyViewModel) {
           hx-post="<?= $escaper->escapeUrl($submitUrl) ?>"
           hx-target="body"
           hx-swap="beforeend"
-          hx-include="[data-swatch-input]">
+          hx-include="[data-swatch-input]"
+          hx-sync="this:drop">
         <input type="hidden" name="product" value="<?= $escaper->escapeHtmlAttr($product->getId()) ?>"/>
         <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>"/>
 
@@ -42,8 +43,9 @@ if ($formKeyViewModel) {
         </div>
 
         <button type="submit"
+                data-hyperion-atc
                 class="w-full py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm uppercase tracking-wider">
-            <?= $escaper->escapeHtml(__('Add to Cart')) ?>
+            <span data-hyperion-atc-label><?= $escaper->escapeHtml(__('Add to Cart')) ?></span><span data-hyperion-atc-busy aria-hidden="true"><?= $escaper->escapeHtml(__('Adding to cart...')) ?></span>
         </button>
     </form>
 <?php else: ?>

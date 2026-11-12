@@ -69,6 +69,10 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
                         <option value="<?= $escaper->escapeHtmlAttr($value) ?>"<?= $value === $type ? ' selected' : '' ?>><?= $escaper->escapeHtml($label) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <?php // One box for every target field: the type is fixed in a store view, so only one of them shows. ?>
+                <?php if (in_array($type, [Item::TYPE_CATEGORY, Item::TYPE_PRODUCT, Item::TYPE_CMS_PAGE, Item::TYPE_CMS_BLOCK, Item::TYPE_CUSTOM], true)): ?>
+                    <?= /* @noEscape */ $useDefault('item_target_value') ?>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -80,7 +84,6 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
                         <option value="<?= $escaper->escapeHtmlAttr((string) $option['value']) ?>"<?= $type === Item::TYPE_CATEGORY && (string) $option['value'] === $target ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <?= /* @noEscape */ $useDefault('item_target_value') ?>
             </div>
         </div>
         <div class="admin__field field-target" data-hmm-target="category" data-hmm-structure>
@@ -100,7 +103,6 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
             <div class="admin__field-control">
                 <input type="text" class="admin__control-text" id="hmm-target-product" name="target_product"
                        value="<?= $type === Item::TYPE_PRODUCT ? $escaper->escapeHtmlAttr($target) : '' ?>"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
-                <?= /* @noEscape */ $useDefault('item_target_value') ?>
             </div>
         </div>
         <div class="admin__field field-target" data-hmm-target="cms_page">
@@ -112,7 +114,6 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
                         <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"<?= !empty($option['disabled']) ? ' disabled' : '' ?><?= $type === Item::TYPE_CMS_PAGE && $option['value'] === $target ? ' selected' : '' ?>><?= $escaper->escapeHtml($option['label']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <?= /* @noEscape */ $useDefault('item_target_value') ?>
             </div>
         </div>
         <div class="admin__field field-target" data-hmm-target="cms_block">
@@ -125,7 +126,6 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
                     <?php endforeach; ?>
                 </select>
                 <div class="admin__field-note"><?= $escaper->escapeHtml(__('Inside a mega panel the block fills its column; an inactive block is listed but cannot be chosen.')) ?></div>
-                <?= /* @noEscape */ $useDefault('item_target_value') ?>
             </div>
         </div>
         <div class="admin__field field-target" data-hmm-target="custom">
@@ -134,7 +134,6 @@ $storeDisabled = static fn (string $field): string => $storeScope && !$block->is
                 <input type="text" class="admin__control-text" id="hmm-target-custom" name="target_custom" placeholder="{storeurl}path or https://..."
                        value="<?= $type === Item::TYPE_CUSTOM ? $escaper->escapeHtmlAttr($target) : '' ?>"<?= /* @noEscape */ $storeDisabled('item_target_value') ?>>
                 <div class="admin__field-note"><?= $escaper->escapeHtml(__('{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.')) ?></div>
-                <?= /* @noEscape */ $useDefault('item_target_value') ?>
             </div>
         </div>
 

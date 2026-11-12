@@ -121,3 +121,4 @@
 "store value","valoare magazin"
 "this store only","doar acest magazin"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} este înlocuit cu URL-ul de bază al vizualizării de magazin; o cale fără schemă este relativă la acesta."
+"The item does not belong to this menu.","Elementul nu aparține acestui meniu."

@@ -291,9 +291,11 @@ export interface CheckoutConfig {
 
     paymentMethods: readonly PaymentMethodConfig[];
     /**
-     * Per-method additional config (keyed by method code). Includes
-     * Stripe `publishableKey`, Braintree `clientToken`, offline
-     * instructions, etc. The `payment.ccform` entry is special-purpose
+     * Per-method additional config (keyed by method code): Braintree
+     * `clientToken`, the check payee and mailing address under `checkmo`,
+     * etc. The offline instructions are NOT under their method code: core
+     * emits them as `payment.instructions[code]` (bank transfer, cash on
+     * delivery). The `payment.ccform` entry is special-purpose
      * for CC gateways and not used directly by our bundle.
      */
     payment: Readonly<Record<string, Record<string, unknown>>>;

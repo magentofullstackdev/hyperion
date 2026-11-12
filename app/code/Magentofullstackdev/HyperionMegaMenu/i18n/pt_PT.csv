@@ -121,3 +121,4 @@
 "store value","valor da loja"
 "this store only","apenas esta loja"
 "{storeurl} is replaced by the store view base URL; a path without a scheme is relative to it.","{storeurl} é substituído pelo URL base da vista de loja; um caminho sem esquema é relativo a ele."
+"The item does not belong to this menu.","O item não pertence a este menu."

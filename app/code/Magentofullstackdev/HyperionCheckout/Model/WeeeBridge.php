@@ -26,6 +26,9 @@ class WeeeBridge
 {
     private const MODULE = 'Magento_Weee';
     private const HELPER = 'Magento\\Weee\\Helper\\Data';
+    /** Display types "Including FPT only" and "Including FPT and FPT description". */
+    private const DISPLAY_INCLUDING_FPT = [0, 1];
+    private const ZONE_CART = 'cart';
 
     private ?object $helper = null;
 
@@ -93,6 +96,41 @@ class WeeeBridge
         } catch (\Throwable $e) {
             $this->logger->error('Hyperion WeeeBridge: applied FPT failed', ['exception' => $e]);
             return [];
+        }
+    }
+
+    /**
+     * The FPT a cart line's price and row total include, null when they do
+     * not: FPT is off, nothing applies to the item, or the store shows cart
+     * prices excluding FPT (`tax/weee/display_sales`). The same decision as
+     * core's item price renderer in the cart zone.
+     *
+     * @return array{unit: float, row: float, unit_incl_tax: float, row_incl_tax: float}|null
+     */
+    public function getIncludedInPrice(AbstractItem $item): ?array
+    {
+        $helper = $this->helper();
+        if ($helper === null) {
+            return null;
+        }
+        try {
+            $store = $item->getQuote()->getStore();
+            if (!$helper->typeOfDisplay(self::DISPLAY_INCLUDING_FPT, self::ZONE_CART, $store)) {
+                return null;
+            }
+            $row = (float) $helper->getWeeeTaxAppliedRowAmount($item);
+            if ($row <= 0) {
+                return null;
+            }
+            return [
+                'unit' => (float) $helper->getWeeeTaxAppliedAmount($item),
+                'row' => $row,
+                'unit_incl_tax' => (float) $helper->getWeeeTaxInclTax($item),
+                'row_incl_tax' => (float) $helper->getRowWeeeTaxInclTax($item),
+            ];
+        } catch (\Throwable $e) {
+            $this->logger->error('Hyperion WeeeBridge: included FPT failed', ['exception' => $e]);
+            return null;
         }
     }
 

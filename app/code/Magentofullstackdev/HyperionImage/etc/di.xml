@@ -22,6 +22,14 @@
         <plugin name="hyperion_image_schedule_conversion"
                 type="Magentofullstackdev\HyperionImage\Plugin\Catalog\Product\Image\ScheduleConversionPlugin"
                 sortOrder="100"/>
+        <!--
+            Wipe the companion .webp / .avif files when Magento clears the
+            product image cache. Strictly scoped to
+            `pub/media/catalog/product/cache/`, see the plugin docblock.
+        -->
+        <plugin name="hyperion_image_clear_cache"
+                type="Magentofullstackdev\HyperionImage\Plugin\Catalog\Model\Product\Image\ClearCachePlugin"
+                sortOrder="100"/>
     </type>
 
     <!--
@@ -32,17 +40,6 @@
     <type name="Magento\MediaStorage\Service\ImageResize">
         <plugin name="hyperion_image_schedule_companions"
                 type="Magentofullstackdev\HyperionImage\Plugin\MediaStorage\Service\ImageResize\ScheduleCompanionsPlugin"
-                sortOrder="100"/>
-    </type>
-
-    <!--
-        Wipe companion .webp/.avif files when Magento clears the
-        product image cache. Strictly scoped to
-        `pub/media/catalog/product/cache/` - see plugin docblock.
-    -->
-    <type name="Magento\Catalog\Helper\Image">
-        <plugin name="hyperion_image_clear_cache"
-                type="Magentofullstackdev\HyperionImage\Plugin\Catalog\Helper\Image\ClearCachePlugin"
                 sortOrder="100"/>
     </type>
 

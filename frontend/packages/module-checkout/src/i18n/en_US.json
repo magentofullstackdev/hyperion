@@ -139,5 +139,15 @@
     "Hyperion_Checkout::gift_save_failed": "The gift message couldn't be saved. Please try again.",
     "Hyperion_Checkout::shipping_policy_open": "See our shipping policy",
     "Hyperion_Checkout::shipping_policy_heading": "Shipping policy",
-    "Hyperion_Checkout::shipping_policy_close": "Close"
+    "Hyperion_Checkout::shipping_policy_close": "Close",
+    "Hyperion_Checkout::checkout_updating": "Your order is being updated. Try again in a moment.",
+    "Hyperion_Checkout::order_not_placed_network": "We could not reach the store. Your order was not placed. Please try again.",
+    "Hyperion_Checkout::order_outcome_unknown": "We could not confirm whether your order was placed. Please wait a moment and press Place Order again; we will check before sending anything.",
+    "Hyperion_Checkout::error_store_unavailable": "The store is temporarily unavailable. Please try again in a moment.",
+    "Hyperion_Checkout::error_too_many_requests": "Too many requests. Please wait a moment and try again.",
+    "Hyperion_Checkout::error_request_blocked": "Your request was blocked. Please reload the page and try again.",
+    "Hyperion_Checkout::error_network": "We could not reach the store. Check your connection and try again.",
+    "Hyperion_Checkout::po_number_required": "Enter the purchase order number.",
+    "Hyperion_Checkout::checkmo_payable_to": "Make Check payable to:",
+    "Hyperion_Checkout::checkmo_send_to": "Send Check to:"
 }

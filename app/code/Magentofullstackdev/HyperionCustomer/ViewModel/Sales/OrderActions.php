@@ -18,7 +18,7 @@ use Magentofullstackdev\HyperionCustomer\Model\OrderCancellation;
 /**
  * Reorder / print / cancel actions for the order pages.
  *
- * Mirrors Magento\Sales\Block\Order\Info\Buttons (plus the 2.4.7+
+ * Mirrors Magento\Sales\Block\Order\Info\Buttons (plus the
  * Magento_OrderCancellationUi button) so the Hyperion order templates can
  * render the actions from any order block (view, invoice, shipment,
  * credit memo, history, recent orders), for customers and guests alike.
@@ -78,7 +78,7 @@ class OrderActions implements ArgumentInterface
     }
 
     /**
-     * Whether the signed-in customer may cancel the order (2.4.7+ feature,
+     * Whether the signed-in customer may cancel the order (optional feature,
      * false when Magento_OrderCancellation is absent or disabled).
      *
      * @param Order $order

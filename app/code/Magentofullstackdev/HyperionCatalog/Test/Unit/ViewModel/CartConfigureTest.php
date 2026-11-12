@@ -31,9 +31,6 @@ class CartConfigureTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider requestProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('requestProvider')]
     public function testItemIdComesOnlyFromTheCartConfigureRequest(string $action, mixed $id, int $expected): void
     {

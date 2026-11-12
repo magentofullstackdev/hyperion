@@ -31,9 +31,12 @@ class Fragment extends Template implements IdentityInterface
     }
 
     /**
-     * @return int
+     * The cart count as CartData gives it: a sum of quantities (a float when
+     * it is not whole) or the number of lines.
+     *
+     * @return float|int
      */
-    public function getItemCount(): int
+    public function getItemCount(): float|int
     {
         try {
             return $this->cartData->getItemCount();

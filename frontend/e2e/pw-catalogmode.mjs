@@ -6,12 +6,12 @@
 //   node e2e/pw-catalogmode.mjs https://shop.example <slotDir>
 // Drives the configuration through `docker compose exec php-fpm bin/magento`
 // in <slotDir>, runs the guest and customer checks for every phase and
-// restores the defaults (catalog mode off, listing button on, reCAPTCHA v3
-// threshold) at the end. Exit code 1 when a check fails.
+// puts the settings it changed back as it found them at the end. Exit code 1 when a check fails.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
 // PW_HOST_RESOLVER="MAP shop.example 10.0.0.4" resolves an install's host
@@ -48,9 +48,13 @@ const configure = (values) => {
 // as a fixed default: an install without reCAPTCHA keys must not end up with
 // reCAPTCHA v3 switched on by this script.
 const RESTORED_PATHS = ['recaptcha_frontend/type_for/customer_login', 'recaptcha_frontend/type_recaptcha_v3/score_threshold', 'hyperion_catalog_mode/general/enabled', 'hyperion_catalog_mode/general/allowed_customer_groups', 'hyperion/catalog/add_to_cart_from_listing'];
-const snapshot = Object.fromEntries(RESTORED_PATHS.map((path) => {
-    try { return [path, magento('config:show', path).trim() || null]; } catch { return [path, null]; }
-}));
+const { configSnapshot, restoreConfig } = makeConfigSnapshot((query) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'exec', '-T', 'db', 'bash', '-c',
+    `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`], { encoding: 'utf8' }));
+const snapshot = RESTORED_PATHS.map((configPath) => [configPath, configSnapshot(configPath)]);
+const restoreSettings = () => {
+    for (const [configPath, stored] of snapshot) restoreConfig(configPath, stored);
+    magento('cache:flush');
+};
 
 const browser = await chromium.launch({ headless: true, ...launchOptions() });
 const problems = [];
@@ -172,7 +176,7 @@ try {
     }
     check('no page errors / HTTP 5xx', problems.length === 0, problems.slice(0, 4).join(' | '));
 } finally {
-    configure(snapshot);
+    restoreSettings();
     await browser.close();
 }
 const failed = results.filter((r) => !r.ok).length;

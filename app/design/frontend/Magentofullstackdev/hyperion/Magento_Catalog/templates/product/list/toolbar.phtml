@@ -5,11 +5,17 @@
  * Hyperion product list toolbar -- sort order, page size, and result count.
  *
  * All select changes trigger HTMX GET requests that swap the product grid
- * fragment without a full page reload. hx-include collects the selects and
- * the hidden inputs (mode, sort direction) so order, direction, limit and
- * mode travel together. The grid / list switch (`catalog/frontend/list_mode`,
- * `product_list_mode`) is a pair of links: HTMX on category pages, plain
- * links on search.
+ * fragment without a full page reload. The request URL of every control is
+ * the fragment URL of the listing as it is filtered now
+ * (Listing::getStateFragmentUrl(): the fragment endpoint plus the active
+ * layered filters, read from the layer state), so a sort, a page size, a
+ * direction or a mode change keeps the filters. hx-include collects the
+ * selects and the hidden inputs (mode, sort direction) so order, direction,
+ * limit and mode travel together; those values are never part of the URL
+ * itself, where they would fight the control's new value. A control that sets
+ * a value of its own (mode link, direction toggle) passes it to the view
+ * model. The grid / list switch (`catalog/frontend/list_mode`,
+ * `product_list_mode`) is a pair of links.
  *
  * The URL the browser shows after a swap is the `HX-Push-Url` header of the
  * fragment response (the PAGE URL with the current query, built server side
@@ -28,7 +34,7 @@
 // endpoint come from the Listing view model, so search results swap like a category.
 $listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
 $listProduct = $listing->getListBlock($block->getLayout());
-$fragmentUrl = $listing->getFragmentUrl($listProduct);
+$fragmentUrl = $listing->getStateFragmentUrl($listProduct);
 $gridId = $listing->getGridTargetId();
 
 $sortOptions = $block->getAvailableOrders();
@@ -85,7 +91,7 @@ $pagerHtml = (string) $block->getPagerHtml();
                     ?>
                     <a href="<?= $escaper->escapeUrl($modeUrl) ?>"
                        <?php if ($fragmentUrl !== ''): ?>
-                           hx-get="<?= $escaper->escapeUrl($fragmentUrl . '&product_list_mode=' . $code) ?>"
+                           hx-get="<?= $escaper->escapeUrl($listing->getStateFragmentUrl($listProduct, ['product_list_mode' => $code])) ?>"
                            hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
                            hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
                            hx-swap="outerHTML"
@@ -146,7 +152,7 @@ $pagerHtml = (string) $block->getPagerHtml();
                 ?>
                 <a href="<?= $escaper->escapeUrl($directionUrl) ?>"
                    <?php if ($fragmentUrl !== ''): ?>
-                   hx-get="<?= $escaper->escapeUrl($fragmentUrl . '&product_list_dir=' . $nextDir) ?>"
+                   hx-get="<?= $escaper->escapeUrl($listing->getStateFragmentUrl($listProduct, ['product_list_dir' => $nextDir])) ?>"
                    hx-target="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
                    hx-indicator="#<?= $escaper->escapeHtmlAttr($gridId) ?>"
                    hx-swap="outerHTML"

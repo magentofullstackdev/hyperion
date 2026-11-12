@@ -20,6 +20,7 @@ const { chromium } = require('@playwright/test');
 import path from 'node:path';
 import fs from 'node:fs';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 const base = (process.argv[2] || '').replace(/\/$/, '');
 const u = makeUrl(await resolveUrlSuffix(base));
 if (!/^https?:\/\//.test(base)) {
@@ -35,6 +36,10 @@ const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--pr
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (q) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(q)} 2>/dev/null`);
 const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* none */ } };
+const { configSnapshot, restoreConfig } = makeConfigSnapshot(sql);
+// The two wish list settings the run switches, as stored before it.
+const WISHLIST_PATHS = ['wishlist/general/active', 'wishlist/general/show_in_sidebar'];
+const previousWishlist = WISHLIST_PATHS.map((configPath) => [configPath, configSnapshot(configPath)]);
 const categoryPath = u('/men/tops-men.html');
 const attrId = sql("SELECT attribute_id FROM eav_attribute WHERE attribute_code='page_layout' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')").trim();
 const catId = sql("SELECT entity_id FROM catalog_category_entity WHERE entity_id IN (SELECT entity_id FROM catalog_category_entity_varchar WHERE attribute_id=(SELECT attribute_id FROM eav_attribute WHERE attribute_code='url_key' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')) AND value='tops-men') LIMIT 1").trim();
@@ -119,7 +124,7 @@ try {
     check('no page errors / HTTP 5xx', problems.length === 0, problems.slice(0, 3).join(' | '));
 } finally {
     setLayout('');
-    sql("DELETE FROM core_config_data WHERE path IN ('wishlist/general/active','wishlist/general/show_in_sidebar') AND scope='default'");
+    for (const [configPath, snapshot] of previousWishlist) restoreConfig(configPath, snapshot);
     clearLists();
     flush();
     await browser.close();

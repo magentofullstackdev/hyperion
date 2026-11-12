@@ -41,6 +41,7 @@
  */
 
 import { LitElement, html, css } from 'lit';
+import { formatPrice } from '../lib/price-format.js';
 
 // Magento\Swatches\Model\Swatch constants. Type is a numeric-string
 // in jsonSwatchConfig:
@@ -387,15 +388,13 @@ export class HyperionSwatches extends LitElement {
         return amount;
     }
 
+    // The amount the way the server printed it for this store view: Magento's
+    // `priceFormat` of the JSON config (decimal and group symbols, precision,
+    // pattern). Without it, two decimals inside the currency pattern.
     _formatPrice(amount) {
         if (amount == null) return '';
-        // Prefer the parsed config's currencyFormat (store-aware) over the
-        // attribute fallback -- Magento's Configurable block ships it in
-        // jsonConfig as the canonical format string for the active currency.
-        const format = this._parsedConfig?.currencyFormat
-            || this.priceCurrencyFormat
-            || '$%s';
-        return String(format).replace('%s', amount.toFixed(2));
+        const config = this._parsedConfig;
+        return formatPrice(amount, config?.priceFormat, config?.currencyFormat || this.priceCurrencyFormat || '$%s');
     }
 
     // Render a <span> for the final price and, when the variant is on sale,
@@ -441,7 +440,7 @@ export class HyperionSwatches extends LitElement {
     }
 
     /**
-     * Full image list for a specific child product, normalised to the
+     * Full image list for a specific child product, normalized to the
      * shape hyperion-gallery expects:
      *   [{ thumb, img, full, caption, isMain, position }]
      *
@@ -542,7 +541,7 @@ export class HyperionSwatches extends LitElement {
             ? document.querySelector(this.galleryTarget)
             : this.closest('article')?.querySelector('[data-tile-image]');
         if (!target) return;
-        // A colour alone is enough to preview the variant picture.
+        // A color alone is enough to preview the variant picture.
         const main = this._getMainImage(this._currentProductId || this._resolveImageProduct());
         if (!main) return;
         const src = main.img || main.full || main.thumb;

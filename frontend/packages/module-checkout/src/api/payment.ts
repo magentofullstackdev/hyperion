@@ -22,6 +22,12 @@ import type { PaymentInformationRequest } from '../types/payment.js';
 import type { PaymentDetails } from '../types/shipping.js';
 
 /**
+ * How long the order request may wait for its answer. Past it the request
+ * is given up and the quote is read to learn whether the order exists.
+ */
+export const PLACE_ORDER_TIMEOUT_MS = 60000;
+
+/**
  * GET payment-information: the payment methods available for the quote as
  * it is now, together with its totals (`PaymentDetailsInterface`). Read
  * again whenever something changed the quote outside the shipping step
@@ -72,6 +78,8 @@ export function placeGuestOrder(
             method: 'POST',
             body: req,
             auth: 'guest',
+            retry: false,
+            timeoutMs: PLACE_ORDER_TIMEOUT_MS,
             ...(recaptchaToken ? { recaptchaToken } : {}),
         }
     );
@@ -87,6 +95,8 @@ export function placeCustomerOrder(
             method: 'POST',
             body: req,
             auth: 'customer',
+            retry: false,
+            timeoutMs: PLACE_ORDER_TIMEOUT_MS,
             ...(recaptchaToken ? { recaptchaToken } : {}),
         }
     );

@@ -17,6 +17,7 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -48,6 +49,7 @@ function compose(service, cmd, user) {
 }
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
+const { configSnapshot, restoreConfig, describe } = makeConfigSnapshot(sql);
 const banVarnish = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .'"); } catch { /* no varnish on this install */ } };
 
 function setUp() {
@@ -55,19 +57,15 @@ function setUp() {
     sql(`insert into checkout_agreement (name, content, checkbox_text, is_active, is_html, mode) values ('${AGREEMENT_NAME}', 'Terms used by e2e/pw-agreements.mjs. Safe to delete.', 'I agree to the e2e terms', 1, 0, 1)`);
     const id = sql(`select agreement_id from checkout_agreement where name = '${AGREEMENT_NAME}' order by agreement_id desc limit 1`);
     sql(`insert into checkout_agreement_store (agreement_id, store_id) values (${id}, 0)`);
-    const previous = sql(`select value from core_config_data where scope = 'default' and scope_id = 0 and path = 'checkout/options/enable_agreements'`);
+    const previous = configSnapshot('checkout/options/enable_agreements');
     magento('config:set checkout/options/enable_agreements 1');
     magento('cache:flush');
     banVarnish();
-    return { id: Number(id), previous: previous === '' ? null : previous };
+    return { id: Number(id), previous };
 }
 
 function tearDown(state) {
-    if (state.previous === null) {
-        sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = 'checkout/options/enable_agreements'`);
-    } else {
-        magento(`config:set checkout/options/enable_agreements ${state.previous}`);
-    }
+    restoreConfig('checkout/options/enable_agreements', state.previous);
     sql(`delete a, s from checkout_agreement a left join checkout_agreement_store s on s.agreement_id = a.agreement_id where a.name = '${AGREEMENT_NAME}'`);
     magento('cache:flush');
     banVarnish();
@@ -143,7 +141,7 @@ async function checkoutWithAgreement(page, label, agreementId) {
 
 const browser = await chromium.launch({ headless: true, ...launchOptions() });
 const state = setUp();
-console.log(`agreement ${state.id} created on ${slot}, enable_agreements was ${state.previous ?? '(unset)'}`);
+console.log(`agreement ${state.id} created on ${slot}, enable_agreements was ${describe(state.previous)}`);
 try {
     {
         const j = await newJourney();

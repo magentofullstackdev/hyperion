@@ -28,11 +28,18 @@ class HtmxConfig implements ArgumentInterface
      * swaps no executable script, so htmx runs without eval and drops
      * script tags from responses. Its indicator rules live in the theme
      * stylesheet, not in a style tag injected at runtime.
+     *
+     * No history snapshot is kept: a Back or Forward across an htmx-pushed
+     * URL reloads the public URL (served from the edge cache), so no
+     * component has to survive a serialized copy of the upgraded page and
+     * nothing private is written to `sessionStorage`.
      */
     private const CONFIG = [
         'allowEval' => false,
         'allowScriptTags' => false,
         'includeIndicatorStyles' => false,
+        'historyCacheSize' => 0,
+        'refreshOnHistoryMiss' => true,
     ];
 
     public function __construct(

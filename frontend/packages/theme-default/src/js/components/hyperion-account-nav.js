@@ -38,18 +38,12 @@ class HyperionAccountNav extends HTMLElement {
         this._enhanceLinks();
         this.addEventListener('click', this._onClick);
 
-        // When the browser restores a history entry via back/forward, HTMX
-        // fires `htmx:historyRestore` -- re-run enhancement so any freshly
-        // paged-in links pick up the HTMX attributes.
-        document.body.addEventListener('htmx:historyRestore', this._onHistoryRestore);
-
         // Whenever a nav-driven swap lands, recompute the active link.
         document.body.addEventListener('htmx:afterSettle', this._onAfterSettle);
     }
 
     disconnectedCallback() {
         this.removeEventListener('click', this._onClick);
-        document.body.removeEventListener('htmx:historyRestore', this._onHistoryRestore);
         document.body.removeEventListener('htmx:afterSettle', this._onAfterSettle);
     }
 
@@ -105,12 +99,6 @@ class HyperionAccountNav extends HTMLElement {
         // We only update the optimistic active state so the user sees
         // immediate feedback before the swap settles.
         this._markActive(a);
-    };
-
-    _onHistoryRestore = () => {
-        // history navigation may have rewritten the nav container; reprocess.
-        this._enhanceLinks();
-        this._syncActiveFromUrl();
     };
 
     _onAfterSettle = (event) => {

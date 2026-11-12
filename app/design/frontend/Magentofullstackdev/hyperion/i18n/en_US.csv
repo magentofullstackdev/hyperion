@@ -126,7 +126,7 @@ More,More
 "My account","My account"
 "My billing and shipping address are the same","My billing and shipping address are the same"
 Name,Name
-"New to Hyperion?","New to Hyperion?"
+"New here?","New here?"
 Newsletter,Newsletter
 "Next page","Next page"
 Nickname,Nickname
@@ -238,7 +238,6 @@ Show,Show
 "Sort by","Sort by"
 "Speed Without","Speed Without"
 "Start Shopping","Start Shopping"
-"Stateless, edge-cacheable commerce -- built for speed on Magento.","Stateless, edge-cacheable commerce -- built for speed on Magento."
 "Stay in the loop","Stay in the loop"
 "Stored Accounts","Stored Accounts"
 Submit,Submit
@@ -311,3 +310,4 @@ products,products
 "This page does not exist.","This page does not exist."
 "Back to the first page","Back to the first page"
 "1 star: %1%","1 star: %1%"
+"We can't load the products right now. Please try again in a moment.","We can't load the products right now. Please try again in a moment."

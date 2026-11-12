@@ -155,9 +155,31 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                             </div>
 
                             <div class="shrink-0 flex flex-col items-end gap-2">
-                                <p class="text-base font-semibold text-secondary">
-                                    <?= $escaper->escapeHtml($item['row_total_display']) ?>
-                                </p>
+                                <?php /* Unit price and row total as the cart tax display asks (including
+                                         tax, excluding tax, or including with the excluding amount beside it). */ ?>
+                                <dl class="text-right" data-hyperion-cart-item-prices>
+                                    <div class="flex flex-wrap items-baseline justify-end gap-1 text-xs text-muted">
+                                        <dt><?= $escaper->escapeHtml(__('Price')) ?>:</dt>
+                                        <dd data-hyperion-cart-item-price><?= $escaper->escapeHtml($item['price_display']) ?></dd>
+                                        <?php if ($item['price_display_excl'] !== null): ?>
+                                            <dd class="basis-full" data-hyperion-cart-item-price-excl>
+                                                <?= $escaper->escapeHtml(__('Excl. Tax')) ?>:
+                                                <?= $escaper->escapeHtml($item['price_display_excl']) ?>
+                                            </dd>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="flex flex-wrap items-baseline justify-end gap-1 text-xs text-muted">
+                                        <dt><?= $escaper->escapeHtml(__('Subtotal')) ?>:</dt>
+                                        <dd class="text-base font-semibold text-secondary"
+                                            data-hyperion-cart-item-row-total><?= $escaper->escapeHtml($item['row_total_display']) ?></dd>
+                                        <?php if ($item['row_total_display_excl'] !== null): ?>
+                                            <dd class="basis-full" data-hyperion-cart-item-row-total-excl>
+                                                <?= $escaper->escapeHtml(__('Excl. Tax')) ?>:
+                                                <?= $escaper->escapeHtml($item['row_total_display_excl']) ?>
+                                            </dd>
+                                        <?php endif; ?>
+                                    </div>
+                                </dl>
 
                                 <label class="flex items-center gap-2 text-xs text-muted">
                                     <span class="sr-only">
@@ -165,9 +187,13 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                                     </span>
                                     <input type="number"
                                            name="cart[<?= (int) $item['id'] ?>][qty]"
-                                           value="<?= (int) $item['qty'] ?>"
-                                           min="1"
-                                           inputmode="numeric"
+                                           value="<?= $escaper->escapeHtmlAttr((string) ($item['qty'] + 0)) ?>"
+                                           min="<?= $escaper->escapeHtmlAttr((string) $item['qty_min']) ?>"
+                                           <?php if ($item['qty_max'] !== null): ?>
+                                               max="<?= $escaper->escapeHtmlAttr((string) $item['qty_max']) ?>"
+                                           <?php endif; ?>
+                                           step="<?= $escaper->escapeHtmlAttr((string) $item['qty_step']) ?>"
+                                           inputmode="<?= $item['is_qty_decimal'] ? 'decimal' : 'numeric' ?>"
                                            aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $item['name'])) ?>"
                                            class="w-16 px-2 py-1 text-sm rounded-lg
                                                   bg-surface border border-subtle text-secondary

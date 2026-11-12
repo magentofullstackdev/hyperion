@@ -5,34 +5,61 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 3 * * *'
 
 jobs:
+  legs:
+    name: Select the matrix legs
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        # A job-level `if` cannot read `matrix`, so the legs are chosen here.
+        # gate: the two blocking legs, the platform the release is verified on (docs/compatibility.md).
+        # php-8.3, tier-2: non-blocking legs for the oldest supported PHP and the previous Mage-OS line.
+        # canary: the newest Mage-OS release, whatever it is; non-blocking, scheduled runs only.
+        env:
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          set -euo pipefail
+          legs='[
+            {"label": "gate",    "mageos": "4.0.*", "php": "8.4", "mariadb": "mariadb:12.3", "opensearch": "opensearchproject/opensearch:3"},
+            {"label": "gate",    "mageos": "4.0.*", "php": "8.5", "mariadb": "mariadb:12.3", "opensearch": "opensearchproject/opensearch:3"},
+            {"label": "php-8.3", "mageos": "4.0.*", "php": "8.3", "mariadb": "mariadb:12.3", "opensearch": "opensearchproject/opensearch:3", "experimental": true},
+            {"label": "tier-2",  "mageos": "3.6.*", "php": "8.4", "mariadb": "mariadb:12.3", "opensearch": "opensearchproject/opensearch:3", "experimental": true},
+            {"label": "canary",  "mageos": "*",     "php": "8.5", "mariadb": "mariadb:12.3", "opensearch": "opensearchproject/opensearch:3", "experimental": true, "nightly": true}
+          ]'
+          if [ "$SCHEDULED" = "true" ]; then
+            include=$(jq -c . <<<"$legs")
+          else
+            include=$(jq -c 'map(select(.nightly != true))' <<<"$legs")
+          fi
+          echo "matrix={\"include\":$include}" >> "$GITHUB_OUTPUT"
+
   php:
-    name: phpcs, phpstan, phpunit on Mage-OS ${{ matrix.mageos }} / PHP ${{ matrix.php }}
+    name: ${{ matrix.label }} / Mage-OS ${{ matrix.mageos }} / PHP ${{ matrix.php }}
+    needs: legs
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        php: ['8.3', '8.4', '8.5']
-        mageos: ['3.6.*']
-        include:
-          - php: '8.4'
-            mageos: '*'
-            experimental: true
+      matrix: ${{ fromJSON(needs.legs.outputs.matrix) }}
     continue-on-error: ${{ matrix.experimental == true }}
     services:
       mysql:
-        image: mariadb:11.4
+        image: ${{ matrix.mariadb }}
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: magento
         ports: ['3306:3306']
         options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=10s --health-timeout=5s --health-retries=10
       opensearch:
-        image: opensearchproject/opensearch:2.19.0
+        image: ${{ matrix.opensearch }}
         env:
           discovery.type: single-node
           DISABLE_SECURITY_PLUGIN: 'true'
+          DISABLE_INSTALL_DEMO_CONFIG: 'true'
           OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
         ports: ['9200:9200']
     steps:
@@ -45,9 +72,39 @@ jobs:
           extensions: bcmath, gd, intl, mbstring, pdo_mysql, soap, sockets, sodium, xsl, zip
           tools: composer:v2
           coverage: none
+      - name: composer validate (the twelve manifests)
+        if: matrix.label == 'gate'
+        # Non-strict on purpose: the `version` field and the unbound `*` constraints on
+        # `magento/module-*` are intentional and only raise warnings.
+        run: |
+          set -euo pipefail
+          manifests=(hyperion/app/code/Magentofullstackdev/*/composer.json hyperion/app/design/frontend/Magentofullstackdev/*/composer.json)
+          test "${#manifests[@]}" -eq 12
+          for manifest in "${manifests[@]}"; do
+            composer validate --no-interaction "$manifest"
+          done
+      - name: Versions agree (Composer manifests and npm packages)
+        if: matrix.label == 'gate'
+        run: |
+          set -euo pipefail
+          files=(hyperion/app/code/Magentofullstackdev/*/composer.json hyperion/app/design/frontend/Magentofullstackdev/*/composer.json hyperion/frontend/packages/*/package.json)
+          test "${#files[@]}" -eq 15
+          versions=$(jq -r .version "${files[@]}" | sort -u)
+          echo "$versions"
+          test "$(wc -l <<<"$versions")" -eq 1
+          test "$versions" != "null"
+      - name: Locate the Composer cache
+        id: composer-cache
+        run: echo "dir=$(composer config --global cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.label }}-php${{ matrix.php }}-mageos${{ matrix.mageos }}
+          restore-keys: |
+            composer-${{ matrix.label }}-php${{ matrix.php }}-
       - name: Create a Mage-OS project (no authentication keys needed)
-        # Pinned to the Mage-OS minor the release was verified on (docs/compatibility.md);
-        # the `latest` job below tracks the newest release without blocking the gate.
+        # The gate legs pin the Mage-OS minor the release is verified on (docs/compatibility.md);
+        # the scheduled canary leg tracks the newest release without blocking the gate.
         run: composer create-project --repository-url=https://repo.mage-os.org/ "mage-os/project-community-edition:${{ matrix.mageos }}" magento --no-interaction --no-progress
       - name: Install Hyperion from this checkout (copy, like a Packagist install)
         working-directory: magento
@@ -64,6 +121,10 @@ jobs:
             --admin-firstname=CI --admin-lastname=CI --admin-email=ci@example.com --admin-user=ci --admin-password=CiPassword123 \
             --search-engine=opensearch --opensearch-host=127.0.0.1 --opensearch-port=9200 --no-interaction
           bin/magento setup:di:compile
+      - name: Plugin targets exist
+        working-directory: magento
+        # A plugin method on a type that has no such public method compiles and never runs.
+        run: php ../hyperion/.github/scripts/check-plugin-targets.php "$PWD" "$PWD/../hyperion"
       - name: phpcs (Magento2 standard, errors only)
         working-directory: magento
         # Deprecation notices raised inside legacy sniffs on PHP 8.4 must not fail the gate.

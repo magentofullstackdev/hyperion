@@ -5,11 +5,14 @@
 $shopLinks = $block->getShopLinks();
 $privacyUrl = $block->getPrivacyPolicyUrl();
 $termsUrl = $block->getTermsUrl();
+$serviceLinks = $block->getServiceLinks();
+$aboutHtml = $block->getAboutHtml();
 $copyrightText = $block->getCopyrightText();
 $homeUrl = $escaper->escapeUrl($block->getHomeUrl());
 $logoUrl = $block->getLogoUrl();
-// Same accessible name as the header logo link: image alt, or visible wordmark + sr-only.
-$homeLabel = __('%1 Home', $block->getStoreName());
+$storeName = $block->getStoreName();
+// Same accessible name as the header logo link: the image alt, or the label of the wordmark link.
+$homeLabel = __('%1 Home', $storeName);
 $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
 ?>
 <?php /* The id is the render blocking marker of the pages with an inline critical sheet
@@ -21,12 +24,16 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
     <div class="container mx-auto px-4 py-12">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-subtle-inverted">
 
-            <?php /* Brand + tagline -- same 3-step logo resolution as the
-                   header (admin upload -> theme images/logo.svg -> wordmark).
-                   See \Magentofullstackdev\HyperionNavigation\Model\LogoResolver. */ ?>
+            <?php /* Brand -- same 3-step logo resolution as the header (admin upload ->
+                   theme images/logo.svg -> the store's brand name as a wordmark), see
+                   \Magentofullstackdev\HyperionNavigation\Model\LogoResolver. The paragraph
+                   under it is the optional CMS block `hyperion-footer-about`. */ ?>
             <div>
                 <a href="<?= /* @noEscape -- escaped above */ $homeUrl ?>"
-                   class="inline-flex items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                   <?php if ($logoUrl === ''): ?>
+                       aria-label="<?= $escaper->escapeHtmlAttr($homeLabel) ?>"
+                   <?php endif; ?>
+                   class="inline-flex max-w-full items-center focus:outline-none focus:ring-2 focus:ring-primary rounded">
                     <?php if ($logoUrl !== ''): ?>
                         <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
                              alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
@@ -34,16 +41,19 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                              class="h-10 w-auto object-contain"
                              loading="lazy" decoding="async">
                     <?php else: ?>
-                        <span class="text-2xl font-black tracking-tighter text-on-inverted
+                        <?php /* A long brand name wraps, and a single long word breaks, inside the column. */ ?>
+                        <span class="min-w-0 break-words text-2xl font-black tracking-tighter text-on-inverted
                                      hover:text-primary transition-colors">
-                            HYPERION<span class="text-primary">.</span>
+                            <?= $escaper->escapeHtml($storeName) ?>
                         </span>
-                        <span class="sr-only"> <?= $escaper->escapeHtml($homeLabel) ?></span>
                     <?php endif; ?>
                 </a>
-                <p class="mt-4 text-sm leading-relaxed text-on-inverted-muted">
-                    <?= $escaper->escapeHtml(__('Stateless, edge-cacheable commerce -- built for speed on Magento.')) ?>
-                </p>
+                <?php if ($aboutHtml !== ''): ?>
+                    <div data-hyperion-footer-about
+                         class="mt-4 text-sm leading-relaxed text-on-inverted-muted">
+                        <?= /* @noEscape -- CMS block content, already filtered */ $aboutHtml ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <?php /* Shop column -- dynamic category links */ ?>
@@ -66,8 +76,9 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                 <?php endif; ?>
             </div>
 
-            <?php /* Support column -- contact, orders, legal */ ?>
-            <div>
+            <?php /* Support column -- contact, orders, legal, then the links modules add to
+                   core's `footer_links` block (Advanced Search, Search Terms, ...). */ ?>
+            <div data-hyperion-footer-service>
                 <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
                     <?= $escaper->escapeHtml(__('Customer service')) ?>
                 </h2>
@@ -104,6 +115,15 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                             </a>
                         </li>
                     <?php endif; ?>
+                    <?php foreach ($serviceLinks as $link): ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($link['url']) ?>"
+                               class="text-on-inverted-muted hover:text-primary transition-colors
+                                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                <?= $escaper->escapeHtml($link['label']) ?>
+                            </a>
+                        </li>
+                    <?php endforeach; ?>
                 </ul>
             </div>
 

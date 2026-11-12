@@ -14,6 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -38,8 +39,14 @@ const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${c
 const ban = () => { try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* no varnish */ } };
 const flush = () => { magento('cache:clean config full_page block_html >/dev/null'); ban(); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const configShow = (p) => { try { return magento(`config:show ${p} 2>/dev/null`).trim(); } catch { return ''; } };
-const original = { mode: configShow('hyperion/catalog/infinite_scroll') || 'disabled', cap: configShow('hyperion/catalog/infinite_scroll_auto_pages') || '3' };
+const { configSnapshot, restoreConfig } = makeConfigSnapshot((query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`));
+// The two settings the run switches, as stored before it: a setting that only had its config.xml default gets no row at the end.
+const MODE_PATHS = ['hyperion/catalog/infinite_scroll', 'hyperion/catalog/infinite_scroll_auto_pages'];
+const original = MODE_PATHS.map((configPath) => [configPath, configSnapshot(configPath)]);
+const restoreMode = () => {
+    for (const [configPath, snapshot] of original) restoreConfig(configPath, snapshot);
+    flush();
+};
 const setMode = (mode, cap) => {
     magento(`config:set hyperion/catalog/infinite_scroll ${mode} >/dev/null`);
     if (cap !== undefined) magento(`config:set hyperion/catalog/infinite_scroll_auto_pages ${cap} >/dev/null`);
@@ -157,7 +164,7 @@ try {
     check('script completed', false, e.message);
 } finally {
     try { fixture('remove', 'tops-women'); fixture('remove', 'tops-men'); } catch { /* fixture gone */ }
-    try { setMode(original.mode, original.cap); } catch { /* restore failed */ }
+    try { restoreMode(); } catch { /* restore failed */ }
     await browser.close();
 }
 const failed = results.filter((r) => !r.ok).map((r) => r.name);

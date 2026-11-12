@@ -4,9 +4,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const placeOrder = vi.fn().mockResolvedValue(null);
+const settleShipping = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../store/flow-actions.js', () => ({
-    flowActions: () => ({ placeOrder }),
+    flowActions: () => ({ placeOrder, settleShipping }),
 }));
+vi.mock('../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
 
 import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type: 'json' };
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
@@ -18,10 +20,15 @@ import { resetValidationRequestsForTests } from '../../store/validation-request.
 import type { Address } from '../../types/address.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import { setActiveCatalogForTests, t } from '../../utils/i18n.js';
+import { navigateTo } from '../../utils/navigate.js';
+import { getCheckoutBlocker } from '../payment-renderers/checkout-gate.js';
+import { getPaymentRenderer } from '../payment-renderers/registry.js';
+import '../payment-renderers/payment-offline.js';
 import '../address-form.js';
 import '../place-order-button.js';
 import type { AddressForm } from '../address-form.js';
-import type { PlaceOrderButton } from '../place-order-button.js';
+import { placeOrderHint, type PlaceOrderButton } from '../place-order-button.js';
+import { initFlowSelectors } from '../../store/flow-selectors.js';
 
 const FLATRATE = {
     carrier_code: 'flatrate',
@@ -74,7 +81,11 @@ describe('<place-order-button> while the order cannot be placed', () => {
     let wrapper: HTMLElement;
 
     beforeEach(() => {
-        placeOrder.mockClear();
+        placeOrder.mockReset();
+        placeOrder.mockResolvedValue(null);
+        settleShipping.mockReset();
+        settleShipping.mockResolvedValue(undefined);
+        vi.mocked(navigateTo).mockClear();
         setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
         setCheckoutConfig(guestFixture as unknown as CheckoutConfig);
         resetFlowSelectorsForTests();
@@ -161,5 +172,220 @@ describe('<place-order-button> while the order cannot be placed', () => {
         el.querySelector<HTMLButtonElement>('button')!.click();
         await settle(wrapper);
         expect(placeOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('a press while the shipping form is ahead of the quote settles the pending work first, then places against what was confirmed', async () => {
+        openGate(store);
+        store.shippingDirty.set(true);
+        settleShipping.mockImplementation(async () => {
+            expect(placeOrder).not.toHaveBeenCalled();
+            store.shippingDirty.set(false);
+        });
+        placeOrder.mockResolvedValue(15);
+        const el = await mountAll(ADDRESS);
+        expect(el.querySelector('button')!.getAttribute('aria-disabled')).toBe('true');
+
+        el.querySelector<HTMLButtonElement>('button')!.click();
+        await settle(wrapper);
+
+        expect(settleShipping).toHaveBeenCalledTimes(1);
+        expect(placeOrder).toHaveBeenCalledTimes(1);
+        expect(navigateTo).toHaveBeenCalledTimes(1);
+        expect(el.querySelector('[data-place-order-hint]')).toBeNull();
+    });
+
+    it('when settling does not confirm the address the order is not placed and the hint does not say the order is being updated when nothing is in flight', async () => {
+        openGate(store);
+        store.shippingDirty.set(true);
+        const el = await mountAll(ADDRESS);
+
+        el.querySelector<HTMLButtonElement>('button')!.click();
+        await settle(wrapper);
+
+        expect(settleShipping).toHaveBeenCalledTimes(1);
+        expect(placeOrder).not.toHaveBeenCalled();
+        const hint = el.querySelector<HTMLElement>('[data-place-order-hint]')!;
+        expect(hint.textContent?.trim()).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+        expect(hint.getAttribute('role')).toBe('status');
+        expect(el.querySelector('button')!.hasAttribute('disabled')).toBe(false);
+    });
+
+    it('a hint about an update in flight does not take the focus and names the missing piece once the update ends without opening the gate', async () => {
+        openGate(store);
+        store.shippingDirty.set(true);
+        // A save is still running when settling gives up waiting.
+        settleShipping.mockImplementation(async () => { store.isSavingShipping.set(true); });
+        const el = await mountAll(ADDRESS);
+        const native = el.querySelector<HTMLButtonElement>('button')!;
+        native.focus();
+
+        native.click();
+        await settle(wrapper);
+
+        const hint = el.querySelector<HTMLElement>('[data-place-order-hint]')!;
+        expect(hint.textContent?.trim()).toBe('Your order is being updated. Try again in a moment.');
+        expect(document.activeElement).not.toBe(hint);
+
+        store.isSavingShipping.set(false);
+        store.shippingDirty.set(false);
+        store.appliedShippingMethod.set(null);
+        await settle(wrapper);
+        expect(el.querySelector('[data-place-order-hint]')?.textContent?.trim())
+            .toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+    });
+
+    it('a press with nothing pending does not wait for anything', async () => {
+        openGate(store);
+        placeOrder.mockResolvedValue(15);
+        const el = await mountAll(ADDRESS);
+
+        el.querySelector<HTMLButtonElement>('button')!.click();
+        await settle(wrapper);
+
+        expect(settleShipping).not.toHaveBeenCalled();
+        expect(placeOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('an order confirmed by the quote after its answer was lost continues on the success page like any other', async () => {
+        openGate(store);
+        placeOrder.mockResolvedValue('placed-unconfirmed');
+        const el = await mountAll(ADDRESS);
+
+        el.querySelector<HTMLButtonElement>('button')!.click();
+        await settle(wrapper);
+
+        expect(navigateTo).toHaveBeenCalledTimes(1);
+    });
+
+    it('once the order exists the button stays in its loading state and a click does nothing', async () => {
+        openGate(store);
+        const el = await mountAll(ADDRESS);
+        store.isPlacingOrder.set(true);
+        store.orderPlaced.set(true);
+        await settle(wrapper);
+
+        const native = el.querySelector<HTMLButtonElement>('button')!;
+        expect(native.disabled).toBe(true);
+        native.click();
+        await settle(wrapper);
+        expect(placeOrder).not.toHaveBeenCalled();
+    });
+
+    describe('what the hint names', () => {
+        it('the billing address when a separate billing address is incomplete and a shipping method is selected', () => {
+            openGate(store);
+            // The save was skipped for the incomplete billing address: nothing is confirmed.
+            store.appliedShippingMethod.set(null);
+            store.shippingDirty.set(true);
+            store.billingSameAsShipping.set(false);
+            store.billingAddress.set({ ...ADDRESS, city: '' });
+
+            expect(placeOrderHint(store, initFlowSelectors()))
+                .toBe(t('Hyperion_Checkout::checkout_incomplete_billing_address'));
+        });
+
+        it('an update in progress while a shipping save, a billing sync or a totals refresh is in flight', () => {
+            openGate(store);
+            const updating = 'Your order is being updated. Try again in a moment.';
+            const selectors = initFlowSelectors();
+            expect(placeOrderHint(store, selectors)).toBeNull();
+
+            store.isSavingShipping.set(true);
+            expect(placeOrderHint(store, selectors)).toBe(updating);
+            store.isSavingShipping.set(false);
+
+            store.isLoadingShippingMethods.set(true);
+            expect(placeOrderHint(store, selectors)).toBe(updating);
+            store.isLoadingShippingMethods.set(false);
+
+            // Ahead of the quote with nothing running is not an update.
+            store.shippingDirty.set(true);
+            expect(placeOrderHint(store, selectors)).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+            store.shippingDirty.set(false);
+
+            store.isRefreshingTotals.set(true);
+            expect(placeOrderHint(store, selectors)).toBe(updating);
+            store.isRefreshingTotals.set(false);
+
+            store.billingSameAsShipping.set(false);
+            store.billingAddress.set(ADDRESS);
+            store.isSavingBilling.set(true);
+            expect(placeOrderHint(store, selectors)).toBe(updating);
+            store.isSavingBilling.set(false);
+            expect(placeOrderHint(store, selectors)).toBe(t('Hyperion_Checkout::checkout_incomplete_billing_address'));
+        });
+
+        it('the shipping method when none is selected, even while the form is ahead of the quote', () => {
+            openGate(store);
+            store.shippingDirty.set(true);
+            store.selectedShippingMethod.set(null);
+
+            expect(placeOrderHint(store, initFlowSelectors()))
+                .toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+        });
+
+        it('the purchase order number while that method is selected and the field is empty', () => {
+            openGate(store);
+            store.availablePaymentMethods.set([{ code: 'purchaseorder', title: 'Purchase Order' }]);
+            store.selectedPaymentMethod.set('purchaseorder');
+            const selectors = initFlowSelectors();
+
+            expect(selectors.canPlaceOrder.get()).toBe(false);
+            expect(placeOrderHint(store, selectors)).toBe('Enter the purchase order number.');
+
+            store.paymentMethodData.set({ purchaseorder: { po_number: 'HYP-PO-1' } });
+            expect(selectors.canPlaceOrder.get()).toBe(true);
+            expect(placeOrderHint(store, selectors)).toBeNull();
+            expect(getPaymentRenderer('purchaseorder')?.isReady?.()).toBe(true);
+        });
+    });
+
+    describe('the gate of a renderer that owns Place Order', () => {
+        it('is open when the button would be', () => {
+            openGate(store);
+            expect(getCheckoutBlocker()).toBeNull();
+        });
+
+        it('blocks while the shipping form is ahead of the quote, as an update only while a request is in flight', () => {
+            openGate(store);
+            store.shippingDirty.set(true);
+            expect(getCheckoutBlocker()).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+
+            store.isSavingShipping.set(true);
+            expect(getCheckoutBlocker()).toBe('Your order is being updated. Try again in a moment.');
+        });
+
+        it('blocks while the totals are being refreshed', () => {
+            openGate(store);
+            store.isRefreshingTotals.set(true);
+            expect(getCheckoutBlocker()).toBe('Your order is being updated. Try again in a moment.');
+        });
+
+        it('blocks a selection the server never confirmed and a separate billing address that is not synced', () => {
+            openGate(store);
+            store.appliedShippingMethod.set(null);
+            expect(getCheckoutBlocker()).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+
+            store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+            store.billingSameAsShipping.set(false);
+            store.billingAddress.set(ADDRESS);
+            expect(getCheckoutBlocker()).toBe(t('Hyperion_Checkout::checkout_incomplete_billing_address'));
+        });
+
+        it('blocks for good once the order exists', () => {
+            openGate(store);
+            store.isPlacingOrder.set(true);
+            store.orderPlaced.set(true);
+            expect(getCheckoutBlocker()).not.toBeNull();
+        });
+
+        it('does not wait for the readiness of the renderer that is asking', () => {
+            openGate(store);
+            store.availablePaymentMethods.set([{ code: 'purchaseorder', title: 'Purchase Order' }]);
+            store.selectedPaymentMethod.set('purchaseorder');
+
+            expect(placeOrderHint(store, initFlowSelectors())).not.toBeNull();
+            expect(getCheckoutBlocker()).toBeNull();
+        });
     });
 });

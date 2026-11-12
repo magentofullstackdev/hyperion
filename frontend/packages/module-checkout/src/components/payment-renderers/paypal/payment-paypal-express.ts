@@ -67,7 +67,20 @@ function messageOf(err: unknown): string {
     return err instanceof PaypalExpressError ? err.message : '';
 }
 
-/** Why the order cannot be paid yet, null when the checkout is complete. */
+/**
+ * A billing address entered on its own must be on the quote before the
+ * payment information is saved for the wallet. Returns false, with the
+ * reason reported, when it could not be put there.
+ */
+async function ensureBillingSynced(): Promise<boolean> {
+    const store = getStore();
+    const needsOwnSync = store.isVirtual.get() || !store.billingSameAsShipping.get();
+    if (!needsOwnSync || store.billingSynced.get()) return true;
+    await flowActions().syncBillingAddress();
+    if (store.billingSynced.get()) return true;
+    reportFailure(store.globalError.get() ?? t('Hyperion_Checkout::checkout_incomplete_billing_address'));
+    return false;
+}
 
 /** The message amount is the base grand total: the SDK is loaded for the base currency. */
 export function getPayLaterAmount(): string {
@@ -83,6 +96,9 @@ export async function createPaypalOrder(): Promise<string> {
     if (!config || blocker !== null) {
         reportFailure(blocker ?? '');
         throw new PaypalExpressError(blocker ?? '');
+    }
+    if (!(await ensureBillingSynced())) {
+        throw new PaypalExpressError(store.globalError.get() ?? '');
     }
     if (!(await flowActions().savePaymentInformation())) {
         const reason = store.globalError.get() ?? '';
@@ -139,6 +155,7 @@ export async function startPaypalRedirect(code: string): Promise<string | null> 
         reportFailure(blocker);
         return null;
     }
+    if (!(await ensureBillingSynced())) return null;
     return (await flowActions().savePaymentInformation()) ? startUrl : null;
 }
 

@@ -1,0 +1,37 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Global notices above the header: the demo store notice
+ * (`design/head/demonotice`) and the JavaScript notice
+ * (`web/browser_capabilities/javascript`) as slim full-width bars.
+ *
+ * The bars are part of the cached page and precede the sticky header, so
+ * their height is in the first paint. Core's local storage notice needs
+ * RequireJS and is not rendered.
+ *
+ * @var \Magento\Theme\Block\Html\Notices $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?php if ($block->displayNoscriptNotice()): ?>
+    <noscript>
+        <div class="bg-surface" data-hyperion-notice="noscript">
+            <p class="bg-warning/10 text-warning-strong border-b border-warning/30 px-4 py-2 text-center text-sm">
+                <strong class="font-semibold">
+                    <?= $escaper->escapeHtml(__('JavaScript seems to be disabled in your browser.')) ?>
+                </strong>
+                <?= $escaper->escapeHtml(
+                    __('For the best experience on our site, be sure to turn on Javascript in your browser.')
+                ) ?>
+            </p>
+        </div>
+    </noscript>
+<?php endif; ?>
+<?php if ($block->displayDemoNotice()): ?>
+    <div class="bg-surface" role="note" data-hyperion-notice="demo">
+        <p class="bg-warning/10 text-warning-strong border-b border-warning/30 px-4 py-2 text-center text-sm font-medium">
+            <?= $escaper->escapeHtml(__('This is a demo store. No orders will be fulfilled.')) ?>
+        </p>
+    </div>
+<?php endif; ?>

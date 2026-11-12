@@ -88,10 +88,22 @@ function loadRecaptchaScript(siteKey: string): Promise<void> {
             }
             window.grecaptcha.ready(() => resolve());
         };
-        script.onerror = () => reject(new Error('Failed to load reCAPTCHA script'));
+        script.onerror = () => {
+            script.remove();
+            reject(new Error('Failed to load reCAPTCHA script'));
+        };
         document.head.appendChild(script);
     });
+    // A failed load is not remembered: the next call tries again instead
+    // of failing for the rest of the page's life.
+    scriptPromise.catch(() => {
+        scriptPromise = null;
+    });
     return scriptPromise;
+}
+
+export function resetRecaptchaLoaderForTests(): void {
+    scriptPromise = null;
 }
 
 /**

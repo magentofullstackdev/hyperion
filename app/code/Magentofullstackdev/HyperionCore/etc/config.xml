@@ -24,6 +24,25 @@
                 <trusted_proxies></trusted_proxies>
             </security>
         </hyperion>
+        <dev>
+            <!--
+                The Vite build output (hashed files under an assets/ directory of the theme,
+                the checkout module or a child theme) is already minified and its chunks import
+                each other by file name: Magento's minification must neither rewrite nor rename
+                them (no ".min" sign). Each value is a regular expression matched against the
+                published file path.
+            -->
+            <js>
+                <minify_exclude>
+                    <hyperion_build>/assets/[^/]+[.-][A-Za-z0-9_-]{8}\.js$</hyperion_build>
+                </minify_exclude>
+            </js>
+            <css>
+                <minify_exclude>
+                    <hyperion_build>/assets/[^/]+[.-][A-Za-z0-9_-]{8}\.css$</hyperion_build>
+                </minify_exclude>
+            </css>
+        </dev>
         <catalog>
             <navigation>
                 <max_depth>4</max_depth>

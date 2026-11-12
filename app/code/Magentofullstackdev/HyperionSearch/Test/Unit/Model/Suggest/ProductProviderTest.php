@@ -16,6 +16,7 @@ use Magento\Framework\Api\Search\SearchCriteriaBuilderFactory;
 use Magento\Framework\Api\Search\SearchResultInterface;
 use Magento\Framework\Api\SortOrder;
 use Magento\Search\Api\SearchInterface;
+use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary;
 use Magentofullstackdev\HyperionSearch\Model\Suggest\ProductProvider;
 use PHPUnit\Framework\MockObject\Stub;
@@ -32,6 +33,8 @@ class ProductProviderTest extends TestCase
 
     /** @var SearchCriteriaBuilder&Stub */
     private SearchCriteriaBuilder $builder;
+
+    private DegradedResponse $degradedResponse;
 
     public function testQueryReturnsTheFirstPageIdsAndTheEngineTotal(): void
     {
@@ -80,6 +83,23 @@ class ProductProviderTest extends TestCase
         self::assertSame(['ids' => [], 'total' => 0], $this->provider(null, null, $logger)->query('bag', 4));
     }
 
+    public function testAnEngineFailureMarksTheRequestAsDegradedAndAnAnswerDoesNot(): void
+    {
+        $this->search->method('search')->willReturnCallback(function () {
+            static $calls = 0;
+            if (++$calls === 1) {
+                return $this->searchResult([], 0);
+            }
+            throw new \RuntimeException('No alive nodes found in your cluster');
+        });
+        $provider = $this->provider();
+
+        self::assertSame(['ids' => [], 'total' => 0], $provider->query('zzzz', 4));
+        self::assertFalse($this->degradedResponse->isDegraded(), 'no match is an answer, not a failure');
+        self::assertSame(['ids' => [], 'total' => 0], $provider->query('bag', 4));
+        self::assertTrue($this->degradedResponse->isDegraded());
+    }
+
     /**
      * @param int[] $ids
      * @return SearchResultInterface&Stub
@@ -101,6 +121,7 @@ class ProductProviderTest extends TestCase
 
     protected function setUp(): void
     {
+        $this->degradedResponse = new DegradedResponse();
         $this->search = $this->createStub(SearchInterface::class);
         $this->builder = $this->createStub(SearchCriteriaBuilder::class);
         $this->builder->method('addFilter')->willReturnSelf();
@@ -133,7 +154,8 @@ class ProductProviderTest extends TestCase
             $this->createStub(ProductCollectionFactory::class),
             $this->createStub(CatalogConfig::class),
             $this->createStub(ProductSummary::class),
-            $logger ?? $this->createStub(LoggerInterface::class)
+            $logger ?? $this->createStub(LoggerInterface::class),
+            $this->degradedResponse
         );
     }
 }

@@ -8,7 +8,13 @@
 // the Orders and Returns widget and removes it at the end. Also
 // the popular search terms page, the Email a Friend link and form
 // (`sendfriend/email/enabled` and `allow_guest` are switched for the run and
-// restored) and the Luma sample "Privacy Policy" menu toggle. The customer
+// restored) and the Luma sample "Privacy Policy" menu toggle, the guest
+// invoice / shipment / refund tabs, the footer service links, the demo store
+// notice (`design/head/demonotice` switched on for the run and restored) and
+// the newsletter form with Google's reCAPTCHA script blocked
+// (`recaptcha_frontend/type_for/newsletter` set for the run when the store has
+// a key pair but does not protect the form, skipped without keys), and the
+// home and category pages at phone widths (no sideways scroll). The customer
 // login needs the customer_login reCAPTCHA type cleared for the run (see
 // docs/development.md). Exit code 1 on any failure.
 import { createRequire } from 'node:module';
@@ -16,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -43,15 +50,24 @@ function compose(service, cmd, user) {
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
 const fixtures = (args) => compose('php-fpm', `cd /var/www/html && php /tmp/sprint4-fixtures.php /var/www/html ${args}`, 'www-data').trim();
-const configValue = (p) => { const v = sql(`select value from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`); return v === '' ? null : v; };
-function restoreConfig(p, previous) {
-    if (previous === null) sql(`delete from core_config_data where scope = 'default' and scope_id = 0 and path = '${p}'`);
-    else magento(`config:set ${p} ${JSON.stringify(previous)}`);
-}
+const { configSnapshot, configValue, restoreConfig } = makeConfigSnapshot(sql);
+// The settings the run changes, as stored before it (no row, SQL NULL or a value).
 const previousConfig = {
-    sendfriendEnabled: configValue('sendfriend/email/enabled'),
-    sendfriendGuest: configValue('sendfriend/email/allow_guest'),
+    sendfriendEnabled: configSnapshot('sendfriend/email/enabled'),
+    sendfriendGuest: configSnapshot('sendfriend/email/allow_guest'),
+    demoNotice: configSnapshot('design/head/demonotice'),
+    recaptchaNewsletter: configSnapshot('recaptcha_frontend/type_for/newsletter'),
 };
+let demoNoticeChanged = false;
+let recaptchaNewsletterChanged = false;
+// Sum of the layout shifts the page recorded so far (shifts right after an input do not count).
+const layoutShift = (page) => page.evaluate(() => new Promise((resolve) => {
+    let total = 0;
+    new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) if (!entry.hadRecentInput) total += entry.value;
+    }).observe({ type: 'layout-shift', buffered: true });
+    setTimeout(() => resolve(total), 500);
+}));
 const SEED_TERM = 'hyperion spec034 popular term';
 let seededTerm = false;
 execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint4-fixtures.php']);
@@ -231,6 +247,34 @@ try {
         await page.click('[data-hyperion-oar-widget] form button[type="submit"]');
         await page.waitForURL((u) => u.toString().includes('/sales/guest/view/'), { timeout: 30000 }).catch(() => {});
         check('orders and returns widget: lookup reaches the guest order view', page.url().includes('/sales/guest/view/'), page.url().replace(base, ''));
+        const tabs = await page.evaluate(() => [...document.querySelectorAll('.hyperion-order-tabs a')].map((a) => new URL(a.href).pathname));
+        check('guest order view: styled tabs link the guest invoice, shipment and refund pages', ['invoice', 'shipment', 'creditmemo'].every((doc) => tabs.some((p) => p.includes(`/sales/guest/${doc}/`))), tabs.join(' '));
+        for (const [name, doc, printAction, totals] of [
+            ['invoice', 'invoice', 'printInvoice', true],
+            ['shipment', 'shipment', 'printShipment', false],
+            ['refund', 'creditmemo', 'printCreditmemo', true],
+        ]) {
+            const url = `/sales/guest/${doc}/order_id/${docs.order_id}/`;
+            await page.goto(base + url, { waitUntil: 'networkidle' });
+            const f = await pageFacts(page);
+            const tab = await page.evaluate((action) => {
+                const shell = document.querySelector('section[aria-labelledby="hyperion-account-heading"]');
+                const prints = [...document.querySelectorAll('a[href*="/print"]')].map((a) => new URL(a.href).pathname);
+                return {
+                    shell: document.querySelectorAll('section[aria-labelledby="hyperion-account-heading"]').length,
+                    info: shell ? shell.querySelectorAll('article').length : 0,
+                    rows: shell ? shell.querySelectorAll('.hyperion-order-table tbody tr').length : 0,
+                    grandTotal: shell ? /grand total/i.test(shell.textContent) : false,
+                    guestPrint: prints.filter((p) => p.includes(`/sales/guest/${action}/`)).length,
+                    accountPrint: prints.filter((p) => p.includes('/sales/order/')).length,
+                    currentTab: document.querySelectorAll('.hyperion-order-tabs .current').length,
+                };
+            }, printAction);
+            check(`guest ${name} tab: Hyperion shell with the info card, the items${totals ? ', the totals' : ''} and guest print links, no core markup`, page.url().includes(url) && tab.shell === 1 && tab.info >= 2 && tab.rows > 0 && (!totals || tab.grandTotal) && tab.guestPrint > 0 && tab.accountPrint === 0 && tab.currentTab === 1 && f.luma === 0 && f.deadInit === 0 && f.h1 === 1, JSON.stringify({ ...tab, luma: f.luma, deadInit: f.deadInit, h1: f.h1, url: page.url().replace(base, '') }));
+            // X-Magento-Debug asks the VCL for the cache verdict, which is stripped otherwise.
+            const verdict = (await j.ctx.request.get(base + url, { headers: { 'X-Magento-Debug': '1' } })).headers()['x-magento-cache-debug'] || '';
+            check(`guest ${name} tab: the page is never cached`, verdict === 'UNCACHEABLE', verdict || 'no verdict header');
+        }
         for (const [name, url, marker] of [
             ['order', `/sales/guest/print/order_id/${docs.order_id}/`, 'section[aria-labelledby="hyperion-account-heading"]'],
             ['invoice', `/sales/guest/printInvoice/order_id/${docs.order_id}/invoice_id/${docs.invoice_id}/`, '[data-hyperion-print="invoice"]'],
@@ -278,7 +322,7 @@ try {
         const sendUrl = (await link.count()) ? await link.getAttribute('href') : '';
         check('email a friend: the product page links to sendfriend/product/send once the feature is on', /\/sendfriend\/product\/send\/id\/\d+\//.test(sendUrl), sendUrl.replace(base, ''));
         if (sendUrl) {
-            const maxRecipients = Number(configValue('sendfriend/email/max_recipients') ?? 5);
+            const maxRecipients = Number(configValue('sendfriend/email/max_recipients') || 5);
             const recaptchaType = configValue('recaptcha_frontend/type_for/sendfriend');
             const expectRecaptcha = !!(recaptchaType && configValue(`recaptcha_frontend/type_${recaptchaType}/public_key`));
             await page.goto(sendUrl, { waitUntil: 'networkidle' });
@@ -335,12 +379,146 @@ try {
         check('fallback pages: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
         await j.ctx.close();
     }
+
+    // ------------------------------------------------------------ footer service links, demo store notice
+    {
+        const j = await newJourney();
+        const { page } = j;
+        await page.goto(base + '/', { waitUntil: 'networkidle' });
+        const footer = await page.evaluate(() => ({
+            links: [...document.querySelectorAll('#hyperion-footer [data-hyperion-footer-service] a')].map((a) => ({ href: a.href, path: new URL(a.href).pathname.replace(/(\/index)*\/*$/, '').toLowerCase() })),
+            coreList: document.querySelectorAll('ul.footer.links').length,
+        }));
+        const advanced = footer.links.find((l) => l.path.endsWith('/catalogsearch/advanced'));
+        const paths = footer.links.map((l) => l.path);
+        check('footer: the customer service column links the advanced search', !!advanced, paths.join(' '));
+        check('footer: each service link appears once and core\'s own link list is not printed', paths.length > 0 && new Set(paths).size === paths.length && footer.coreList === 0, JSON.stringify({ paths, coreList: footer.coreList }));
+        if (advanced) {
+            const response = await page.goto(advanced.href, { waitUntil: 'networkidle' });
+            check('footer: the advanced search page answers 200', response?.status() === 200, String(response?.status()));
+        }
+
+        demoNoticeChanged = true;
+        magento('config:set design/head/demonotice 1');
+        magento('cache:flush');
+        for (const [device, viewport] of [['desktop', { width: 1366, height: 1000 }], ['phone', { width: 390, height: 844 }]]) {
+            await page.setViewportSize(viewport);
+            await page.goto(base + '/', { waitUntil: 'networkidle' });
+            const shift = await layoutShift(page);
+            const notice = await page.evaluate(() => {
+                const bar = document.querySelector('[data-hyperion-notice="demo"]');
+                const header = document.querySelector('header[role="banner"]');
+                const paint = (el) => (el ? getComputedStyle(el).backgroundColor : '');
+                const transparent = (color) => color === '' || color === 'transparent' || /,\s*0\)$/.test(color);
+                const barPaint = paint(bar?.querySelector('p'));
+                return {
+                    count: document.querySelectorAll('[data-hyperion-notice="demo"]').length,
+                    role: bar?.getAttribute('role') || '',
+                    text: bar?.textContent.trim().length || 0,
+                    barPaint,
+                    pagePaint: paint(document.body),
+                    tinted: !transparent(barPaint) && barPaint !== paint(document.body) && barPaint !== paint(document.documentElement),
+                    // The root's own box: `clientWidth` still counts a reserved scrollbar gutter (`scrollbar-gutter: stable`).
+                    fullWidth: bar ? Math.abs(bar.getBoundingClientRect().width - document.documentElement.getBoundingClientRect().width) <= 1 : false,
+                    aboveHeader: !!(bar && header && (bar.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING)),
+                    coreMarkup: document.querySelectorAll('.message.global').length,
+                };
+            });
+            check(`demo store notice (${device}): one styled full-width bar above the header`, notice.count === 1 && notice.role === 'note' && notice.text > 0 && notice.tinted && notice.fullWidth && notice.aboveHeader && notice.coreMarkup === 0, JSON.stringify(notice));
+            check(`demo store notice (${device}): the page has no layout shift`, shift === 0, shift.toFixed(4));
+            await page.evaluate(() => window.scrollTo(0, 600));
+            await page.waitForTimeout(300);
+            const sticky = await page.evaluate(() => ({
+                scrolled: window.scrollY,
+                headerTop: Math.round(document.querySelector('.page-header')?.getBoundingClientRect().top ?? -1),
+                barBottom: Math.round(document.querySelector('[data-hyperion-notice="demo"]')?.getBoundingClientRect().bottom ?? 1),
+            }));
+            check(`demo store notice (${device}): the bar scrolls away and the header stays at the top`, sticky.scrolled > 0 && sticky.headerTop === 0 && sticky.barBottom <= 0, JSON.stringify(sticky));
+        }
+        restoreConfig('design/head/demonotice', previousConfig.demoNotice);
+        magento('cache:flush');
+        demoNoticeChanged = false;
+        await page.goto(base + '/', { waitUntil: 'networkidle' });
+        check('demo store notice: no bar once the setting is back', previousConfig.demoNotice.value === '1' || await page.locator('[data-hyperion-notice="demo"]').count() === 0);
+        check('footer and notice: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
+        await j.ctx.close();
+    }
+
+    // ------------------------------------------------------------ phones: nothing is wider than the page
+    {
+        // Mobile emulation gives the layout the whole width (overlay scrollbars), like a real phone.
+        for (const width of [360, 375]) {
+            const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width, height: 800 }, isMobile: true, hasTouch: true });
+            const page = await ctx.newPage();
+            const wide = [];
+            for (const [name, target] of [['home page', '/'], ['category page', u('/gear/bags.html')]]) {
+                await page.goto(base + target, { waitUntil: 'networkidle' });
+                const sizes = await page.evaluate(() => ({
+                    scrollWidth: document.documentElement.scrollWidth,
+                    pageWidth: Math.ceil(document.documentElement.getBoundingClientRect().width),
+                }));
+                if (sizes.scrollWidth > sizes.pageWidth) wide.push(`${name} ${JSON.stringify(sizes)}`);
+            }
+            check(`phone: the page does not scroll sideways at ${width} px`, wide.length === 0, wide.join(' | '));
+            await ctx.close();
+        }
+    }
+
+    // ------------------------------------------------------------ newsletter form while Google's reCAPTCHA script cannot load
+    {
+        // Core's values of `type_for/*` and the configuration group that holds each type's keys.
+        const keyed = ['recaptcha_v3', 'invisible', 'recaptcha'].filter((type) => configValue(`recaptcha_frontend/type_${type}/public_key`));
+        const type = keyed.includes(previousConfig.recaptchaNewsletter.value) ? previousConfig.recaptchaNewsletter.value : keyed[0];
+        if (!type) {
+            check('newsletter with reCAPTCHA blocked: the store has no reCAPTCHA key pair (skipped)', true);
+        } else {
+            if (previousConfig.recaptchaNewsletter.value !== type) {
+                recaptchaNewsletterChanged = true;
+                magento(`config:set recaptcha_frontend/type_for/newsletter ${type}`);
+                magento('cache:flush');
+            }
+            const j = await newJourney();
+            const { page } = j;
+            const blocked = [];
+            await j.ctx.route((url) => ['www.google.com', 'www.gstatic.com', 'www.recaptcha.net'].includes(url.hostname) && url.pathname.includes('/recaptcha/'), (route) => {
+                blocked.push(route.request().url());
+                return route.abort();
+            });
+            const posts = [];
+            page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/newsletter/subscriber/new')) posts.push(r.url()); });
+            await page.goto(base + '/', { waitUntil: 'networkidle' });
+            const form = '#hyperion-footer form#newsletter-validate-detail';
+            check('newsletter with reCAPTCHA blocked: the form carries the reCAPTCHA element', await page.locator(`${form} hyperion-recaptcha`).count() === 1);
+            await page.fill(`${form} input[name="email"]`, `hyperion.recaptcha.${Date.now()}@example.com`);
+            await Promise.all([
+                page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/newsletter/subscriber/new'), { timeout: 30000 }).catch(() => null),
+                page.click(`${form} button[type="submit"]`, { timeout: 10000, noWaitAfter: true }).catch(() => {}),
+            ]);
+            await page.waitForSelector('[data-hyperion-messages] [role="alert"]', { timeout: 20000 }).catch(() => {});
+            await page.waitForTimeout(1000);
+            // A page stuck in a submit loop never answers: the round trip is the responsiveness probe.
+            const responsive = await Promise.race([
+                page.evaluate(() => true).catch(() => false),
+                new Promise((resolve) => { setTimeout(() => resolve(false), 2000); }),
+            ]);
+            check('newsletter with reCAPTCHA blocked: the tab stays responsive', responsive === true);
+            const message = responsive ? await page.evaluate(() => document.querySelector('[data-hyperion-messages] [role="alert"]')?.textContent.trim().replace(/\s+/g, ' ').slice(0, 140) || '') : '';
+            check('newsletter with reCAPTCHA blocked: Google\'s script was requested and refused', blocked.length > 0, String(blocked.length));
+            check('newsletter with reCAPTCHA blocked: the form is posted exactly once', posts.length === 1, String(posts.length));
+            check('newsletter with reCAPTCHA blocked: the server answers with a message', message.length > 0, message);
+            // The refused script is a failed request and a console warning, never a page error.
+            check('newsletter with reCAPTCHA blocked: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
+            await Promise.race([j.ctx.close(), new Promise((resolve) => { setTimeout(resolve, 5000); })]);
+        }
+    }
 } finally {
     await browser.close();
     console.log(fixtures('remove'));
     compose('php-fpm', 'rm -f /tmp/sprint4-fixtures.php');
     restoreConfig('sendfriend/email/enabled', previousConfig.sendfriendEnabled);
     restoreConfig('sendfriend/email/allow_guest', previousConfig.sendfriendGuest);
+    if (demoNoticeChanged) restoreConfig('design/head/demonotice', previousConfig.demoNotice);
+    if (recaptchaNewsletterChanged) restoreConfig('recaptcha_frontend/type_for/newsletter', previousConfig.recaptchaNewsletter);
     if (seededTerm) sql(`delete from search_query where query_text = '${SEED_TERM}'`);
     magento('cache:flush');
 }

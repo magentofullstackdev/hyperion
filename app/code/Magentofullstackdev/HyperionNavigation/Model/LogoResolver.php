@@ -47,6 +47,9 @@ class LogoResolver
      * @param Filesystem $filesystem
      * @param DbFileStorageHelper $fileStorageHelper
      * @param LoggerInterface $logger
+     * @param \Magento\Framework\Component\ComponentRegistrarInterface $componentRegistrar
+     * @param \Magento\Framework\Filesystem\Driver\File $fileDriver
+     * @param \Magentofullstackdev\HyperionNavigation\Model\StoreBrand $storeBrand
      */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
@@ -58,6 +61,7 @@ class LogoResolver
         private readonly LoggerInterface $logger,
         private readonly ComponentRegistrarInterface $componentRegistrar,
         private readonly FileDriver $fileDriver,
+        private readonly StoreBrand $storeBrand,
     ) {
     }
 
@@ -188,11 +192,6 @@ class LogoResolver
      */
     private function getStoreName(): string
     {
-        try {
-            return (string) $this->storeManager->getStore()->getName();
-        } catch (\Throwable $e) {
-            $this->logger->error('Hyperion LogoResolver: failed to get store name: ' . $e->getMessage());
-            return '';
-        }
+        return $this->storeBrand->getName();
     }
 }

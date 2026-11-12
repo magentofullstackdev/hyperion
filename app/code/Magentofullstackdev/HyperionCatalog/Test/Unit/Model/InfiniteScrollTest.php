@@ -49,9 +49,6 @@ class InfiniteScrollTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider resolveProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('resolveProvider')]
     public function testResolve(?string $configMode, ?string $categoryValue, string $expected): void
     {
@@ -75,9 +72,6 @@ class InfiniteScrollTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider automaticProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('automaticProvider')]
     public function testIsAutomaticLoadAllowed(string $mode, int $cap, int $currentPage, bool $expected): void
     {

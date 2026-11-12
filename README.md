@@ -18,7 +18,7 @@ Built and maintained by [Sergiu Ro](https://magentofullstack.dev).
 
 | | |
 |---|---|
-| Release | 0.9.0-beta.3, public beta |
+| Release | 0.9.0-beta.5, public beta |
 | Website | [hyperionfront.dev](https://hyperionfront.dev) |
 | Live demo | [demo.hyperionfront.dev](https://demo.hyperionfront.dev) |
 | License | [MIT](./LICENSE) |
@@ -26,45 +26,54 @@ Built and maintained by [Sergiu Ro](https://magentofullstack.dev).
 
 Beta means: the default flows of a Magento Open Source store (browse, search,
 every product type, cart, checkout, account, orders) pass the same end-to-end
-suite on five platforms, but the long tail of native features is not fully
-covered yet. Read [Known limitations](./docs/known-limitations.md) before you
+suite on every platform of the table below, but the long tail of native
+features is not fully covered yet. Read [Known limitations](./docs/known-limitations.md) before you
 plan a migration.
 
 ## Tested platforms
 
-Every row was verified with the same end-to-end suite (guest and
-logged-in customer journeys, every product type, orders placed; 71 checks
-when the first three rows ran, 74 since the success page offer joined it)
-and the feature checks; the 2.4.9, Mage-OS 3.6.0, Mage-OS 4.0.0 and PHP 8.5 rows also ran
-the axe-core accessibility scan of the common chrome and forms
-(`pw-a11y.mjs`, see [Development](./docs/development.md)). The suite is
-rerun on every row before a tag; dates and counts per row are in
-[Compatibility](./docs/compatibility.md).
+Hyperion supports two tiers ([support policy](./docs/compatibility.md#support-policy)):
 
-| Platform | PHP | Varnish | Mode | Result |
-|---|---|---|---|---|
-| Magento Open Source 2.4.7-p10 | 8.3 | 7.4 | developer | 71 / 71 |
-| Magento Open Source 2.4.8-p5 (clean install on Luma sample data) | 8.3 | 7.6 | developer and production | 71 / 71 |
-| Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer and production | 74 / 74 |
-| Mage-OS 2.3.0 | 8.4 | 7.7 | developer | 71 / 71 |
-| Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey) | 8.4 | 7.7 | developer and production | 74 / 74 |
-| Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | developer and production | 74 / 74 |
-| Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 74 / 74 |
+- **Tier 1**: Magento Open Source 2.4.9 and Mage-OS 4.0, PHP 8.4 and 8.5.
+  The full battery (the end-to-end suite with guest and logged-in customer
+  journeys, every product type and orders placed; every feature script; the
+  accessibility, layout shift and critical CSS gates; PHPUnit, phpstan,
+  phpcs) runs on every release.
+- **Tier 2**: Magento Open Source 2.4.8 and Mage-OS 3.6. One smoke battery
+  per release candidate, best-effort fixes.
 
-Details, what was not tested and the PHPUnit notes: [Compatibility](./docs/compatibility.md).
+Tier 1 rows are rerun on every release, Tier 2 rows on every release
+candidate; each row shows the release and the date of its run.
+
+| Tier | Platform | PHP | Varnish | Mode | Release | Date | E2E suite |
+|---|---|---|---|---|---|---|---|
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer and production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer and production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.5 | 2026-10-30 | 74 / 74 |
+| 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.5 | 2026-11-12 | 84 / 84 |
+
+Production mode: the second row is the dated production-mode battery, and
+the [live demo](https://demo.hyperionfront.dev) is the standing
+production-mode install. Counts per script, what was not tested, the
+platforms that were tested before and are no longer supported, and the
+PHPUnit notes: [Compatibility](./docs/compatibility.md).
 
 ## Requirements
 
 - PHP 8.3, 8.4 or 8.5 (`~8.3.0 || ~8.4.0 || ~8.5.0`), with `ext-gd`;
   `ext-imagick` is recommended for large catalogs.
-- Magento Open Source 2.4.6 or later, or Mage-OS 2.x / 3.x (`magento/framework ^103.0.6`).
-  Only the versions in the table above were tested.
+- Magento Open Source 2.4.8 or 2.4.9, or Mage-OS 3.6 or 4.0
+  (`magento/framework ^103.0.8`). Older platforms keep resolving the last
+  release that supported them, see
+  [Compatibility](./docs/compatibility.md#previously-tested).
 - Elasticsearch or OpenSearch as the search engine (the only engines Magento
   2.4 supports): the search module queries it for the autocomplete.
-- Varnish 6 or 7 in front of Magento is strongly recommended: the top menu is
-  an ESI fragment and public fragments are cached at the edge. Without
-  Varnish the fragments render inline; the built-in full page cache was not
-  part of the test runs.
+- Varnish in front of Magento is strongly recommended: the top menu is
+  an ESI fragment and public fragments are cached at the edge. Varnish 7.4 to 8.x tested; the VCL is `vcl 4.1` and uses only `std`; 6.0 LTS untested.
+  Without Varnish the fragments render inline; the built-in full page cache
+  was not part of the test runs.
 - Node.js 22 only if you build a child theme or work on the theme sources.
   Merchants installing through Composer never need Node: the build outputs
   are committed.
@@ -78,8 +87,8 @@ The verified procedure, run from the Magento root (details and every option in
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta      # beta release; prefer-stable keeps everything else stable
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.3
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.3   # optional, Luma sample data stores only
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.5
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.5   # optional, Luma sample data stores only
 bin/magento setup:upgrade
 bin/magento setup:di:compile
 bin/magento setup:static-content:deploy -f
@@ -150,18 +159,18 @@ reports):
 
 | Method | Status |
 |---|---|
-| Check / money order, bank transfer, cash on delivery, purchase order, free | verified |
-| PayPal Express Checkout, in-context (smart button) | verified with real sandbox payments |
+| Check / money order, bank transfer, cash on delivery, purchase order (number required, stored on the order), free | verified; instructions and the purchase order number by the automated checks of 2026-11-11 on Magento 2.4.9 |
+| PayPal Express Checkout, in-context (smart button) | verified with real sandbox payments (on a platform now in "Previously tested") |
 | PayPal Express Checkout, redirect flow (`in_context = 0`) | reaches PayPal, payment completion not verified |
-| Braintree card (hosted fields), vault, 3D Secure | verified against a Braintree sandbox |
+| Braintree card (hosted fields), vault, 3D Secure | verified against a Braintree sandbox (on a platform now in "Previously tested") |
 | Braintree PayPal | renderer exists, not tested |
-| Braintree Google Pay (with 3D Secure and stored cards) | button verified against the Braintree sandbox, payment not completed by the automated checks |
+| Braintree Google Pay (with 3D Secure and stored cards) | button verified against the Braintree sandbox; payment not verified |
 | Everything else | listed as "not supported by this checkout yet" |
 
 **Customer**: registration (optional address fields), login, password reset,
 account dashboard, address book with region selector, name prefix / suffix,
 orders with invoices, shipments, credit memos, print, reorder, self-service
-order cancellation (2.4.7+), Login as Customer banner, wishlist (sharing,
+order cancellation, Login as Customer banner, wishlist (sharing,
 edit with options), newsletter, product alerts, my downloadable products,
 cookie restriction notice, reCAPTCHA on every form.
 
@@ -170,11 +179,11 @@ settings, without RequireJS ([PageBuilder](./docs/pagebuilder.md)); full-width
 page layouts for CMS pages, categories and products; store, store view and
 currency switchers; transactional email CSS.
 
-**Performance and SEO** (`pw-perf.mjs` on a developer machine against
-Magento 2.4.9 with a Varnish hit, warm browser cache, not a benchmark): home page LCP 68 ms, category 52 ms, product page 248 ms, 55
-requests on the home page, 0 third-party requests, 92 KB of JavaScript and
-38 KB of CSS transferred (search dropdown, mega menu and infinite loading
-included); cart page (uncacheable) TTFB 91 ms.
+**Performance and SEO**: a local Lighthouse run on 2026-11-11 against
+Magento 2.4.9 (mobile and desktop presets, CPU slowdown 4x; a lab number on
+a developer machine, not a field measurement) scored performance 100 on the
+home page, a category, a product page and the cart on both presets (eight
+runs), with a cumulative layout shift of 0.
 Cumulative layout shift is 0 on nine page types (home, a category in grid
 and in list mode, a top-level category landing, a configurable and a simple
 product, search results, cart, contact), desktop and phone, under a throttled
@@ -182,7 +191,8 @@ network and CPU: components that arrive after their chunk render
 on top of server rendered skeletons with the same geometry. Third-party
 scripts (PayPal SDK, reCAPTCHA, Braintree, Google Maps) load only on first
 interaction or when the relevant element is on the page. Open Graph and
-product price meta tags on the product page; GA4 and Google Ads events
+product price meta tags on the product page (on Mage-OS 4.0 the platform's
+SEO module emits them, see [Compatibility](./docs/compatibility.md#mage-os-40-seo-module)); GA4 and Google Ads events
 through a lazily loaded `<hyperion-gtag>`.
 
 **Motion**: a 120 ms cross-fade between pages (view transitions), htmx swaps
@@ -196,9 +206,11 @@ The short version; the full list is in [Known limitations](./docs/known-limitati
 
 - Analytics is GA4 / Google Ads only (no Universal Analytics, no Tag Manager).
 - Multishipping and in-store pickup are not available.
+- Magento's HTML minification (`dev/template/minify_html`) must stay off;
+  JS and CSS minification are supported.
 - Third-party extensions with Knockout / RequireJS frontends need an adapter.
-- A few rarely used core pages (billing agreements, popular search terms,
-  the RSS and multishipping pages) render core markup without styling.
+- A few rarely used core pages (billing agreements, the RSS and
+  multishipping pages) render core markup without styling.
 - Adobe Commerce / B2B were not tested.
 
 ## Documentation

@@ -16,6 +16,7 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Message\ManagerInterface as MessageManagerInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
+use Magento\Quote\Model\Quote\Address;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
 use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
@@ -32,6 +33,8 @@ use Psr\Log\LoggerInterface;
  * address, the rates are collected, the chosen method (when it is one of
  * them) is applied, the totals are recollected and the quote saved, so the
  * summary card shows the shipping cost and the taxes of that destination.
+ * A rate the carrier answered with an error is never a choice: posting its
+ * code is refused, and a quote that still carries one loses it.
  *
  * HTMX requests get the cart fragment (`hyperion_checkout_cart_fragment`)
  * plus the toast out of band, like every other cart mutation; a plain POST
@@ -90,13 +93,19 @@ class Estimate implements HttpPostActionInterface
                 ->setCollectShippingRates(true);
             $this->recollect($quote);
 
+            $current = (string) $address->getShippingMethod();
+            if ($current !== '' && !$this->isOffered($address->getGroupedAllShippingRates(), $current)) {
+                $this->applyMethod($quote, $address, '');
+                $this->recollect($quote);
+            }
+
             if ($method !== '' && $method !== (string) $address->getShippingMethod()) {
                 if (!$this->isOffered($address->getGroupedAllShippingRates(), $method)) {
                     $this->messageManager->addErrorMessage(
                         (string) __('The selected shipping method is not available for this address.')
                     );
                 } else {
-                    $address->setShippingMethod($method)->setCollectShippingRates(true);
+                    $this->applyMethod($quote, $address, $method);
                     $this->recollect($quote);
                 }
             }
@@ -114,6 +123,20 @@ class Estimate implements HttpPostActionInterface
     }
 
     /**
+     * Set the shipping method on the address and on the quote's shipping
+     * assignments: the repository save applies the assignment's method to
+     * the address again, so an assignment left on the previous method
+     * would bring that method back while the totals stay the new ones.
+     */
+    private function applyMethod(Quote $quote, Address $address, string $method): void
+    {
+        $address->setShippingMethod($method)->setCollectShippingRates(true);
+        foreach ((array) $quote->getExtensionAttributes()?->getShippingAssignments() as $assignment) {
+            $assignment->getShipping()->setMethod($method);
+        }
+    }
+
+    /**
      * Collect the totals again even when this request already did: the
      * quote remembers a collection with `totals_collected_flag` and
      * `collectTotals()` returns early on the second call.
@@ -125,15 +148,19 @@ class Estimate implements HttpPostActionInterface
     }
 
     /**
+     * Whether the method is one of the collected rates the shopper can
+     * choose: an error rate (a message instead of a method) is not.
+     *
      * @param array<string, array<int, \Magento\Quote\Model\Quote\Address\Rate>> $groupedRates
      */
     private function isOffered(array $groupedRates, string $method): bool
     {
         foreach ($groupedRates as $rates) {
             foreach ($rates as $rate) {
-                if ((string) $rate->getCode() === $method) {
-                    return true;
+                if ((string) $rate->getCode() !== $method) {
+                    continue;
                 }
+                return (string) $rate->getErrorMessage() === '' && (string) $rate->getMethod() !== '';
             }
         }
         return false;

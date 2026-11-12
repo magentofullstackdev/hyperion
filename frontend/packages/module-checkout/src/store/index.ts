@@ -8,7 +8,7 @@
  * (`canPlaceOrder`, etc.) are `Signal.Computed` and live in
  * `selectors.ts`. Components NEVER call `.set()` directly; every
  * mutation goes through an action in `actions.ts` so the log is
- * greppable and side effects are centralised.
+ * greppable and side effects are centralized.
  */
 import { Signal } from 'signal-polyfill';
 
@@ -66,6 +66,13 @@ export interface Store {
      */
     appliedShippingMethod: Signal.State<SelectedShippingMethod | null>;
     isSavingShipping: Signal.State<boolean>;
+    /**
+     * The shipping form holds an address the quote has not confirmed yet.
+     * Set synchronously by every edit, cleared only by the shipping save
+     * that carried the current address object. Place Order stays closed
+     * while it is true.
+     */
+    shippingDirty: Signal.State<boolean>;
 
     // Billing (only meaningful when the billing address is entered on its
     // own: virtual quote, or "same as shipping" unchecked). `billingSynced`
@@ -85,9 +92,22 @@ export interface Store {
 
     // Totals
     totals: Signal.State<Totals | null>;
+    /** A re-read of the payment methods and totals is in flight (coupon, gift message). */
+    isRefreshingTotals: Signal.State<boolean>;
 
     // UI
     isPlacingOrder: Signal.State<boolean>;
+    /**
+     * Terminal: the order exists. Never reset; `isPlacingOrder` stays true
+     * with it, so the overlay holds until the browser leaves the page.
+     */
+    orderPlaced: Signal.State<boolean>;
+    /**
+     * The order request lost its answer and the quote could not be read
+     * either: the next Place Order checks the quote before it sends
+     * anything.
+     */
+    orderOutcomeUnknown: Signal.State<boolean>;
     globalError: Signal.State<string | null>;
     fieldErrors: Signal.State<Readonly<Record<string, string>>>;
 
@@ -95,7 +115,7 @@ export interface Store {
     acceptedAgreements: Signal.State<readonly number[]>;
 
     // Min-order gate (Magento_Sales::MinimumOrderConfigProvider).
-    // Holds the localised description when the cart fails the
+    // Holds the localized description when the cart fails the
     // minimum-amount check; null when valid or feature inactive.
     minimumOrderError: Signal.State<string | null>;
 }
@@ -128,6 +148,7 @@ export function createStore(): Store {
         isLoadingShippingMethods: new Signal.State<boolean>(false),
         appliedShippingMethod: new Signal.State<SelectedShippingMethod | null>(null),
         isSavingShipping: new Signal.State<boolean>(false),
+        shippingDirty: new Signal.State<boolean>(false),
 
         isSavingBilling: new Signal.State<boolean>(false),
         billingSynced: new Signal.State<boolean>(false),
@@ -140,8 +161,11 @@ export function createStore(): Store {
         couponError: new Signal.State<string | null>(null),
 
         totals: new Signal.State<Totals | null>(null),
+        isRefreshingTotals: new Signal.State<boolean>(false),
 
         isPlacingOrder: new Signal.State<boolean>(false),
+        orderPlaced: new Signal.State<boolean>(false),
+        orderOutcomeUnknown: new Signal.State<boolean>(false),
         globalError: new Signal.State<string | null>(null),
         fieldErrors: new Signal.State<Readonly<Record<string, string>>>({}),
 

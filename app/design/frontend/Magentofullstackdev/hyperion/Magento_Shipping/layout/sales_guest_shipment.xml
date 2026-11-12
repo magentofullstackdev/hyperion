@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Same shell as the guest order view: info card inside it. No `actions` child:
+             reorder and cancel belong to the account, the shell shows the status pill
+             and the items template links the guest print pages. -->
+        <move element="sales.order.info" destination="sales.order.shipment" as="info"/>
+        <referenceBlock name="sales.order.shipment" template="Magento_Sales::order/view.phtml">
+            <arguments>
+                <argument name="items_alias" xsi:type="string">shipment_items</argument>
+                <argument name="items_title" xsi:type="string" translate="true">Order Shipments</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

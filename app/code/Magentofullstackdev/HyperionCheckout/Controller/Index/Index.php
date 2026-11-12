@@ -16,6 +16,7 @@ use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Controller\ResultInterface;
 use Magento\Framework\View\Result\Page;
 use Magento\Framework\View\Result\PageFactory;
+use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
 
 /**
@@ -54,7 +55,9 @@ use Magento\Store\Model\ScopeInterface;
  * so it repeats that controller's checks (one-page checkout enabled, quote
  * without errors and above the minimum amount, guest checkout allowed for
  * this quote). A guest who may not check out (store setting, or a cart with
- * downloadable products) is sent to the login page and comes back here.
+ * downloadable products) is sent to the login page and comes back here; the
+ * notice names the downloadable products when they are the reason, since the
+ * store setting alone allows guests.
  *
  * Caching: the `hyperion.checkout` block in `hyperion_checkout_index.xml`
  * carries `cacheable="false"`, so Varnish / built-in FPC skip storage.
@@ -63,6 +66,9 @@ class Index extends Action implements HttpGetActionInterface
 {
     public const CONFIG_ENABLED = 'hyperion_checkout/general/enabled';
     public const HYPERION_HANDLE = 'hyperion_checkout_index';
+
+    /** Product type id of `Magento_Downloadable`, by name so the module stays optional. */
+    private const TYPE_DOWNLOADABLE = 'downloadable';
 
     public function __construct(
         Context $context,
@@ -91,8 +97,11 @@ class Index extends Action implements HttpGetActionInterface
         }
 
         if (!$this->customerSession->isLoggedIn() && !$this->checkoutHelper->isAllowedGuestCheckout($quote)) {
+            $reason = $this->isBlockedByDownloadable($quote)
+                ? __('Your cart contains downloadable products, which require a customer account.')
+                : __('Guest checkout is disabled.');
             $this->messageManager->addNoticeMessage(
-                __('Guest checkout is disabled.') . ' ' . __('Please sign in or create an account to continue.')
+                $reason . ' ' . __('Please sign in or create an account to continue.')
             );
             $this->customerSession->setBeforeAuthUrl($this->_url->getUrl('checkout', ['_secure' => true]));
             return $redirect->setPath('customer/account/login');
@@ -106,5 +115,27 @@ class Index extends Action implements HttpGetActionInterface
         }
 
         return $result;
+    }
+
+    /**
+     * True when the store allows guest checkout, so the refusal comes from the
+     * downloadable items of the cart (`catalog/downloadable/disable_guest_checkout`
+     * or links that are not shareable, both decided by core's observer).
+     */
+    private function isBlockedByDownloadable(Quote $quote): bool
+    {
+        if (!$this->scopeConfig->isSetFlag(
+            CheckoutHelper::XML_PATH_GUEST_CHECKOUT,
+            ScopeInterface::SCOPE_STORE,
+            $quote->getStoreId()
+        )) {
+            return false;
+        }
+        foreach ($quote->getAllItems() as $item) {
+            if ((string) $item->getProductType() === self::TYPE_DOWNLOADABLE) {
+                return true;
+            }
+        }
+        return false;
     }
 }

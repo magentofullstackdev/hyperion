@@ -139,5 +139,15 @@
     "Hyperion_Checkout::gift_save_failed": "Impossibile salvare il messaggio regalo. Riprova.",
     "Hyperion_Checkout::shipping_policy_open": "Consulta la nostra politica di spedizione",
     "Hyperion_Checkout::shipping_policy_heading": "Politica di spedizione",
-    "Hyperion_Checkout::shipping_policy_close": "Chiudi"
+    "Hyperion_Checkout::shipping_policy_close": "Chiudi",
+    "Hyperion_Checkout::checkout_updating": "Stiamo aggiornando il tuo ordine. Riprova tra un momento.",
+    "Hyperion_Checkout::order_not_placed_network": "Impossibile raggiungere il negozio. Il tuo ordine non è stato effettuato. Riprova.",
+    "Hyperion_Checkout::order_outcome_unknown": "Non siamo riusciti a confermare se il tuo ordine è stato effettuato. Attendi un momento e premi di nuovo Effettua l'ordine: verificheremo prima di inviare qualsiasi dato.",
+    "Hyperion_Checkout::error_store_unavailable": "Il negozio è temporaneamente non disponibile. Riprova tra un momento.",
+    "Hyperion_Checkout::error_too_many_requests": "Troppe richieste. Attendi un momento e riprova.",
+    "Hyperion_Checkout::error_request_blocked": "La tua richiesta è stata bloccata. Ricarica la pagina e riprova.",
+    "Hyperion_Checkout::error_network": "Impossibile raggiungere il negozio. Controlla la connessione e riprova.",
+    "Hyperion_Checkout::po_number_required": "Inserisci il numero dell'ordine d'acquisto.",
+    "Hyperion_Checkout::checkmo_payable_to": "Intestare l'assegno a:",
+    "Hyperion_Checkout::checkmo_send_to": "Inviare l'assegno a:"
 }

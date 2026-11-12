@@ -22,7 +22,7 @@ use Psr\Log\LoggerInterface;
  * event payloads for the `<hyperion-gtag>` element.
  *
  * Reads the configuration paths of Magento_GoogleGtag (whose own blocks
- * are RequireJS only and removed with `head.additional`) without depending
+ * are RequireJS only; the theme removes them by name) without depending
  * on that module: the paths simply read as empty when it is absent.
  * Templates print the payloads as `data-hyperion-gtag-event` /
  * `data-hyperion-gtag-payload` attributes; the element pushes them to the

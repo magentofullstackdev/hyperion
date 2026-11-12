@@ -12,6 +12,13 @@
  *      outer shell is NOT present, so this template stands alone with
  *      no surrounding chrome.
  *
+ * Request synchronization: the grid root carries `hx-sync` on itself with
+ * `replace`, which the toolbar, the pager and Load more inherit, so a new
+ * listing request aborts the one in flight (the layered navigation wrapper
+ * names the same element, one queue for both). The tile forms set their own
+ * `hx-sync="this:drop"`: a second submit while the first is in flight is
+ * dropped, and the attribute on the form wins over the inherited one.
+ *
  * Each tile carries four server-rendered interactive elements, all
  * wired to HTMX and degrading to native POST when JS is unavailable:
  *   * Add to Cart       -> Magentofullstackdev\HyperionCore\Plugin\Checkout\Cart\AddPlugin
@@ -42,7 +49,7 @@ $imageCfg = $block->getData('image_config_view_model');
 // null, which renders "No products match your selection." for every query.
 $isHyperionList = $block instanceof \Magentofullstackdev\HyperionCatalog\Block\Product\ListProduct;
 $products = $isHyperionList ? $block->getProductCollection() : $block->getLoadedProductCollection();
-$gridId = $isHyperionList ? $block->getGridTargetId() : 'hyperion-product-grid';
+$gridId = $isHyperionList ? $block->getGridTargetId() : \Magentofullstackdev\HyperionCatalog\ViewModel\Listing::GRID_ID;
 $formKey = $block->getBlockHtml('formkey');
 $showWish = $vm->isWishlistEnabled();
 $showComp = $vm->isCompareEnabled();
@@ -60,12 +67,16 @@ $showCart = $vm->canAddToCartFromListing();
 $listing = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\Listing::class);
 $append = $listing->isAppend();
 $infinite = $listing->isInfinite($block);
+// The products could not be loaded (the search engine did not answer): not an
+// empty listing. The view model also marks the request as degraded, so no
+// cache keeps this answer.
+$loadFailed = $listing->isLoadFailed($block);
 // Tile records for the recently compared history (read by the compare toggle
 // on success) and the GA4 `view_item_list` record of this listing.
 $summaryVm = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary::class);
 $gtag = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\GoogleGtag::class);
 $viewListJson = '';
-if ($gtag->isEnabled() && $products) {
+if ($gtag->isEnabled() && $products && !$loadFailed) {
     $category = $isHyperionList ? $block->getLayer()->getCurrentCategory() : null;
     $listId = $category && $category->getId() ? 'category_' . (int) $category->getId() : 'search_results';
     $listName = $category && $category->getId() ? (string) $category->getName() : (string) __('Search results');
@@ -77,6 +88,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
 <?php if (!$append): ?>
 <div id="<?= $escaper->escapeHtmlAttr($gridId) ?>"
      data-hyperion-product-grid
+     hx-sync="#<?= $escaper->escapeHtmlAttr($gridId) ?>:replace"
      aria-live="polite">
     <?php if ($viewListJson !== ''): ?>
         <span data-hyperion-gtag-event="view_item_list" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($viewListJson) ?>" hidden></span>
@@ -86,9 +98,23 @@ $block->setData('hyperion_view_list_json', $viewListJson);
     <?php
     // getSize() is the total of the listing, count() the items of this page: a page
     // past the last one (p=50 of 3 pages) has a total and no items.
-    $pastTheEnd = $products !== null && $products->getSize() > 0 && $products->count() === 0;
+    $pastTheEnd = !$loadFailed && $products !== null && $products->getSize() > 0 && $products->count() === 0;
     ?>
-    <?php if ($products === null || $products->getSize() === 0 || $pastTheEnd): ?>
+    <?php if ($loadFailed): ?>
+
+        <?php if ($append): ?>
+        <li class="col-span-full py-6 text-center text-muted" role="alert" data-hyperion-listing-error>
+            <?= $escaper->escapeHtml(__("We can't load the products right now. Please try again in a moment.")) ?>
+        </li>
+        <?php else: ?>
+        <div class="py-16 text-center" role="alert" data-hyperion-listing-error>
+            <p class="text-muted text-lg">
+                <?= $escaper->escapeHtml(__("We can't load the products right now. Please try again in a moment.")) ?>
+            </p>
+        </div>
+        <?php endif; ?>
+
+    <?php elseif ($products === null || $products->getSize() === 0 || $pastTheEnd): ?>
 
         <?php if ($append): ?>
             <?= $block->getChildHtml('load_more') ?>
@@ -277,6 +303,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                           hx-target="#hyperion-notification"
                                           hx-swap="outerHTML"
                                           hx-select="#hyperion-notification"
+                                          hx-sync="this:drop"
                                           class="flex">
                                         <?= /* @noEscape */ $formKey ?>
                                         <input type="hidden" name="product" value="<?= (int) $productId ?>">
@@ -294,6 +321,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                 the grid the same height. */ ?>
                                         <button type="submit"
                                                 data-hyperion-tile-cart
+                                                data-hyperion-atc
                                                 class="inline-flex w-full min-h-[2.75rem] items-center justify-center gap-2
                                                        rounded-lg bg-primary px-3 py-2
                                                        text-sm font-bold uppercase tracking-wider leading-tight
@@ -306,7 +334,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                 <path stroke-linecap="round" stroke-linejoin="round"
                                                       d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
                                             </svg>
-                                            <span><?= $escaper->escapeHtml(__('Add to Cart')) ?></span>
+                                            <span data-hyperion-atc-label><?= $escaper->escapeHtml(__('Add to Cart')) ?></span><span data-hyperion-atc-busy aria-hidden="true"><?= $escaper->escapeHtml(__('Adding to cart...')) ?></span>
                                         </button>
                                     </form>
                                 <?php elseif ($showCart): ?>
@@ -332,6 +360,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                   hx-target="#hyperion-notification"
                                                   hx-swap="outerHTML"
                                                   hx-select="#hyperion-notification"
+                                                  hx-sync="this:drop"
                                                   class="flex-1">
                                                 <?= /* @noEscape */ $formKey ?>
                                                 <input type="hidden" name="product" value="<?= (int) $productId ?>">
@@ -343,7 +372,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                                hover:border-primary/40
                                                                focus:outline-none focus:ring-2 focus:ring-primary
                                                                transition-colors"
-                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Wish List', $productNameAttr)) ?>"
+                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Wish List', $_product->getName())) ?>"
                                                         title="<?= $escaper->escapeHtmlAttr(__('Add to Wish List')) ?>">
                                                     <svg class="h-4 w-4" fill="none" stroke="currentColor"
                                                          viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
@@ -370,6 +399,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                   hx-target="#hyperion-notification"
                                                   hx-swap="outerHTML"
                                                   hx-select="#hyperion-notification"
+                                                  hx-sync="this:drop"
                                                   class="flex-1">
                                                 <?= /* @noEscape */ $formKey ?>
                                                 <input type="hidden" name="product" value="<?= (int) $productId ?>">
@@ -381,7 +411,7 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                                                hover:border-primary/40
                                                                focus:outline-none focus:ring-2 focus:ring-primary
                                                                transition-colors"
-                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Compare', $productNameAttr)) ?>"
+                                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Add %1 to Compare', $_product->getName())) ?>"
                                                         title="<?= $escaper->escapeHtmlAttr(__('Add to Compare')) ?>">
                                                     <svg class="h-4 w-4" fill="none" stroke="currentColor"
                                                          viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">

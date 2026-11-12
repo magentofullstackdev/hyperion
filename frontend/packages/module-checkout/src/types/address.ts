@@ -8,7 +8,7 @@
  *   vendor/magento/module-customer/Api/Data/AddressInterface.php
  *   vendor/magento/module-customer/Api/Data/RegionInterface.php
  *
- * Shape captured from a Magento 2.4.7 checkoutConfig
+ * Shape captured from a Magento checkoutConfig
  * (checkoutConfig.customer.json -> customerData.addresses["1"]).
  *
  * Key gotchas this typing captures:

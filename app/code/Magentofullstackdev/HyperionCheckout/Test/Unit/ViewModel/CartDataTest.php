@@ -7,6 +7,8 @@ namespace Magentofullstackdev\HyperionCheckout\Test\Unit\ViewModel;
 
 use Magento\Catalog\Helper\Image;
 use Magento\Catalog\Helper\Product\ConfigurationPool;
+use Magento\CatalogInventory\Api\Data\StockItemInterface;
+use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Checkout\Model\Session;
 use Magento\Customer\Api\Data\AddressInterface as CustomerAddressData;
 use Magento\Customer\Api\Data\RegionInterface;
@@ -18,9 +20,13 @@ use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Catalog\Model\Product;
+use Magento\Quote\Api\Data\ShippingMethodInterface;
+use Magento\Quote\Model\Cart\ShippingMethodConverter;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address as QuoteAddress;
+use Magento\Quote\Model\Quote\Address\Rate;
 use Magento\Quote\Model\Quote\Item as QuoteItem;
+use Magento\Tax\Helper\Data as TaxHelper;
 use Magento\Tax\Model\Config as TaxConfig;
 use Magentofullstackdev\HyperionCheckout\Model\WeeeBridge;
 use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
@@ -31,7 +37,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * A quote that cannot be loaded answers 0 items like an empty cart; the
- * `hasLoadFailure()` flag is what tells the templates apart.
+ * `hasLoadFailure()` flag is what tells the templates apart. Amounts follow
+ * the tax display settings and the quote currency; quantities follow the
+ * stock item of the product.
  *
  * @covers \Magentofullstackdev\HyperionCheckout\ViewModel\CartData
  */
@@ -43,6 +51,14 @@ class CartDataTest extends TestCase
     private CustomerSession $customerSession;
     /** @var ScopeConfigInterface&Stub */
     private ScopeConfigInterface $scopeConfig;
+    /** @var TaxConfig&Stub */
+    private TaxConfig $taxConfig;
+    /** @var TaxHelper&Stub */
+    private TaxHelper $taxHelper;
+    /** @var ShippingMethodConverter&Stub */
+    private ShippingMethodConverter $shippingMethodConverter;
+    /** @var StockRegistryInterface&Stub */
+    private StockRegistryInterface $stockRegistry;
     private CartData $viewModel;
 
     protected function setUp(): void
@@ -50,6 +66,10 @@ class CartDataTest extends TestCase
         $this->checkoutSession = $this->createStub(Session::class);
         $this->customerSession = $this->createStub(CustomerSession::class);
         $this->scopeConfig = $this->createStub(ScopeConfigInterface::class);
+        $this->taxConfig = $this->createStub(TaxConfig::class);
+        $this->taxHelper = $this->createStub(TaxHelper::class);
+        $this->shippingMethodConverter = $this->createStub(ShippingMethodConverter::class);
+        $this->stockRegistry = $this->createStub(StockRegistryInterface::class);
         $this->viewModel = $this->viewModel($this->createStub(LoggerInterface::class));
     }
 
@@ -59,19 +79,27 @@ class CartDataTest extends TestCase
      */
     private function viewModel(LoggerInterface $logger): CartData
     {
+        $priceCurrency = $this->createStub(PriceCurrencyInterface::class);
+        $priceCurrency->method('format')->willReturnCallback(
+            static fn ($amount): string => number_format((float) $amount, 2)
+        );
+
         return new CartData(
             $this->checkoutSession,
-            $this->createStub(PriceCurrencyInterface::class),
+            $priceCurrency,
             $this->createStub(UrlInterface::class),
             $this->createStub(Image::class),
             $this->createStub(ConfigurationPool::class),
             $logger,
-            $this->createStub(TaxConfig::class),
+            $this->taxConfig,
             $this->createStub(WeeeBridge::class),
             $this->customerSession,
             $this->createStub(ModuleManager::class),
             $this->scopeConfig,
-            $this->createStub(Availability::class)
+            $this->createStub(Availability::class),
+            $this->shippingMethodConverter,
+            $this->taxHelper,
+            $this->stockRegistry
         );
     }
 
@@ -81,6 +109,7 @@ class CartDataTest extends TestCase
         $quote->method('getItemsQty')->willReturn(3.0);
         $quote->method('getAllVisibleItems')->willReturn([]);
         $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->scopeConfig->method('isSetFlag')->willReturn(true);
         $logger = $this->createMock(LoggerInterface::class);
         $logger->expects(self::never())->method('error');
         $viewModel = $this->viewModel($logger);
@@ -137,6 +166,7 @@ class CartDataTest extends TestCase
         $quote = $this->createStub(Quote::class);
         $quote->method('getItemsQty')->willReturn(0.0);
         $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->scopeConfig->method('isSetFlag')->willReturn(true);
 
         self::assertSame(0, $this->viewModel->getItemCount());
         self::assertFalse($this->viewModel->hasItems());
@@ -158,9 +188,6 @@ class CartDataTest extends TestCase
         self::assertTrue($viewModel->hasLoadFailure());
     }
 
-    /**
-     * @dataProvider quoteReaders
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('quoteReaders')]
     public function testEveryQuoteReaderRaisesTheFlag(string $method, mixed $fallback): void
     {
@@ -191,6 +218,325 @@ class CartDataTest extends TestCase
             'fpt lines' => ['getFptLines', []],
             'estimate address' => ['getEstimateAddress', ['country_id' => '', 'region_id' => '', 'region' => '', 'postcode' => '']],
         ];
+    }
+
+    /**
+     * The header count follows the cart link setting like core: the sum of
+     * the quantities (a decimal sum is not truncated) or the number of lines.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('cartCounts')]
+    public function testTheCartCountFollowsTheCartLinkSetting(
+        bool $useQty,
+        float $itemsQty,
+        int $itemsCount,
+        float|int $expected,
+        string $display
+    ): void {
+        $quote = $this->createStub(Quote::class);
+        $quote->method('getItemsQty')->willReturn($itemsQty);
+        $quote->method('getItemsCount')->willReturn($itemsCount);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->scopeConfig->method('isSetFlag')->willReturn($useQty);
+
+        self::assertSame($expected, $this->viewModel->getItemCount());
+        self::assertSame($display, $this->viewModel->getItemCountDisplay());
+        self::assertSame($expected > 0, $this->viewModel->hasItems());
+    }
+
+    /**
+     * @return array<string, array{bool, float, int, float|int, string}>
+     */
+    public static function cartCounts(): array
+    {
+        return [
+            'sum of whole quantities' => [true, 3.0, 2, 3, '3'],
+            'sum with a decimal quantity' => [true, 2.5, 2, 2.5, '2.5'],
+            'half a unit is not an empty cart' => [true, 0.5, 1, 0.5, '0.5'],
+            'sum rounded to two decimals' => [true, 1.999, 1, 2, '2'],
+            'number of lines' => [false, 7.5, 2, 2, '2'],
+            'empty cart' => [true, 0.0, 0, 0, ''],
+        ];
+    }
+
+    /**
+     * A quote line with the amounts the tax collector stores on it: 34.00 a
+     * unit, 36.81 with 8.25 % tax, quantity 2 unless told otherwise.
+     *
+     * @param array<string, mixed> $magic answers of the item's magic getters
+     */
+    private function line(int $id, float $qty = 2.0, array $magic = []): QuoteItem&Stub
+    {
+        $magic += ['getRowTotal' => 68.0, 'getPriceInclTax' => 36.81, 'getRowTotalInclTax' => 73.61];
+        $product = $this->createStub(Product::class);
+        $product->method('getTypeId')->willReturn('simple');
+        $item = $this->createStub(QuoteItem::class);
+        $item->method('getId')->willReturn($id);
+        $item->method('getProduct')->willReturn($product);
+        $item->method('getQty')->willReturn($qty);
+        $item->method('getCalculationPrice')->willReturn(34.0);
+        $item->method('getData')->willReturnMap([['has_error', null, null], ['product_id', null, $id + 100]]);
+        $item->method('getMessage')->willReturn([]);
+        $item->method('__call')->willReturnCallback(static fn (string $method) => $magic[$method] ?? null);
+
+        return $item;
+    }
+
+    /**
+     * @param QuoteItem[] $items
+     */
+    private function quoteWithItems(array $items): void
+    {
+        $quote = $this->createStub(Quote::class);
+        $quote->method('getAllVisibleItems')->willReturn($items);
+        $quote->method('getStore')->willReturn($this->createStub(\Magento\Store\Model\Store::class));
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('cartPriceDisplays')]
+    public function testItemPricesFollowTheCartPriceTaxDisplay(
+        bool $including,
+        bool $both,
+        string $price,
+        ?string $priceExcl,
+        string $rowTotal,
+        ?string $rowTotalExcl
+    ): void {
+        $this->taxConfig->method('displayCartPricesInclTax')->willReturn($including);
+        $this->taxConfig->method('displayCartPricesBoth')->willReturn($both);
+        $this->quoteWithItems([$this->line(7)]);
+
+        $item = $this->viewModel->getItems()[0];
+
+        self::assertSame($price, $item['price_display']);
+        self::assertSame($priceExcl, $item['price_display_excl']);
+        self::assertSame($rowTotal, $item['row_total_display']);
+        self::assertSame($rowTotalExcl, $item['row_total_display_excl']);
+        self::assertSame(68.0, $item['row_total'], 'the float keeps its excluding-tax meaning');
+        self::assertSame(73.61, $item['row_total_incl']);
+        self::assertFalse($this->viewModel->hasLoadFailure());
+    }
+
+    /**
+     * @return array<string, array{bool, bool, string, string|null, string, string|null}>
+     */
+    public static function cartPriceDisplays(): array
+    {
+        return [
+            'excluding tax' => [false, false, '34.00', null, '68.00', null],
+            'including tax' => [true, false, '36.81', null, '73.61', null],
+            'both' => [false, true, '36.81', '34.00', '73.61', '68.00'],
+        ];
+    }
+
+    private function stockItem(bool $decimal, float|false $increments, float $minSale, float $maxSale): StockItemInterface&Stub
+    {
+        $stockItem = $this->createStub(StockItemInterface::class);
+        $stockItem->method('getIsQtyDecimal')->willReturn($decimal);
+        $stockItem->method('getQtyIncrements')->willReturn($increments);
+        $stockItem->method('getMinSaleQty')->willReturn($minSale);
+        $stockItem->method('getMaxSaleQty')->willReturn($maxSale);
+
+        return $stockItem;
+    }
+
+    /**
+     * @param array{bool, float|false, float, float} $stock decimal, increments, minimum and maximum sale quantity
+     * @param array{is_qty_decimal: bool, qty_step: float|int|string, qty_min: float|int, qty_max: float|int|null} $expected
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('quantityRules')]
+    public function testQuantityRulesComeFromTheStockItem(array $stock, float $qty, array $expected): void
+    {
+        $this->stockRegistry->method('getStockItem')->willReturn($this->stockItem(...$stock));
+        $this->quoteWithItems([$this->line(7, $qty)]);
+
+        $item = $this->viewModel->getItems()[0];
+
+        self::assertSame($qty, $item['qty'], 'the quantity is never truncated');
+        self::assertSame(
+            $expected,
+            array_intersect_key($item, $expected)
+        );
+    }
+
+    /**
+     * @return array<string, array{array{bool, float|false, float, float}, float, array<string, mixed>}>
+     */
+    public static function quantityRules(): array
+    {
+        return [
+            'whole-unit product' => [
+                [false, false, 1.0, 10000.0],
+                2.0,
+                ['is_qty_decimal' => false, 'qty_step' => 1, 'qty_min' => 1, 'qty_max' => 10000],
+            ],
+            'decimal product' => [
+                [true, false, 1.0, 10000.0],
+                1.5,
+                ['is_qty_decimal' => true, 'qty_step' => 'any', 'qty_min' => 1, 'qty_max' => 10000],
+            ],
+            'decimal product sold from half a unit' => [
+                [true, false, 0.5, 0.0],
+                1.5,
+                ['is_qty_decimal' => true, 'qty_step' => 'any', 'qty_min' => 0.5, 'qty_max' => null],
+            ],
+            'decimal product without a minimum' => [
+                [true, false, 0.0, 0.0],
+                0.25,
+                ['is_qty_decimal' => true, 'qty_step' => 'any', 'qty_min' => 0.0001, 'qty_max' => null],
+            ],
+            'product sold in increments of five' => [
+                [false, 5.0, 1.0, 10000.0],
+                10.0,
+                ['is_qty_decimal' => false, 'qty_step' => 5, 'qty_min' => 5, 'qty_max' => 10000],
+            ],
+            'decimal increments' => [
+                [true, 0.25, 1.0, 0.0],
+                1.25,
+                ['is_qty_decimal' => true, 'qty_step' => 0.25, 'qty_min' => 1, 'qty_max' => null],
+            ],
+        ];
+    }
+
+    public function testAnUnreadableStockItemLeavesWholeUnitRulesAndNoLoadFailure(): void
+    {
+        $this->stockRegistry->method('getStockItem')->willThrowException(new \RuntimeException('no stock item'));
+        $this->quoteWithItems([$this->line(7)]);
+
+        $item = $this->viewModel->getItems()[0];
+
+        self::assertSame([false, 1, 1, null], [$item['is_qty_decimal'], $item['qty_step'], $item['qty_min'], $item['qty_max']]);
+        self::assertFalse($this->viewModel->hasLoadFailure());
+    }
+
+    /**
+     * @param array<string, mixed> $data code, carrier_title, method_title, method, price, error_message
+     */
+    private function rate(array $data): Rate&Stub
+    {
+        $rate = $this->createStub(Rate::class);
+        $rate->method('__call')->willReturnCallback(
+            static fn (string $method) => $data[strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', substr($method, 3)))] ?? null
+        );
+
+        return $rate;
+    }
+
+    /**
+     * A quote in `$currency` whose shipping address carries the rates. The
+     * converter double does what core's does: base price times the rate of
+     * the quote currency, with 8.25 % tax for the including amount, and
+     * `available` false for a rate that carries an error message.
+     *
+     * @param Rate[] $rates
+     */
+    private function quoteWithRates(array $rates, string $currency = 'EUR', float $currencyRate = 1.0): void
+    {
+        $address = $this->createStub(QuoteAddress::class);
+        $address->method('getCountryId')->willReturn('US');
+        $address->method('getPostcode')->willReturn('48201');
+        $address->method('getGroupedAllShippingRates')->willReturn(['carrier' => $rates]);
+        $quote = $this->createStub(Quote::class);
+        $quote->method('getId')->willReturn(5);
+        $quote->method('getShippingAddress')->willReturn($address);
+        $quote->method('__call')->willReturnCallback(
+            static fn (string $method) => $method === 'getQuoteCurrencyCode' ? $currency : null
+        );
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->shippingMethodConverter->method('modelToDataObject')->willReturnCallback(
+            function (Rate $rate, string $code) use ($currency, $currencyRate): ShippingMethodInterface {
+                self::assertSame($currency, $code, 'the converter gets the quote currency');
+                $error = (string) $rate->getErrorMessage();
+                $excl = round((float) $rate->getPrice() * $currencyRate, 2);
+                $method = $this->createStub(ShippingMethodInterface::class);
+                $method->method('getAvailable')->willReturn($error === '');
+                $method->method('getErrorMessage')->willReturn($error === '' ? false : $error);
+                $method->method('getPriceExclTax')->willReturn($excl);
+                $method->method('getPriceInclTax')->willReturn(round($excl * 1.0825, 2));
+
+                return $method;
+            }
+        );
+    }
+
+    private function flatRate(): Rate&Stub
+    {
+        return $this->rate([
+            'code' => 'flatrate_flatrate',
+            'carrier_title' => 'Flat Rate',
+            'method_title' => 'Fixed',
+            'method' => 'flatrate',
+            'price' => 5.0,
+        ]);
+    }
+
+    public function testARateIsConvertedToTheQuoteCurrencyBeforeItIsFormatted(): void
+    {
+        $this->quoteWithRates([$this->flatRate()], 'USD', 1.09);
+
+        $rates = $this->viewModel->getShippingRates();
+
+        self::assertCount(1, $rates);
+        self::assertSame('flatrate_flatrate', $rates[0]['code']);
+        self::assertSame('Flat Rate -- Fixed', $rates[0]['title']);
+        self::assertSame(5.45, $rates[0]['price'], '5.00 in the base currency at 1.09');
+        self::assertSame('5.45', $rates[0]['formatted_price']);
+        self::assertNull($rates[0]['formatted_price_excl']);
+        self::assertTrue($rates[0]['available']);
+        self::assertSame('', $rates[0]['error_message']);
+        self::assertFalse($this->viewModel->hasLoadFailure());
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('shippingTaxDisplays')]
+    public function testRatesFollowTheShippingTaxDisplay(bool $including, bool $both, string $price, ?string $priceExcl): void
+    {
+        $this->taxHelper->method('displayShippingPriceIncludingTax')->willReturn($including);
+        $this->taxHelper->method('displayShippingBothPrices')->willReturn($both);
+        $this->quoteWithRates([$this->flatRate()]);
+
+        $rate = $this->viewModel->getShippingRates()[0];
+
+        self::assertSame($price, $rate['formatted_price']);
+        self::assertSame($priceExcl, $rate['formatted_price_excl']);
+    }
+
+    /**
+     * @return array<string, array{bool, bool, string, string|null}>
+     */
+    public static function shippingTaxDisplays(): array
+    {
+        return [
+            'excluding tax' => [false, false, '5.00', null],
+            'including tax' => [true, false, '5.41', null],
+            'both' => [false, true, '5.41', '5.00'],
+        ];
+    }
+
+    public function testAnErrorRateStaysInTheListAsUnavailableWithItsMessageAndNoPrice(): void
+    {
+        $error = $this->rate([
+            'code' => 'freeshipping_error',
+            'carrier_title' => 'Free Shipping',
+            'price' => 0.0,
+            'error_message' => 'This shipping method is not available.',
+        ]);
+        $this->quoteWithRates([$this->flatRate(), $error]);
+
+        $rates = $this->viewModel->getShippingRates();
+
+        self::assertCount(2, $rates);
+        self::assertTrue($rates[0]['available']);
+        self::assertSame(
+            [
+                'code' => 'freeshipping_error',
+                'title' => 'Free Shipping',
+                'price' => 0.0,
+                'formatted_price' => '',
+                'formatted_price_excl' => null,
+                'available' => false,
+                'error_message' => 'This shipping method is not available.',
+            ],
+            $rates[1]
+        );
     }
 
     /**

@@ -65,9 +65,6 @@ class SuggestTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider highlightProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('highlightProvider')]
     public function testHighlightWrapsTheMatchesAndEscapesEverything(string $query, string $text, string $expected): void
     {

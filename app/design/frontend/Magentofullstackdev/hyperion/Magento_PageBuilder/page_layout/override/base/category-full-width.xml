@@ -8,7 +8,7 @@
 
     This REPLACES the core file (override/base): core moves `columns.top` and
     `category.view.container` out of the columns, but Hyperion removes the
-    first and renders the category blocks as children of
+    second and renders the category blocks as children of
     `hyperion.category.view` (Magento_Catalog/layout/catalog_category_view.xml),
     so the core moves had nothing to act on and the description stayed inside
     the site container.

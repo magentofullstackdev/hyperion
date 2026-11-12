@@ -102,6 +102,8 @@
     <type name="Magento\Framework\View\Layout">
         <plugin name="hyperion_core_degraded_response"
                 type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\DegradedResponsePlugin"/>
+        <plugin name="hyperion_core_remove_requirejs_output"
+                type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\RemoveRequireJsOutputPlugin"/>
     </type>
     <type name="Magento\Framework\App\Response\Http">
         <plugin name="hyperion_core_esi_marker"

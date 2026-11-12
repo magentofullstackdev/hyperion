@@ -12,7 +12,7 @@
  * (from `checkoutConfig.checkoutAgreements`), every non-auto agreement
  * must appear in `acceptedAgreements`. When the admin has no active
  * agreements, `expectedAgreements` stays empty and the check is a
- * no-op -- defensive armour per the log entry.
+ * no-op.
  */
 import { Signal } from 'signal-polyfill';
 
@@ -79,11 +79,15 @@ export function createSelectors(store: Store): {
     // save is in flight nothing is known yet, so the gate stays closed.
     const shippingReady = new Signal.Computed<boolean>(() => {
         if (store.isVirtual.get()) return true;
+        // The form was edited and no save confirmed the new address yet.
+        if (store.shippingDirty.get()) return false;
         if (store.isLoadingShippingMethods.get() || store.isSavingShipping.get()) return false;
         const selected = store.selectedShippingMethod.get();
         if (selected === null) return false;
         const offered = store.availableShippingMethods.get().some(
-            (m) => m.carrier_code === selected.carrier_code && m.method_code === selected.method_code
+            (m) => m.available !== false
+                && m.carrier_code === selected.carrier_code
+                && m.method_code === selected.method_code
         );
         if (!offered) return false;
         const applied = store.appliedShippingMethod.get();
@@ -102,7 +106,7 @@ export function createSelectors(store: Store): {
     });
 
     // A renderer may hold Place Order back until the shopper finished a step
-    // inside it (PayPal authorisation). `isReady` reads signals, so this
+    // inside it (PayPal authorization). `isReady` reads signals, so this
     // computed follows it.
     const paymentMethodReady = new Signal.Computed<boolean>(() => {
         const code = store.selectedPaymentMethod.get();
@@ -129,7 +133,9 @@ export function createSelectors(store: Store): {
             paymentMethodReady.get() &&
             agreementsAccepted.get() &&
             store.minimumOrderError.get() === null &&
+            !store.isRefreshingTotals.get() &&
             !store.isPlacingOrder.get() &&
+            !store.orderPlaced.get() &&
             store.totals.get() !== null
         );
     });

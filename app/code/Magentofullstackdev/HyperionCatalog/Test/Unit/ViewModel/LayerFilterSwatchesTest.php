@@ -124,9 +124,6 @@ class LayerFilterSwatchesTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider lightProvider
-     */
     #[\PHPUnit\Framework\Attributes\DataProvider('lightProvider')]
     public function testLightColourDetection(string $hex, bool $expected): void
     {

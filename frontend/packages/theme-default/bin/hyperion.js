@@ -176,7 +176,7 @@ ComponentRegistrar::register(
 
         'tailwind.config.js': `// Tailwind configuration for ${path}.
 //
-// The Hyperion preset supplies the semantic colour tokens (bg-primary,
+// The Hyperion preset supplies the semantic color tokens (bg-primary,
 // text-muted, border-subtle, ...) so classes in your templates resolve
 // exactly like in the parent theme. Only THIS theme's files are scanned:
 // utilities used by parent templates are already served by the parent's
@@ -206,12 +206,19 @@ export default {
 
         'vite.config.js': `// Vite configuration for ${path}.
 //
-// Builds src/js/entry.js (which imports src/css/entry.css) into web/assets/
-// with FIXED file names. Magento's static-content signing
-// (/static/version<ts>/...) already cache-busts everything under web/, so
-// hashed names and a manifest are not needed: the layout template
-// Magento_Theme/templates/html/theme-assets.phtml links the two files
-// through $block->getViewFileUrl().
+// Builds src/js/entry.js (which imports src/css/entry.css) into web/assets/.
+// The two entry files keep FIXED names (entry.js, entry.css): the layout
+// template Magento_Theme/templates/html/theme-assets.phtml links them through
+// $block->getViewFileUrl(), and Magento's static-content signing
+// (/static/version<ts>/...) already cache-busts everything under web/.
+//
+// Every other file the build splits off (a chunk behind a dynamic import(),
+// its stylesheet, a font or image) gets a hashed name, <name>.<hash>.js.
+// Keep that shape: the entry imports its chunks by file name, and Hyperion
+// excludes hashed files under an assets/ directory from Magento's JS / CSS
+// minification, which would otherwise publish them as <name>.min.js and
+// break those imports. The entry files may be minified by Magento:
+// getViewFileUrl() then links entry.min.js / entry.min.css by itself.
 //
 // The parent theme's bundle (components, HTMX, base stylesheet) is loaded
 // by Magentofullstackdev/hyperion itself; this build only carries your
@@ -222,6 +229,9 @@ import { fileURLToPath } from 'node:url';
 
 const themeDir = dirname(fileURLToPath(import.meta.url));
 
+// The stylesheet of the entry is the one asset the layout links by name.
+const isEntryStylesheet = (asset) => (asset.names ?? [asset.name]).includes('entry.css');
+
 export default defineConfig({
     root: themeDir,
     publicDir: false,
@@ -231,7 +241,7 @@ export default defineConfig({
         emptyOutDir: true,
         manifest: false,
         sourcemap: true,
-        // One stylesheet per entry, named after it (web/assets/entry.css).
+        // One stylesheet per entry or chunk, named after it (web/assets/entry.css).
         cssCodeSplit: true,
         rollupOptions: {
             input: {
@@ -240,8 +250,8 @@ export default defineConfig({
             output: {
                 format: 'es',
                 entryFileNames: '[name].js',
-                chunkFileNames: '[name].js',
-                assetFileNames: '[name][extname]',
+                chunkFileNames: '[name].[hash].js',
+                assetFileNames: (asset) => (isEntryStylesheet(asset) ? '[name][extname]' : '[name].[hash][extname]'),
             },
         },
     },
@@ -264,7 +274,7 @@ import '../css/entry.css';
  * Tailwind base styles (preflight) come from the parent theme; only the
  * components and utilities layers are generated here, for the classes used
  * in this theme's own templates and scripts. Add custom rules below or
- * override the colour tokens declared by @magentofullstackdev/hyperion-shared/tokens/colors.css:
+ * override the color tokens declared by @magentofullstackdev/hyperion-shared/tokens/colors.css:
  *
  *   :root { --color-primary: 220 38 38; }
  */
@@ -294,7 +304,7 @@ import '../css/entry.css';
 /**
  * ${path} -- links the Vite build output. Paths resolve through the
  * current theme's static directory, so Magento's static signing and
- * setup:static-content:deploy handle cache busting and materialisation.
+ * setup:static-content:deploy handle cache busting and materialization.
  *
  * @var \\Magento\\Framework\\View\\Element\\Template $block
  * @var \\Magento\\Framework\\Escaper $escaper

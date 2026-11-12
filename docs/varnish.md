@@ -5,8 +5,7 @@ reference VCL ships in
 `app/code/Magentofullstackdev/HyperionCore/etc/varnish/default.vcl`
 (`vendor/magentofullstackdev/module-hyperion-core/etc/varnish/default.vcl`
 after a Composer install). It is based on the VCL Magento generates for
-Varnish 6+ and extended for Hyperion's edge composition. Varnish 7.4, 7.6 and
-7.7 were used in the test runs.
+Varnish and extended for Hyperion's edge composition. Varnish 7.4 to 8.x tested; the VCL is `vcl 4.1` and uses only `std`; 6.0 LTS untested.
 
 ## How caching works
 
@@ -46,6 +45,13 @@ Varnish 6+ and extended for Hyperion's edge composition. Varnish 7.4, 7.6 and
 - **Query string sorting** (`std.querysort`): `?color=49&size=168` and
   `?size=168&color=49` are one cache object, so filter permutations cannot
   multiply the cache entries of a category page.
+- **A degraded response is never stored.** When a price cannot be rendered
+  or the search engine does not answer, the request is marked degraded: the
+  page or fragment leaves PHP as private, the listing fragments and the
+  search suggestions answer a "try again" message, and neither Varnish, the
+  block cache nor the suggest cache keeps it. The full category or search
+  page with the engine fully down still answers the platform's uncached
+  error page.
 - **ESI parsing** is enabled for responses flagged `X-Esi: 1` by
   `EsiMarkerPlugin` and, as in stock Magento, for any text response.
 
@@ -56,7 +62,10 @@ Two places need editing before use; both are marked `ADAPT` in the file.
 **Backend.** `backend default` ships with the example values `web` / `8080`
 (the service name and port of a docker compose stack). Set the host and port
 of the web server that runs Magento. The health probe hits
-`/health_check.php` every 5 s.
+`/health_check.php` every 5 s (window 10, threshold 5) and leaves `.initial`
+at Varnish's default, so one good poll after a start or a VCL load marks the
+backend healthy; a probe that starts further below the threshold answers 503
+for several seconds after every reload.
 
 **Purge ACL.** The `purge` ACL decides who may send `PURGE` (a cache BAN).
 It ships as:
@@ -82,7 +91,7 @@ if ($request_method = PURGE) { return 405; }
 
 With that rule a `PURGE` sent through the public host answers 405 while
 purges from Magento (`cache:flush`, `cache:clean full_page`, product save)
-still reach Varnish. This was verified on the three test platforms.
+still reach Varnish.
 
 Give every `location` that proxies to Varnish response buffers above
 nginx's default (one memory page, usually 4k): a Magento response carries
@@ -112,8 +121,18 @@ Other behavior worth knowing: objects have a grace of 3 days (`beresp.grace`),
 but `vcl_hit` serves an expired object for at most 300 s past its TTL while
 the backend is healthy (the next request fetches a fresh copy); the whole
 grace is used only while the health probe marks the backend sick, the same
-shape as Magento's own VCL. Marketing query parameters (`gclid`, `utm_*`,
-`fbclid`, ...) are stripped from the URL before hashing. Server
+shape as Magento's own VCL. Marketing query parameters are stripped from the
+URL before hashing, so a campaign link shares the cache object of the plain
+URL: `gad_source`, `gad_campaignid`, `gbraid`, `wbraid`, `_gl`, `dclid`,
+`gclsrc`, `srsltid`, `msclkid`, `gclid`, `ttclid`, `twclid`, `li_fat_id`,
+`igshid`, `epik`, `yclid`, `cx`, `_kx`, `ie`, `cof`, `siteurl`, `zanpid`,
+`origin`, `fbclid`, `mc_*`, `utm_*` and `_bta_*` (the list of core 2.4.9 plus
+`gad_campaignid`, `ttclid`, `twclid`, `li_fat_id`, `igshid`, `epik` and
+`yclid`). The PHP side reads the same list
+(`HyperionCore\Model\Http\MarketingParameters`, kept in step with the VCL by
+a unit test), so these parameters never count against the filter guard or
+the rate limiter. A store that runs a copy of the VCL regenerates it from the
+shipped file after an upgrade that changes the list. Server
 identification headers (`Server`, `X-Powered-By`, `Via`, `X-Varnish`,
 `X-Magento-Tags`, `X-Esi`) are removed on delivery, and so are the Hyperion markers (`X-Hyperion-Fragment`, `X-Hyperion-Edge-Cache`, `X-Hyperion-Suggest-Cache`) and `X-Magento-Cache-Control`, unless the exchange is a debug one: the origin flagged the response `X-Magento-Debug: 1` (Magento developer mode) or the request carried an `X-Magento-Debug` header; the `X-Magento-Cache-Debug` verdict is only set on such an exchange. `Age` stays (stripping it changed the browsers' freshness arithmetic for assets and cost a layout shift on warm reloads). A visitor therefore learns
 neither which URLs are Hyperion fragments nor whether an object was a hit;
@@ -162,6 +181,11 @@ with a forged prefix. Set the list in production; see
 - Every cacheable response carries `X-Magento-Tags` (`cat_p_<id>`,
   `cat_c_<id>`, `cms_p_<id>`, ...). A `PURGE` with `X-Magento-Tags-Pattern`
   bans every object whose tags match the pattern.
+- The listing fragments (`/hyperion/category/filter`,
+  `/hyperion/catalog/search`) carry the identities of the list block, so the
+  category's product tag (`cat_c_p_<id>`) is among them next to the product
+  tags (at most 1000 `cat_p_<id>` per response): a change of the category's
+  products purges the fragments with the page.
 - Core's `clean_cache_by_tags` path (the `Magento_CacheInvalidate` observer)
   purges on product, category and CMS saves, including repository saves from
   imports and API writes, and on `cache:clean full_page`. Hyperion sends its

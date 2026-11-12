@@ -39,8 +39,8 @@ These install dependencies, check types/style, run Vitest and rebuild Magento as
 
 ## Validation and Pull Requests
 
-Place frontend tests in adjacent `__tests__/` directories (`*.test.ts` or `*.test.js`); PHP tests belong in each module's `Test/` directory. For PHP changes, run PHPStan level 5, PHPCS Magento2 with no errors, and relevant PHPUnit tests from a Magento installation loading the changed sources. Use PHPUnit `--no-extensions`; see the development guide for full commands.
+Place frontend tests in adjacent `__tests__/` directories (`*.test.ts` or `*.test.js`); PHP tests belong in each module's `Test/` directory. For PHP changes, run PHPStan level 5, PHPCS Magento2 with no errors, and relevant PHPUnit tests from a Magento installation loading the changed sources. Use PHPUnit `--no-extensions`; data providers use the `#[DataProvider]` attribute only (PHPUnit 10 and 12) and are `public static`. Run `.github/scripts/check-plugin-targets.php` after adding or renaming a plugin method. See the development guide for full commands.
 
-Run relevant browser checks on a disposable test store; the suite can place orders and change customer data. Verify session-dependent changes as both guest and customer. Report unavailable checks explicitly. Documentation-only changes need link and content checks, not an application rebuild.
+Run relevant browser checks on a disposable test store; the suite can place orders and change customer data. A script that changes configuration restores it through `frontend/e2e/lib/config-snapshot.mjs`. Verify session-dependent changes as both guest and customer. Report unavailable checks explicitly. Documentation-only changes need link and content checks, not an application rebuild.
 
 Keep PRs focused, use descriptive conventional commit prefixes (`fix:`, `feat:`, `docs:`), and report validation and tested platform versions. Include screenshots for visual changes. Update `docs/` and `CHANGELOG.md` under `Unreleased` when behavior, configuration or limitations change. Follow the PR template, including AI assistance disclosure where applicable.

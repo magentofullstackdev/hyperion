@@ -8,19 +8,26 @@
 // that is a list on a phone, bold query highlighting, no review stars) and its
 // two cache layers (Varnish HIT, app cache hit), the SKU badge, typo tolerance
 // on the results page, promoted SKUs, stop words, the zero-results fallback,
-// Varnish query sorting, the filter guard (unknown parameters dropped, too many
-// filters refused, robots directive), the suggest freshness (a
+// Varnish query sorting, the marketing parameters (one cache object, never
+// counted by the limiter), the filter guard (unknown parameters dropped, too
+// many filters refused, robots directive), the suggest freshness (a
 // cached answer of a word no product matched shows the product created and
-// indexed afterwards, through the app cache and Varnish) and the rate limiter
-// (429 with Retry-After). Settings changed for the run are restored and the
-// fixture product removed; the rate limit checks run last because the client's
-// budget stays spent for the rest of the 10 second window.
+// indexed afterwards, through the app cache and Varnish), the search engine
+// outage (the script stops the `opensearch` service of the install, checks
+// that the listing fragments and the suggest answer a degraded response no
+// cache keeps, starts the service again and waits until listings show
+// products) and the rate limiter (429 with Retry-After, junk toolbar values
+// counted). Settings changed for the run are restored and the fixture product
+// removed; the rate limit checks run last because the client's budget stays
+// spent for the rest of the 10 second window.
 // node e2e/pw-search-shield.mjs <baseUrl> <slotDir>
+// <slotDir> is the Magento install directory (the Docker Compose project of the store).
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -50,19 +57,23 @@ const configSet = (p, v) => magento(`config:set ${p} ${JSON.stringify(String(v))
 const configUnset = (p) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e "DELETE FROM core_config_data WHERE path = '${p}' AND scope = 'default' AND scope_id = 0" 2>/dev/null`);
 const flush = () => { magento('cache:flush >/dev/null'); try { compose('varnish', "varnishadm ban 'req.url ~ .' >/dev/null"); } catch { /* no varnish */ } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ENGINE_SERVICE = 'opensearch';
+const composeServices = () => {
+    try { return execFileSync('docker', ['compose', '--project-directory', slotDir, 'config', '--services'], { encoding: 'utf8' }).split('\n').map((l) => l.trim()); } catch { return []; }
+};
+const engine = (action) => execFileSync('docker', ['compose', '--project-directory', slotDir, action, ENGINE_SERVICE], { stdio: 'ignore' });
+const engineHealth = () => {
+    try { return JSON.parse(compose('php-fpm', `curl -s -m 5 http://${ENGINE_SERVICE}:9200/_cluster/health`)).status || ''; } catch { return ''; }
+};
 const fixture = (action) => JSON.parse(compose('php-fpm', `php /tmp/search-freshness-fixture.php /var/www/html ${action} ${FRESH_WORD}`, 'www-data').trim().split('\n').pop());
 const removeFixture = () => { try { fixture('remove'); } catch (e) { console.error('fixture removal failed: ' + String(e.message).slice(0, 200)); } };
 const TOUCHED = ['hyperion_search/general/fuzziness', 'hyperion_search/general/promoted_skus', 'hyperion_search/general/stop_words',
     'hyperion/security/search_suggest_limit', 'hyperion/security/catalog_filter_limit'];
-const original = Object.fromEntries(TOUCHED.map((p) => {
-    let v;
-    try { v = magento(`config:show ${p} 2>/dev/null`).trim(); } catch { v = ''; }
-    return [p, v];
-}));
+const { configSnapshot, restoreConfig } = makeConfigSnapshot((query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`));
+// The settings as stored before the run: a setting that only had its config.xml default gets no row at the end.
+const original = Object.fromEntries(TOUCHED.map((p) => [p, configSnapshot(p)]));
 const restore = () => {
-    for (const p of TOUCHED) {
-        if (original[p] === '') configUnset(p); else configSet(p, original[p]);
-    }
+    for (const p of TOUCHED) restoreConfig(p, original[p]);
     flush();
 };
 
@@ -199,6 +210,12 @@ try {
     const b = await get(categoryPath + '?p=1&product_list_order=name');
     check('varnish: the parameter order does not matter (second order is a HIT)', a.headers['x-magento-cache-debug'] === 'MISS' && b.headers['x-magento-cache-debug'] === 'HIT', `${a.headers['x-magento-cache-debug']} then ${b.headers['x-magento-cache-debug']}`);
 
+    // ---- marketing parameters: stripped at the edge, so a click from an ad lands on the cached page
+    await get(categoryPath);
+    const adFirst = await get(categoryPath + '?gad_source=1&gbraid=0AAAAAC&srsltid=AfmBOop');
+    const adSecond = await get(categoryPath + '?srsltid=AfmBOoq&gad_source=5&gbraid=0AAAAAD');
+    check('marketing parameters: a category URL with gad_source, gbraid and srsltid is a Varnish HIT whatever their values', adFirst.status === 200 && adSecond.status === 200 && adSecond.headers['x-magento-cache-debug'] === 'HIT', `${adFirst.headers['x-magento-cache-debug']} then ${adSecond.headers['x-magento-cache-debug']}`);
+
     // ---- filter guard
     const bogus = await get(categoryPath + '?filtro1=x&filtro2=y');
     check('filter guard: bogus parameters are dropped and the page renders', bogus.status === 200 && /<h1/.test(bogus.text) && !/filtro1/.test(bogus.text), `${bogus.status}, filtro1 in markup: ${/filtro1/.test(bogus.text)}`);
@@ -240,10 +257,80 @@ try {
         flush();
     }
 
+    // ---- search engine outage: a listing that cannot load is a degraded answer, shown once and never stored
+    if (!composeServices().includes(ENGINE_SERVICE)) {
+        console.log(`SKIP  engine outage: the install has no "${ENGINE_SERVICE}" service to stop`);
+    } else {
+        // Request URLs no earlier check asked for: neither Varnish nor the block cache holds them.
+        const outage = {
+            categoryPage: `${categoryPath}?product_list_order=name&product_list_dir=desc&product_list_mode=list`,
+            categoryFragment: `/hyperion/category/filter?id=${categoryId}&product_list_order=name&product_list_dir=desc`,
+            searchFragment: '/hyperion/catalog/search?q=jacket&product_list_order=name&product_list_dir=desc',
+            suggest: '/hyperion/search/suggest?q=jack',
+        };
+        const readyProbe = `${categoryPath}?product_list_order=price&product_list_dir=desc`;
+        const tileCount = (html) => (html.match(/<li class="flex">/g) || []).length;
+        const verdict = (r) => r.headers['x-magento-cache-debug'] || '';
+        const isDegradedFragment = (r) => r.status === 200 && /data-hyperion-listing-error/.test(r.text) && /load the products right now/.test(r.text)
+            && tileCount(r.text) === 0 && !r.headers['hx-push-url'] && /no-store|private/.test(r.headers['cache-control'] || '');
+        flush();
+        let down = {};
+        let ready = false;
+        try {
+            engine('stop');
+            await sleep(1500);
+            for (const [name, url] of Object.entries(outage)) {
+                down[name] = [await get(url), await get(url)];
+            }
+        } finally {
+            engine('start');
+            // Up means: the cluster reports yellow or green AND a listing shows products again.
+            for (let i = 0; i < 60 && !ready; i++) {
+                await sleep(3000);
+                if (!/^(yellow|green)$/.test(engineHealth())) continue;
+                const probe = await get(`${readyProbe}&p=1&_=${i}`);
+                ready = probe.status === 200 && tileCount(probe.text) > 0;
+            }
+        }
+        check('engine outage: the search engine is back and listings show products', ready);
+        const summary = (pair) => pair.map((r) => `${r.status} ${verdict(r) || '-'}`).join(' then ');
+        check('engine outage: the category fragment answers the "try again" message, pushes no URL and is not stored',
+            down.categoryFragment?.every(isDegradedFragment) && verdict(down.categoryFragment[1]) !== 'HIT', summary(down.categoryFragment || []));
+        check('engine outage: the search fragment answers the "try again" message, pushes no URL and is not stored',
+            down.searchFragment?.every(isDegradedFragment) && verdict(down.searchFragment[1]) !== 'HIT', summary(down.searchFragment || []));
+        check('engine outage: the category page is never stored and never shows an empty listing as if it were the answer',
+            down.categoryPage?.every((r) => verdict(r) !== 'HIT' && !/No products match your selection/.test(r.text)), summary(down.categoryPage || []));
+        check('engine outage: the suggest answer computed without the engine is stored in neither cache layer',
+            down.suggest?.every((r) => r.status === 200 && verdict(r) !== 'HIT' && r.headers['x-hyperion-suggest-cache'] !== 'hit'
+                && /no-store|private/.test(r.headers['cache-control'] || '')) && !/data-hyperion-product-id="\d+"/.test(down.suggest[1].text), summary(down.suggest || []));
+        // No flush and no ban of our own from here: whatever a cache kept during the outage would still be served.
+        if (ready) {
+            const after = {};
+            for (const [name, url] of Object.entries(outage)) after[name] = await get(url);
+            check('engine outage: afterwards the same URLs show products (nothing empty was stored)',
+                tileCount(after.categoryPage.text) > 0 && tileCount(after.categoryFragment.text) > 0 && tileCount(after.searchFragment.text) > 0
+                && /data-hyperion-product-id="\d+"/.test(after.suggest.text) && !/data-hyperion-listing-error/.test(after.categoryFragment.text + after.searchFragment.text),
+                `page ${tileCount(after.categoryPage.text)}, fragment ${tileCount(after.categoryFragment.text)}, search ${tileCount(after.searchFragment.text)} tiles, suggest ${/data-hyperion-product-id/.test(after.suggest.text)}`);
+        }
+    }
+
     // ---- rate limiter (last: the budget of this client stays spent for the window)
     configSet('hyperion/security/search_suggest_limit', '8'); configSet('hyperion/security/catalog_filter_limit', '5'); flush();
     // The limiter counts in 10 second windows of the server clock (same host as this
     // script): start right after a boundary so the whole burst lands in one window.
+    await sleep(10000 - (Date.now() % 10000) + 150);
+    // Marketing parameters are no reason to count a category page: thirty ad clicks pass a budget of five.
+    const adStatuses = [];
+    for (let i = 0; i < 30; i++) {
+        adStatuses.push((await get(`${categoryPath}?gad_source=1&gbraid=click${i}&srsltid=s${i}`)).status);
+    }
+    check('rate limiter: thirty category requests with marketing parameters inside one window are not limited', adStatuses.every((st) => st === 200), adStatuses.join(','));
+    await sleep(10000 - (Date.now() % 10000) + 150);
+    const junkStatuses = [];
+    for (let i = 0; i < 9; i++) {
+        junkStatuses.push((await get(`${categoryPath}?product_list_order=junk${Date.now()}${i}`)).status);
+    }
+    check('rate limiter: category pages with a sort order the store does not have are served canonical and counted', junkStatuses.filter((st) => st === 429).length >= 3 && junkStatuses.slice(0, 5).every((st) => st === 200), junkStatuses.join(','));
     await sleep(10000 - (Date.now() % 10000) + 150);
     const statuses = [];
     let limited = null;

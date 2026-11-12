@@ -14,6 +14,40 @@ const QTY_INPUT_SELECTOR = '[data-hyperion-minicart-qty]';
 const ITEM_SELECTOR = '[data-hyperion-minicart-item]';
 const UPDATE_URL_SELECTOR = '[data-hyperion-minicart-update-url]';
 const CART_ITEMS_TARGET = '#hyperion-cart-items';
+// Quiet time after the last step or typed value of a line before its
+// quantity is posted: a burst of taps becomes one request.
+const QTY_QUIET_MS = 250;
+
+// The quantity rules of a line, read from its number input. The stepper
+// moves by a numeric `step` (1 while it is absent or `any`); a decimal or
+// `any` step makes the line a decimal one, parsed as a float. `min` falls
+// back to 1 for whole quantities and to "above zero" for decimal ones.
+function qtyRulesOf(input) {
+    const stepAttribute = input.getAttribute('step');
+    const stepNumber = stepAttribute === null || stepAttribute === '' ? NaN : Number(stepAttribute);
+    const hasNumericStep = Number.isFinite(stepNumber) && stepNumber > 0;
+    const decimal = stepAttribute === 'any' || (hasNumericStep && !Number.isInteger(stepNumber));
+    const parse = (raw) => {
+        const value = decimal ? parseFloat(raw) : parseInt(raw, 10);
+        // Float steps (0.1 + 0.2) are rounded to the four decimals a quantity keeps.
+        return Number.isFinite(value) ? Math.round(value * 10000) / 10000 : NaN;
+    };
+    const min = parse(input.getAttribute('min'));
+    const max = parse(input.getAttribute('max'));
+    return {
+        parse,
+        step: hasNumericStep ? stepNumber : 1,
+        min: Number.isFinite(min) ? min : (decimal ? 0 : 1),
+        // Without a `min` a decimal quantity only has to be above zero.
+        minExclusive: !Number.isFinite(min) && decimal,
+        max: Number.isFinite(max) ? max : Infinity,
+    };
+}
+
+function isQtyAllowed(rules, qty) {
+    if (!Number.isFinite(qty)) return false;
+    return rules.minExclusive ? qty > rules.min : qty >= rules.min;
+}
 // Attributes a slotted trigger link gives up while the component is upgraded
 // (see _neutralizeTriggerLink), each kept in a data attribute for the restore.
 const TRIGGER_LINK_ATTRIBUTES = [
@@ -248,6 +282,11 @@ export class HyperionMiniCart extends LitElement {
         // The control to focus again once the drawer body is re-rendered
         // after a quantity change: { itemId, selector }.
         this._pendingFocus = null;
+        // Quantity changes being collected or sent, by item id:
+        // { url, pending, sent, confirmed, timer }. `pending` is the value
+        // the shopper sees, `sent` the one in flight (null when none),
+        // `confirmed` the last one the server holds.
+        this._qtyLines = new Map();
     }
 
     // The light DOM trigger is a link to the cart page (header.phtml), the
@@ -329,15 +368,16 @@ export class HyperionMiniCart extends LitElement {
         this._markStale();
     }
 
-    // A controlled update (quantity step, remove) refetches once itself when
-    // its request settled (`_post`): the badge observer and the cart-changed
-    // event fire during that request too, and their refetch is folded into
-    // that one. Two fetches back to back would re-render the body twice and
-    // the second render would drop the focus `_restorePendingFocus` had just
-    // put back.
+    // A controlled update (quantity change, remove) refetches once itself
+    // when its work settled (`_post`, `_settleQty`): the badge observer and
+    // the cart-changed event fire during that work too, and their refetch is
+    // folded into that one. Two fetches back to back would re-render the body
+    // twice and the second render would drop the focus `_restorePendingFocus`
+    // had just put back; a refetch while a line still collects steps would
+    // show a quantity the shopper has already moved past.
     _markStale() {
         this._stale = true;
-        if (this._open && !this._updating) {
+        if (this._open && !this._updating && this._qtyLines.size === 0) {
             this._fetchFragment();
         }
     }
@@ -387,49 +427,136 @@ export class HyperionMiniCart extends LitElement {
     // validation exception and saves the cart, Luma validates client side):
     // the plugin answers with the item's error as the toast and the refetched
     // line prints the same message under the stepper.
+    //
+    // Steps accumulate: the input shows the new value at once, and one
+    // request carries the final quantity once the line has been quiet for
+    // QTY_QUIET_MS. The stepper stays enabled while that request runs; steps
+    // made meanwhile only move the pending value, and a follow-up request
+    // goes out after the answer when the two differ.
     _onShadowChange(event) {
         const input = event.target.closest(QTY_INPUT_SELECTOR);
         if (!input) return;
-        this._updateQty(input, parseInt(input.value, 10), { itemId: this._itemIdOf(input), selector: QTY_INPUT_SELECTOR });
+        const rules = qtyRulesOf(input);
+        this._queueQty(input, rules, rules.parse(input.value), QTY_INPUT_SELECTOR);
     }
 
     _stepQty(button) {
         const item = button.closest(ITEM_SELECTOR);
         const input = item?.querySelector(QTY_INPUT_SELECTOR);
         if (!input) return;
-        const delta = parseInt(button.getAttribute('data-hyperion-minicart-qty-step'), 10) || 0;
-        const next = (parseInt(input.value, 10) || 0) + delta;
-        if (next < 1) return;
-        input.value = String(next);
-        this._updateQty(input, next, {
-            itemId: this._itemIdOf(input),
-            selector: `${QTY_STEP_SELECTOR.slice(0, -1)}="${delta}"]`,
-        });
+        const direction = Math.sign(parseInt(button.getAttribute('data-hyperion-minicart-qty-step'), 10) || 0);
+        if (direction === 0) return;
+        const rules = qtyRulesOf(input);
+        const current = this._qtyLines.get(this._itemIdOf(input))?.pending ?? rules.parse(input.value);
+        const next = Math.round(((Number.isFinite(current) ? current : 0) + direction * rules.step) * 10000) / 10000;
+        if (!isQtyAllowed(rules, next) || next > rules.max) return;
+        this._queueQty(input, rules, next, `${QTY_STEP_SELECTOR.slice(0, -1)}="${button.getAttribute('data-hyperion-minicart-qty-step')}"]`);
     }
 
     _itemIdOf(control) {
         return control.closest(ITEM_SELECTOR)?.getAttribute('data-item-id') || '';
     }
 
-    _updateQty(input, qty, focus) {
+    _queueQty(input, rules, qty, focusSelector) {
         const item = input.closest(ITEM_SELECTOR);
         const url = input.closest(UPDATE_URL_SELECTOR)?.getAttribute('data-hyperion-minicart-update-url');
         const itemId = this._itemIdOf(input);
-        if (!item || !url || !itemId || !Number.isInteger(qty) || qty < 1) {
-            // Not a quantity (empty, 0, negative): the refetch below is not
-            // needed, the server value is what the input started from.
-            input.value = input.getAttribute('value') || '1';
+        let line = this._qtyLines.get(itemId);
+        if (!item || !url || !itemId || !isQtyAllowed(rules, qty)) {
+            // Not a quantity (empty, 0, negative): nothing is sent and the
+            // input goes back to the value it stood for.
+            input.value = String(line ? line.pending : (input.getAttribute('value') || '1'));
             return;
         }
-        this._pendingFocus = focus;
-        const controls = Array.from(item.querySelectorAll(`${QTY_STEP_SELECTOR}, ${QTY_INPUT_SELECTOR}`));
-        this._post(url, {
-            update_cart_action: 'update_qty',
-            [`cart[${itemId}][qty]`]: qty,
-        }, controls);
+        if (!line) {
+            line = { url, pending: qty, sent: null, confirmed: rules.parse(input.getAttribute('value')), timer: null };
+            this._qtyLines.set(itemId, line);
+        }
+        line.pending = qty;
+        this._pendingFocus = { itemId, selector: focusSelector };
+        this._paintQty(item, qty);
+        clearTimeout(line.timer);
+        line.timer = setTimeout(() => {
+            line.timer = null;
+            // A request of the line is in flight: its answer decides.
+            if (line.sent === null) this._flushQty(itemId);
+        }, QTY_QUIET_MS);
+    }
+
+    // The optimistic state of a line: the pending value in the input, minus
+    // disabled at the minimum and plus at the maximum.
+    _paintQty(item, qty) {
+        const input = item.querySelector(QTY_INPUT_SELECTOR);
+        if (!input) return;
+        const rules = qtyRulesOf(input);
+        input.value = String(qty);
+        for (const button of item.querySelectorAll(QTY_STEP_SELECTOR)) {
+            const direction = Math.sign(parseInt(button.getAttribute('data-hyperion-minicart-qty-step'), 10) || 0);
+            const next = Math.round((qty + direction * rules.step) * 10000) / 10000;
+            button.disabled = !isQtyAllowed(rules, next) || next > rules.max;
+        }
+    }
+
+    _itemOf(itemId) {
+        return this.shadowRoot?.querySelector(`${ITEM_SELECTOR}[data-item-id="${itemId}"]`) || null;
+    }
+
+    // Send the pending quantity of a quiet line, or settle the line when the
+    // server already holds it.
+    _flushQty(itemId) {
+        const line = this._qtyLines.get(itemId);
+        if (!line || line.sent !== null || line.timer !== null) return;
+        if (line.pending === line.confirmed) {
+            this._settleQty(itemId);
+            return;
+        }
+        const values = { update_cart_action: 'update_qty', [`cart[${itemId}][qty]`]: line.pending };
+        const htmx = window.htmx;
+        if (!htmx || typeof htmx.ajax !== 'function') {
+            this._qtyLines.delete(itemId);
+            this._post(line.url, values, []);
+            return;
+        }
+        line.sent = line.pending;
+        // Removing the line while its quantity is being saved would race the save.
+        const remove = this._itemOf(itemId)?.querySelector(REMOVE_SELECTOR);
+        if (remove) remove.disabled = true;
+        const cartBody = document.querySelector(CART_ITEMS_TARGET);
+        htmx.ajax('POST', line.url, {
+            source: this,
+            target: cartBody ? CART_ITEMS_TARGET : this,
+            swap: cartBody ? 'outerHTML' : 'none',
+            values: { ...values, form_key: readFormKeyCookie() },
+        }).finally(() => {
+            if (this._qtyLines.get(itemId) !== line) return;
+            line.confirmed = line.sent;
+            line.sent = null;
+            // Steps still arriving: the quiet timer sends the follow-up.
+            this._flushQty(itemId);
+        });
+    }
+
+    // The line is in step with the server: one refetch re-renders the drawer
+    // (totals, messages, the Remove button) once no line has work left.
+    _settleQty(itemId) {
+        this._qtyLines.delete(itemId);
+        if (this._qtyLines.size === 0) this._markStale();
+    }
+
+    // A re-render that lands while a line still collects steps would show
+    // the server value again: put the pending values back.
+    _repaintPendingQty() {
+        for (const [itemId, line] of this._qtyLines) {
+            const item = this._itemOf(itemId);
+            if (item) this._paintQty(item, line.pending);
+        }
     }
 
     _removeItem(url, button) {
+        // A quantity still waiting for its quiet time goes with the line.
+        const itemId = this._itemIdOf(button);
+        clearTimeout(this._qtyLines.get(itemId)?.timer);
+        this._qtyLines.delete(itemId);
         this._post(url, {}, [button]);
     }
 
@@ -476,7 +603,7 @@ export class HyperionMiniCart extends LitElement {
 
     // After a quantity change the body is re-rendered from the fragment:
     // put the keyboard focus back on the control that was used (a disabled
-    // minus at quantity 1 falls back to the input of the line).
+    // minus at the minimum quantity falls back to the input of the line).
     _restorePendingFocus() {
         const pending = this._pendingFocus;
         if (!pending) return;
@@ -506,7 +633,10 @@ export class HyperionMiniCart extends LitElement {
             }
             // The last render of the sequence (the body replaced the loading
             // slot): the control that was used gets the focus back.
-            return this.updateComplete.then(() => this._restorePendingFocus());
+            return this.updateComplete.then(() => {
+                this._repaintPendingQty();
+                this._restorePendingFocus();
+            });
         });
         return this._fetching;
     }
@@ -618,6 +748,8 @@ export class HyperionMiniCart extends LitElement {
         document.removeEventListener('hyperion:cart-changed', this._onCartChanged);
         this.shadowRoot?.removeEventListener('click', this._onShadowClick);
         this.shadowRoot?.removeEventListener('change', this._onShadowChange);
+        for (const line of this._qtyLines.values()) clearTimeout(line.timer);
+        this._qtyLines.clear();
         if (this._badgeObserver) {
             this._badgeObserver.disconnect();
             this._badgeObserver = null;

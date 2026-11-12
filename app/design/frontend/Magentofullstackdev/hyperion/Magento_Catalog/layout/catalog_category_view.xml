@@ -28,10 +28,11 @@
                    template="Magento_Catalog::product/compare/sidebar.phtml"
                    after="hyperion.wishlist.sidebar"/>
         </referenceContainer>
-        <!-- Luma page-title container is unused; Hyperion's category/view.phtml
-             renders the category header inline. -->
+        <!-- Luma's page title and category container are unused: Hyperion's
+             category/view.phtml renders the category header inline. `columns.top`
+             itself stays, it also holds `page.messages` (the session messages). -->
         <referenceBlock name="page.main.title" remove="true"/>
-        <referenceContainer name="columns.top" remove="true"/>
+        <referenceContainer name="category.view.container" remove="true"/>
 
         <!-- Drop the old Magentofullstackdev_HyperionCore category wrapper (retired in Phase 3). -->
         <referenceBlock name="hyperion.category.wrapper" remove="true"/>
@@ -57,7 +58,7 @@
                 <!--
                     Re-mount the category image, CMS block, and description blocks
                     inside the Hyperion wrapper. Upstream Magento places them in
-                    `columns.top` (removed above) so view.phtml can render them
+                    `category.view.container` (removed above) so view.phtml can render them
                     above the product grid via $block->getChildHtml('...').
                     The title is a block of its own for the same reason: the
                     category-full-width page layout moves these four blocks

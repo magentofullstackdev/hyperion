@@ -7,6 +7,8 @@ namespace Magentofullstackdev\HyperionCatalog\ViewModel;
 
 use Magento\Bundle\Model\Option;
 use Magento\Bundle\Model\Product\Price as BundlePrice;
+use Magento\Bundle\Pricing\Price\BundleOptionPrice;
+use Magento\Bundle\Pricing\Price\FinalPrice as BundleFinalPrice;
 use Magento\Catalog\Model\Product;
 use Magento\Framework\Locale\ResolverInterface as LocaleResolver;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
@@ -29,22 +31,23 @@ class BundleOptions implements ArgumentInterface
     }
 
     /**
-     * Price a single selection adds to the bundle for its default quantity,
-     * through Magento's bundle price model so fixed-price bundles, special
-     * prices and catalog rules are honoured.
+     * Price a single selection adds to the bundle for its default quantity:
+     * the amount of core's bundle option price (the one its own option block
+     * renders), so it carries the catalog tax display adjustment, special
+     * prices and catalog rules, and is already in the display currency.
      */
     public function getSelectionPrice(Product $bundle, Product $selection): float
     {
         try {
-            $priceModel = $bundle->getPriceModel();
-            if (!$priceModel instanceof BundlePrice) {
-                return (float) $selection->getFinalPrice();
+            $optionPrice = $bundle->getPriceInfo()->getPrice(BundleOptionPrice::PRICE_CODE);
+            if (!$optionPrice instanceof BundleOptionPrice) {
+                return 0.0;
             }
             $qty = (float) $selection->getData('selection_qty') ?: 1.0;
-            // Display currency, like the formatted labels and the running total the component computes.
-            return (float) $this->priceCurrency->convertAndRound(
-                $priceModel->getSelectionFinalTotalPrice($bundle, $selection, 1.0, $qty, false)
-            );
+
+            // Core documents the selection model here but passes, and reads, the selection product.
+            // @phpstan-ignore-next-line argument.type
+            return (float) $optionPrice->getOptionSelectionAmount($selection)->getValue() * $qty;
         } catch (\Throwable $e) {
             $this->logger->error('BundleOptions::getSelectionPrice', ['exception' => $e]);
             return 0.0;
@@ -52,20 +55,35 @@ class BundleOptions implements ArgumentInterface
     }
 
     /**
-     * Fixed-price bundles start from the bundle's own price; dynamic ones
-     * from zero.
+     * Fixed-price bundles start from the bundle's own price (the price info
+     * amount without options, display currency, tax display applied);
+     * dynamic ones from zero.
      */
     public function getBasePrice(Product $bundle): float
     {
-        return (int) $bundle->getData('price_type') === BundlePrice::PRICE_TYPE_FIXED
-            ? (float) $this->priceCurrency->convertAndRound($bundle->getFinalPrice())
-            : 0.0;
+        try {
+            if ((int) $bundle->getData('price_type') !== BundlePrice::PRICE_TYPE_FIXED) {
+                return 0.0;
+            }
+            $finalPrice = $bundle->getPriceInfo()->getPrice(BundleFinalPrice::PRICE_CODE);
+
+            return $finalPrice instanceof BundleFinalPrice
+                ? (float) $finalPrice->getPriceWithoutOption()->getValue()
+                : (float) $finalPrice->getAmount()->getValue();
+        } catch (\Throwable $e) {
+            $this->logger->error('BundleOptions::getBasePrice', ['exception' => $e]);
+            return 0.0;
+        }
     }
 
+    /**
+     * Format an amount that is already in the display currency (what
+     * getSelectionPrice() and getBasePrice() return): no conversion.
+     */
     public function format(float $amount): string
     {
         try {
-            return (string) $this->priceCurrency->convertAndFormat($amount, false);
+            return (string) $this->priceCurrency->format($amount, false);
         } catch (\Throwable $e) {
             $this->logger->error('BundleOptions::format', ['exception' => $e]);
             return (string) $amount;

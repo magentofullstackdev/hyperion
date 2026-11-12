@@ -20,13 +20,17 @@ use Psr\Log\LoggerInterface;
  * search results) against parameter noise and filter permutation floods:
  *
  *   1. unknown query parameters are dropped from the request before the
- *      action runs (`?filtro1=x&filtro2=y` never reaches the layer);
+ *      action runs (`?filtro1=x&filtro2=y` never reaches the layer), and so
+ *      are toolbar parameters with a value the toolbar would not act on
+ *      (`FilterGuard::normalizeToolbar()`): what is left is the canonical
+ *      request, the only one the caches key on;
  *   2. more active filters than `hyperion/catalog/max_active_filters` is a
  *      combinatorial crawl, answered with HTTP 400 and `noindex` before any
  *      layout or search engine work;
- *   3. a category page that carries filters or dropped parameters counts
- *      against the `category_filter` rate limit (the fragment and the
- *      search page are counted by route by the core plugin);
+ *   3. a category page that carries filters, dropped parameters or
+ *      normalized toolbar values counts against the `category_filter` rate
+ *      limit (the fragment and the search page are counted by route by the
+ *      core plugin);
  *   4. a category page with two or more filters is served with
  *      `X-Robots-Tag: noindex, nofollow` and the matching robots meta tag,
  *      so spiders stop at the first level of filter URLs; the grid fragment
@@ -35,7 +39,8 @@ use Psr\Log\LoggerInterface;
  *      lib/listing-filters.js writes into the page's robots meta, so the
  *      meta follows the filters applied through HTMX;
  *   5. the page number is clamped to the search engine's result window
- *      (`FilterGuard::clampPage()`), so no listing request reaches the
+ *      (`FilterGuard::clampPage()`, after the normalization, from the page
+ *      size the toolbar will really use), so no listing request reaches the
  *      adapter's point in time pagination.
  *
  * Same shape as the catalog mode guard: the policy is fail-open and the
@@ -103,6 +108,7 @@ class FilterGuardPlugin
             $guarded = true;
 
             $stripped = $this->filterGuard->stripUnknown($this->request);
+            $normalized = $this->filterGuard->normalizeToolbar($this->request);
             $clamped = $this->filterGuard->clampPage($this->request);
             if ($clamped !== null) {
                 $this->logger->info(sprintf('Hyperion filter guard: page clamped to %d on %s', $clamped, $route));
@@ -122,7 +128,7 @@ class FilterGuardPlugin
             }
 
             if ($route === self::CATEGORY_VIEW
-                && ($activeFilters > 0 || $stripped !== [])
+                && ($activeFilters > 0 || $stripped !== [] || $normalized !== [])
                 && !$this->rateLimiter->hit('category_filter')
             ) {
                 return $this->tooManyRequests->create();
