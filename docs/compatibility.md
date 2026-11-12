@@ -41,8 +41,8 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, counts below | 692 (PHPUnit 12) | 0 | 0 |
 | 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | `pw-cls` 6, `pw-critical` 39, `pw-a11y` 14, `pw-ui-polish` 26, `pw-listing-state` 26, `pw-cart-features` 51 | not rerun (same code as the row above) | not rerun | not rerun |
-| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, see the note on counts below | 692 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green, counts below | 701 (PHPUnit 12) | 0 | 0 |
+| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, see the note on counts below | 692 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green, see the note on counts below | 701 (PHPUnit 12) | 0 | 0 |
 | 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 10) | 0 | not in the smoke battery |
 | 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 12) | 0 | not in the smoke battery |
 
@@ -52,9 +52,15 @@ subject).
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row is an install that takes the
 packages from the published Composer repository, so its battery runs after
-the publication of the release (`0.9.0-beta.5` on 2026-11-12, with the six
-sample data and three checkout tests added after the batteries of the other
-rows, hence 701 PHPUnit tests). The shipped VCL of this release compiles
+the publication of the release (`0.9.0-beta.5` on 2026-11-12). It is the
+only row that ran the published release exactly: after the batteries of the
+other rows the release gained two data patches of HyperionSampleData (store
+name, footer block), the guest checkout notice for carts with downloadable
+products in HyperionCheckout and their nine unit tests, hence 701 PHPUnit
+tests here and 692 on the other rows. Those changes were checked on the
+Magento 2.4.9 / PHP 8.4 install with PHPUnit, phpstan, phpcs, `pw-a11y`,
+`pw-cls`, `pw-critical`, `pw-ui-polish` and in a browser, not with a new
+full battery. The shipped VCL of this release compiles
 (`varnishd -C`) on Varnish 8.0, 7.7, 7.6 and 7.4.
 
 On the Mage-OS 4.0 row every script passed too; four of them count fewer
@@ -112,7 +118,10 @@ Magento's JS and CSS minification on (`dev/js/minify_files`,
 `dev/css/minify_files`), run on 2026-11-11: every Hyperion asset kept its file name and answered 200 (71 static files, every import between them), and the seven scripts of that row passed (246 checks). The
 public demo ([demo.hyperionfront.dev](https://demo.hyperionfront.dev),
 Magento 2.4.9, PHP 8.5, Varnish 8) runs in production mode and is the
-standing production-mode install. HTML minification
+standing production-mode install. On the Mage-OS 4.0 row and on the
+Magento 2.4.9 / PHP 8.5 / Varnish 8 row the battery ran in developer mode;
+production mode was checked by hand on the storefront of both installs, not
+with a battery. HTML minification
 (`dev/template/minify_html`) is not supported in this release, see
 [Known limitations](./known-limitations.md).
 

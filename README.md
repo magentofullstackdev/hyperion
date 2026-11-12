@@ -47,7 +47,7 @@ candidate; each row shows the release and the date of its run.
 
 | Tier | Platform | PHP | Varnish | Mode | Release | Date | E2E suite |
 |---|---|---|---|---|---|---|---|
-| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer and production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
 | 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
 | 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer and production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
 | 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.5 | 2026-11-12 | 84 / 84 |
