@@ -225,7 +225,12 @@ try {
     await page.selectOption(groupsSelect, [groupValue]);
     await saveForm();
     const restricted = sql(`SELECT IFNULL(customer_group_ids, 'NULL') FROM hyperion_megamenu_item WHERE item_id = ${linkId}`);
+    // The builder fetches the form again after a save: a selection made on the form that is about to be
+    // replaced is lost, and the next save sends the restriction once more. Clear it on a freshly loaded form.
+    await openBuilder(builderHref);
+    await rowByTitle('E2E link').click();
     await page.waitForSelector(groupsSelect, { timeout: 15000 });
+    await page.waitForFunction((selector) => document.querySelector(selector)?.selectedOptions.length === 1, groupsSelect, { timeout: 15000 });
     await page.selectOption(groupsSelect, []);
     const cleared = await saveForm();
     await openBuilder(builderHref);

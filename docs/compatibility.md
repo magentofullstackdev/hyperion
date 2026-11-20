@@ -42,7 +42,7 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 | 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, counts below | 926 (PHPUnit 12) | 0 | 0 |
 | 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.6` | 2026-11-18 | 86 / 86 | `pw-cls` 51, `pw-a11y` 19, `pw-checkout-flow` 182, `pw-critical` 39, `pw-fallback-pages` 72 | not rerun (see the row above) | not rerun | not rerun |
 | 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green on that release (its script set and counts) | 701 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.6` | 2026-11-20 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
 | 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 10) | 0 | not in the smoke battery |
 | 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 12) | 0 | not in the smoke battery |
 
@@ -52,10 +52,15 @@ subject).
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row is an install that takes the
 packages from the published Composer repository, so its battery runs after
-the publication of a release. It still shows `0.9.0-beta.5` (published and
-run on 2026-11-12, 701 PHPUnit tests at that release, and on that release
-production mode was checked by hand on its storefront); the row moves to
-`0.9.0-beta.6` once that release is published and the battery has run there.
+the publication of a release: the full battery passed there on 2026-11-20,
+on the published `0.9.0-beta.6` packages. Four scripts count fewer checks
+than on the first row because that install has no reCAPTCHA v3 keys and no
+active Braintree method (`pw-cart-features.mjs` 89, `pw-fallback-pages.mjs`
+67, `pw-checkout-flow.mjs` 160 without the Braintree card orders,
+`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped). Production mode
+was checked by hand on a storefront deployed from the same packages (home,
+category, product, cart, search, checkout and sign-in pages: no console
+error, no failed request).
 The shipped VCL, unchanged since `0.9.0-beta.5`, compiled (`varnishd -C`)
 on Varnish 8.0, 7.7, 7.6 and 7.4 at that release.
 

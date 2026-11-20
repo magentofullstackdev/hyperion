@@ -50,13 +50,12 @@ candidate; each row shows the release and the date of its run.
 | 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
 | 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | production | 0.9.0-beta.6 | 2026-11-18 | 86 / 86 |
 | 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
-| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.5 | 2026-11-12 | 84 / 84 |
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.6 | 2026-11-20 | 86 / 86 |
 | 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
 | 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row installs from the published
-Composer repository, so its battery runs after a release is published: it
-shows 0.9.0-beta.5 until then.
+Composer repository, so its battery runs after a release is published.
 
 Production mode: the second row is the dated production-mode run, and
 the [live demo](https://demo.hyperionfront.dev) is the standing
