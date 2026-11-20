@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Block\Cart;
 
 use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
+use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Data\Form\FormKey;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Template;
@@ -20,6 +21,14 @@ use Psr\Log\LoggerInterface;
  * THIS block plus an OOB totals update, so the form reflows to its
  * post-apply state (readonly input + "Cancel Coupon" button) without
  * a full page reload.
+ *
+ * After a refused code the plugin sets the block data `coupon_attempt`
+ * and `coupon_error`; the template hands them to the form, which stays
+ * open with the code and the reason.
+ *
+ * Children are printed inside the form: the layouts add core's CAPTCHA
+ * block (`captcha`, form id `sales_rule_coupon_request`) and, when the
+ * module is installed, the coupon reCAPTCHA.
  */
 class Coupon extends Template
 {
@@ -42,6 +51,44 @@ class Coupon extends Template
             $this->logger->error('Cart\Coupon::getAppliedCoupon -- ' . $e->getMessage());
             return '';
         }
+    }
+
+    /**
+     * The code of a refused apply request, empty otherwise.
+     *
+     * @return string
+     */
+    public function getAttemptedCode(): string
+    {
+        $code = $this->getData('coupon_attempt');
+
+        return is_string($code) ? $code : '';
+    }
+
+    /**
+     * Why the attempted code was refused, as plain text.
+     *
+     * @return string
+     */
+    public function getAttemptError(): string
+    {
+        $error = $this->getData('coupon_error');
+
+        return is_string($error) ? $error : '';
+    }
+
+    /**
+     * Whether the block is rendered for an HTMX swap. Scripting is on then,
+     * and htmx parses the answer with scripting off: a `<noscript>` fallback
+     * would become real elements in the page.
+     *
+     * @return bool
+     */
+    public function isHtmxRequest(): bool
+    {
+        $request = $this->getRequest();
+
+        return $request instanceof HttpRequest && (bool) $request->getHeader('HX-Request');
     }
 
     public function getFormKey(): string

@@ -8,12 +8,18 @@ vi.mock('../../../../store/flow-actions.js', () => ({
     flowActions: () => ({ placeOrder }),
 }));
 vi.mock('../../../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
+// The gate is read from the real store; the flush of the pending saves is a double.
+vi.mock('../../checkout-gate.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../checkout-gate.js')>()),
+    prepareCheckout: vi.fn(async () => null),
+}));
 
 import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
 import { resetFlowSelectorsForTests } from '../../../../store/flow-selectors.js';
 import type { Store } from '../../../../store/index.js';
 import { setActiveCatalogForTests, t } from '../../../../utils/i18n.js';
 import { navigateTo } from '../../../../utils/navigate.js';
+import { prepareCheckout } from '../../checkout-gate.js';
 import { getPaymentRenderer } from '../../registry.js';
 import { PaymentBraintreeGooglepay, getGooglePayAuthorisation } from '../payment-braintree-googlepay.js';
 import {
@@ -101,6 +107,8 @@ describe('<payment-braintree-googlepay>', () => {
         });
         placeOrder.mockReset();
         placeOrder.mockResolvedValue(42);
+        vi.mocked(prepareCheckout).mockReset();
+        vi.mocked(prepareCheckout).mockResolvedValue(null);
         vi.mocked(navigateTo).mockClear();
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
@@ -314,7 +322,7 @@ describe('<payment-braintree-googlepay>', () => {
 
     it('does not open the sheet while the order is being updated and says so', async () => {
         await mountReady(sdk);
-        store.isRefreshingTotals.set(true);
+        store.isSettlingTotals.set(true);
 
         sdk.googlePayButton.element.click();
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -322,10 +330,54 @@ describe('<payment-braintree-googlepay>', () => {
         expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
         expect(store.globalError.get()).toBe('Your order is being updated. Try again in a moment.');
 
-        store.isRefreshingTotals.set(false);
+        store.isSettlingTotals.set(false);
         store.isSavingShipping.set(true);
         sdk.googlePayButton.element.click();
         await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
+        expect(placeOrder).not.toHaveBeenCalled();
+    });
+
+    it('opens the sheet inside the click when the gate is open, without waiting for anything', async () => {
+        await mountReady(sdk);
+
+        sdk.googlePayButton.element.click();
+
+        // Still in the task of the click: the browser accepts the window of the sheet.
+        expect(sdk.googlePay.loadPaymentData).toHaveBeenCalledTimes(1);
+        expect(prepareCheckout).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(placeOrder).toHaveBeenCalled());
+    });
+
+    it('saves the pending edits on a blocked click, so the next click opens the sheet', async () => {
+        await mountReady(sdk);
+        store.shippingDirty.set(true);
+        // Like the flow: the banner is cleared when the flush starts.
+        vi.mocked(prepareCheckout).mockImplementation(async () => {
+            store.globalError.set(null);
+            store.shippingDirty.set(false);
+            return null;
+        });
+
+        sdk.googlePayButton.element.click();
+        await vi.waitFor(() => expect(prepareCheckout).toHaveBeenCalledTimes(1));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
+        expect(store.globalError.get()).toBe('Your order is being updated. Try again in a moment.');
+
+        sdk.googlePayButton.element.click();
+        expect(sdk.googlePay.loadPaymentData).toHaveBeenCalledTimes(1);
+        expect(prepareCheckout).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows what is still missing after the pending edits were saved', async () => {
+        await mountReady(sdk);
+        store.shippingDirty.set(true);
+        vi.mocked(prepareCheckout).mockResolvedValue('The store is temporarily unavailable.');
+
+        sdk.googlePayButton.element.click();
+
+        await vi.waitFor(() => expect(store.globalError.get()).toBe('The store is temporarily unavailable.'));
         expect(sdk.googlePay.loadPaymentData).not.toHaveBeenCalled();
         expect(placeOrder).not.toHaveBeenCalled();
     });

@@ -38,8 +38,8 @@
     "file": "assets/lit-element.CGWggwb8.js",
     "name": "lit-element"
   },
-  "_paypal-sdk.C2264dGQ.js": {
-    "file": "assets/paypal-sdk.C2264dGQ.js",
+  "_paypal-sdk.B769dtKR.js": {
+    "file": "assets/paypal-sdk.B769dtKR.js",
     "name": "paypal-sdk",
     "imports": [
       "_sanitize.DP7-Q_DW.js"
@@ -77,17 +77,17 @@
     "name": "video-embed"
   },
   "src/css/critical/category.css": {
-    "file": "assets/critical-category.BVMJRsr0.css",
+    "file": "assets/critical-category.BH897FDq.css",
     "src": "src/css/critical/category.css",
     "isEntry": true
   },
   "src/css/critical/cms.css": {
-    "file": "assets/critical-cms.BxP7m7Xk.css",
+    "file": "assets/critical-cms.DYgCL3tA.css",
     "src": "src/css/critical/cms.css",
     "isEntry": true
   },
   "src/css/critical/product.css": {
-    "file": "assets/critical-product.DCgy-X3S.css",
+    "file": "assets/critical-product.BwyaNxxg.css",
     "src": "src/css/critical/product.css",
     "isEntry": true
   },
@@ -132,6 +132,17 @@
     "isDynamicEntry": true,
     "imports": [
       "_lit-element.CGWggwb8.js"
+    ]
+  },
+  "src/js/components/hyperion-captcha.js": {
+    "file": "assets/hyperion-captcha.D72IT02Y.js",
+    "name": "hyperion-captcha",
+    "src": "src/js/components/hyperion-captcha.js",
+    "isEntry": true,
+    "isDynamicEntry": true,
+    "imports": [
+      "_lit-element.CGWggwb8.js",
+      "_HyperionLightElement.CshfoQhS.js"
     ]
   },
   "src/js/components/hyperion-carousel.js": {
@@ -179,7 +190,7 @@
     ]
   },
   "src/js/components/hyperion-coupon-form.js": {
-    "file": "assets/hyperion-coupon-form.CtiFNEi-.js",
+    "file": "assets/hyperion-coupon-form.BEkWLy57.js",
     "name": "hyperion-coupon-form",
     "src": "src/js/components/hyperion-coupon-form.js",
     "isEntry": true,
@@ -278,7 +289,7 @@
     ]
   },
   "src/js/components/hyperion-mini-cart.js": {
-    "file": "assets/hyperion-mini-cart.CQdTSDF7.js",
+    "file": "assets/hyperion-mini-cart.CMGSvMdy.js",
     "name": "hyperion-mini-cart",
     "src": "src/js/components/hyperion-mini-cart.js",
     "isEntry": true,
@@ -321,7 +332,7 @@
     ]
   },
   "src/js/components/hyperion-paypal-buttons.js": {
-    "file": "assets/hyperion-paypal-buttons.B_TJwFFJ.js",
+    "file": "assets/hyperion-paypal-buttons.BhVLQM4F.js",
     "name": "hyperion-paypal-buttons",
     "src": "src/js/components/hyperion-paypal-buttons.js",
     "isEntry": true,
@@ -329,12 +340,12 @@
     "imports": [
       "_lit-element.CGWggwb8.js",
       "_HyperionLightElement.CshfoQhS.js",
-      "_paypal-sdk.C2264dGQ.js",
+      "_paypal-sdk.B769dtKR.js",
       "_sanitize.DP7-Q_DW.js"
     ]
   },
   "src/js/components/hyperion-paypal-message.js": {
-    "file": "assets/hyperion-paypal-message.D3Pt53NS.js",
+    "file": "assets/hyperion-paypal-message.DAs1yZ6j.js",
     "name": "hyperion-paypal-message",
     "src": "src/js/components/hyperion-paypal-message.js",
     "isEntry": true,
@@ -342,7 +353,7 @@
     "imports": [
       "_lit-element.CGWggwb8.js",
       "_HyperionLightElement.CshfoQhS.js",
-      "_paypal-sdk.C2264dGQ.js",
+      "_paypal-sdk.B769dtKR.js",
       "_sanitize.DP7-Q_DW.js"
     ]
   },
@@ -448,7 +459,7 @@
     ]
   },
   "src/js/entry.js": {
-    "file": "assets/entry.CypW5Isv.js",
+    "file": "assets/entry.CRTTxEeH.js",
     "name": "entry",
     "src": "src/js/entry.js",
     "isEntry": true,
@@ -492,10 +503,11 @@
       "src/js/components/hyperion-wishlist-sidebar.js",
       "src/js/components/hyperion-compare-sidebar.js",
       "src/js/components/hyperion-recently-viewed.js",
-      "src/js/components/hyperion-gtag.js"
+      "src/js/components/hyperion-gtag.js",
+      "src/js/components/hyperion-captcha.js"
     ],
     "css": [
-      "assets/entry.DyICnnsY.css"
+      "assets/entry.DZ7Tddx3.css"
     ]
   },
   "src/js/lib/pagebuilder.js": {

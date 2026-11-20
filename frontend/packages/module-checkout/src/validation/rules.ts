@@ -12,9 +12,16 @@ export type Validator = (value: string) => string | null;
 export const required: Validator = (value) =>
     value.trim().length === 0 ? 'Hyperion_Checkout::validation_required' : null;
 
+/**
+ * The shape of an email address the checkout accepts: the one expression
+ * behind the field validator, the Place Order gate and the guest email
+ * sent with the quote addresses.
+ */
+export const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const email: Validator = (value) => {
     if (!value) return 'Hyperion_Checkout::validation_required';
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+    return EMAIL_SHAPE.test(value)
         ? null
         : 'Hyperion_Checkout::validation_email';
 };

@@ -18,7 +18,7 @@ Built and maintained by [Sergiu Ro](https://magentofullstack.dev).
 
 | | |
 |---|---|
-| Release | 0.9.0-beta.5, public beta |
+| Release | 0.9.0-beta.6, public beta |
 | Website | [hyperionfront.dev](https://hyperionfront.dev) |
 | Live demo | [demo.hyperionfront.dev](https://demo.hyperionfront.dev) |
 | License | [MIT](./LICENSE) |
@@ -47,14 +47,18 @@ candidate; each row shows the release and the date of its run.
 
 | Tier | Platform | PHP | Varnish | Mode | Release | Date | E2E suite |
 |---|---|---|---|---|---|---|---|
-| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
-| 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
-| 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer and production | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
+| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | production | 0.9.0-beta.6 | 2026-11-18 | 86 / 86 |
+| 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
 | 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.5 | 2026-11-12 | 84 / 84 |
-| 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.5 | 2026-11-11 | 84 / 84 |
-| 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.5 | 2026-11-12 | 84 / 84 |
+| 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
+| 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
 
-Production mode: the second row is the dated production-mode battery, and
+The Magento 2.4.9 / PHP 8.5 / Varnish 8 row installs from the published
+Composer repository, so its battery runs after a release is published: it
+shows 0.9.0-beta.5 until then.
+
+Production mode: the second row is the dated production-mode run, and
 the [live demo](https://demo.hyperionfront.dev) is the standing
 production-mode install. Counts per script, what was not tested, the
 platforms that were tested before and are no longer supported, and the
@@ -87,8 +91,8 @@ The verified procedure, run from the Magento root (details and every option in
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta      # beta release; prefer-stable keeps everything else stable
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.5
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.5   # optional, Luma sample data stores only
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.6
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.6   # optional, Luma sample data stores only
 bin/magento setup:upgrade
 bin/magento setup:di:compile
 bin/magento setup:static-content:deploy -f
@@ -150,7 +154,12 @@ cache entry.
 
 **Checkout**: a single-page Lit checkout (address, shipping, payment, review)
 driven by Magento's REST API, behind a feature flag (`hyperion_checkout/general/enabled`,
-default off). Cart page and mini-cart with coupon, gift messages, downloadable
+default off). Every change of the cart goes through one serialized queue
+that Place Order waits for; every kind of failure (offline, timeout, expired
+session, rate limit, store unavailable) has a translated message and a way
+out; a lost answer to the order is resolved by reading the cart; typed data
+survives a reload or a sign-in; reCAPTCHA (v3, v2 invisible, v2 checkbox)
+and the image CAPTCHA work for sign-in, coupon and Place Order. Cart page and mini-cart with coupon, gift messages, downloadable
 links and bundle selections, PayPal smart buttons and Pay Later messages on
 the storefront.
 
@@ -162,9 +171,10 @@ reports):
 | Check / money order, bank transfer, cash on delivery, purchase order (number required, stored on the order), free | verified; instructions and the purchase order number by the automated checks of 2026-11-11 on Magento 2.4.9 |
 | PayPal Express Checkout, in-context (smart button) | verified with real sandbox payments (on a platform now in "Previously tested") |
 | PayPal Express Checkout, redirect flow (`in_context = 0`) | reaches PayPal, payment completion not verified |
-| Braintree card (hosted fields), vault, 3D Secure | verified against a Braintree sandbox (on a platform now in "Previously tested") |
-| Braintree PayPal | renderer exists, not tested |
-| Braintree Google Pay (with 3D Secure and stored cards) | button verified against the Braintree sandbox; payment not verified |
+| Braintree card (hosted fields), 3D Secure | verified against a Braintree sandbox on Magento 2.4.9 (card orders as a guest and as a customer, 3D Secure challenge completed, 2026-11-18) |
+| Braintree stored cards (vault) | verified against a Braintree sandbox on Magento 2.4.9 (card stored at an order, then orders with CVV re-verification on and off, 2026-11-18) |
+| Braintree PayPal | verified against the Braintree and PayPal sandboxes on Magento 2.4.9 (guest, customer, a display currency other than the base one, a virtual cart, 2026-11-18); saving the PayPal account (vault) not completed: the PayPal sandbox answered its own error page |
+| Braintree Google Pay (with 3D Secure and stored cards) | the button renders against the Braintree sandbox and opens Google's window (2026-11-18); a payment was not made (it needs a Google account in a real browser) |
 | Everything else | listed as "not supported by this checkout yet" |
 
 **Customer**: registration (optional address fields), login, password reset,
@@ -179,11 +189,12 @@ settings, without RequireJS ([PageBuilder](./docs/pagebuilder.md)); full-width
 page layouts for CMS pages, categories and products; store, store view and
 currency switchers; transactional email CSS.
 
-**Performance and SEO**: a local Lighthouse run on 2026-11-11 against
-Magento 2.4.9 (mobile and desktop presets, CPU slowdown 4x; a lab number on
-a developer machine, not a field measurement) scored performance 100 on the
-home page, a category, a product page and the cart on both presets (eight
-runs), with a cumulative layout shift of 0.
+**Performance and SEO**: a local Lighthouse run on 2026-11-18 against
+Magento 2.4.9 in production mode (mobile and desktop presets, CPU slowdown
+4x; a lab number on a developer machine, not a field measurement) scored
+performance 99 to 100 on the home page, a category, a product page and the
+cart on both presets (eight runs; 99 is the home page on mobile), with a
+cumulative layout shift of 0.
 Cumulative layout shift is 0 on nine page types (home, a category in grid
 and in list mode, a top-level category landing, a configurable and a simple
 product, search results, cart, contact), desktop and phone, under a throttled
@@ -206,8 +217,8 @@ The short version; the full list is in [Known limitations](./docs/known-limitati
 
 - Analytics is GA4 / Google Ads only (no Universal Analytics, no Tag Manager).
 - Multishipping and in-store pickup are not available.
-- Magento's HTML minification (`dev/template/minify_html`) must stay off;
-  JS and CSS minification are supported.
+- Saving a PayPal account through Braintree, a Google Pay payment and a card
+  stored through Google Pay have renderers but no completed sandbox payment.
 - Third-party extensions with Knockout / RequireJS frontends need an adapter.
 - A few rarely used core pages (billing agreements, the RSS and
   multishipping pages) render core markup without styling.

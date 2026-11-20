@@ -1,6 +1,6 @@
 # Hyperion
 
-> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.5 (beta). Supported platforms and their tiers: see docs/compatibility.md (Magento Open Source and Mage-OS, PHP 8.3 to 8.5).
+> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.6 (beta). Supported platforms and their tiers: see docs/compatibility.md (Magento Open Source and Mage-OS, PHP 8.3 to 8.5).
 
 Website: https://hyperionfront.dev
 Live demo: https://demo.hyperionfront.dev

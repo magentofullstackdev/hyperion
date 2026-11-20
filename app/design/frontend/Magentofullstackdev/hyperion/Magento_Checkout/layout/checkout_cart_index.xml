@@ -61,6 +61,10 @@
         <referenceContainer name="checkout.cart.container" remove="true"/>
         <referenceContainer name="checkout.cart.totals.container" remove="true"/>
         <referenceContainer name="checkout.cart.methods" remove="true"/>
+        <!-- Core's cart messages block (minimum order amount, quote errors): the summary card
+             states the same reasons next to the checkout link (cart/totals.phtml), and page
+             messages reach <hyperion-messages> through the message cookie. -->
+        <referenceBlock name="checkout.cart.validationmessages" remove="true"/>
         <!--
             checkout.cart.extra_actions: SKIPPED. This block name does not
             exist in the core checkout_cart_index.xml tree.
@@ -95,7 +99,28 @@
                 <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Coupon"
                        name="hyperion.cart.coupon"
                        as="coupon"
-                       template="Magento_Checkout::cart/coupon.phtml"/>
+                       template="Magento_Checkout::cart/coupon.phtml">
+                    <!-- Core's image CAPTCHA of the coupon form (form id
+                         sales_rule_coupon_request, Customers > Customer Configuration >
+                         CAPTCHA). Core creates it inside the coupon block of the Knockout
+                         cart, which the theme removes. It prints nothing while the form
+                         does not require an answer. Declared in the page layout and in
+                         the HTMX fragment handle alike: keep the two in sync. -->
+                    <block class="Magento\Captcha\Block\Captcha"
+                           name="hyperion.cart.coupon.captcha"
+                           as="captcha"
+                           cacheable="false">
+                        <action method="setFormId">
+                            <argument name="formId" xsi:type="string">sales_rule_coupon_request</argument>
+                        </action>
+                        <action method="setImgWidth">
+                            <argument name="width" xsi:type="string">230</argument>
+                        </action>
+                        <action method="setImgHeight">
+                            <argument name="width" xsi:type="string">50</argument>
+                        </action>
+                    </block>
+                </block>
 
                 <block class="Magentofullstackdev\HyperionCheckout\Block\Cart\Totals"
                        name="hyperion.cart.totals"

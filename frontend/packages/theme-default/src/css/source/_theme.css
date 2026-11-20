@@ -29,6 +29,10 @@ html {
     /* --- Motion: the one knob of _motion.css, 0ms turns it off --- */
     --hyperion-motion-fast: 120ms;
 
+    /* --- Height of the sticky site header (h-16 plus its border): the
+       offset of anything that sticks below it --- */
+    --hyperion-header-height: calc(4rem + 1px);
+
     /* --- Component: hyperion-slider --- */
     --slide-gap: 0px;
     --slide-transition-duration: 300ms;

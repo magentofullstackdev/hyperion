@@ -89,7 +89,8 @@
                 "shape": "rect"
             },
             "isRequiredBillingAddress": "0",
-            "canSendLineItems": true
+            "canSendCartLineItems": true,
+            "cspNonce": "fixture-csp-nonce"
         },
         "braintree_paypal_credit": {
             "isActive": false,
@@ -104,7 +105,7 @@
                 "shape": "rect"
             },
             "isRequiredBillingAddress": "0",
-            "canSendLineItems": true
+            "canSendCartLineItems": true
         },
         "braintree_paypal_paylater": {
             "isActive": true,
@@ -120,7 +121,7 @@
                 "shape": "rect"
             },
             "isRequiredBillingAddress": "0",
-            "canSendLineItems": true
+            "canSendCartLineItems": true
         },
         "vault": {
             "braintree_cc_vault_0": {

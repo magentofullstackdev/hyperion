@@ -17,9 +17,28 @@
  * (a list argument fills `%1`, `%2`, ...; a named one fills `%name`), and
  * an aggregate error ("One or more input exceptions have occurred.") is
  * reported by its nested, specific messages.
+ *
+ * `message` is that rendered text, or a translated line for the status
+ * class when the answer carried none. The class of a failure (and the text
+ * to show for it) is decided by `classifyError()` of `error-kinds.ts`, from
+ * the fields kept here: the status, the raw phrase, whether the body was
+ * JSON at all, and the `Retry-After` header.
  */
-import type { MagentoWireError } from '../types/errors.js';
+import type { CheckoutErrorKind, MagentoWireError } from '../types/errors.js';
 import { t } from '../utils/i18n.js';
+
+/** Stands for a response body that is not JSON (a proxy's page, a firewall's challenge). */
+export const NON_JSON_BODY: unique symbol = Symbol('non-JSON body');
+
+/** What an answer told beyond its status and its rendered message. */
+export interface MagentoApiErrorDetails {
+    /** The wire phrase before its placeholders were rendered. */
+    rawMessage?: string;
+    /** The body was not JSON: nothing in it is a message. */
+    nonJsonBody?: boolean;
+    /** The wait the `Retry-After` header asks for. */
+    retryAfterMs?: number;
+}
 
 export class MagentoApiError extends Error {
     public readonly httpStatus: number;
@@ -27,13 +46,26 @@ export class MagentoApiError extends Error {
     public readonly parameters: Readonly<Record<string, string>>;
     /** The nested per-field messages of an aggregate error, rendered. */
     public readonly errors: readonly string[];
+    /**
+     * The wire phrase before its placeholders were rendered (`%1` still in
+     * it); empty when the answer carried no message. An error built without
+     * it reports its message.
+     */
+    public readonly rawMessage: string;
+    /** The body was not JSON. */
+    public readonly nonJsonBody: boolean;
+    /** The wait the `Retry-After` header asked for, when the answer had one. */
+    public readonly retryAfterMs: number | undefined;
+    /** The class of the failure, set by the client, which knows the request. */
+    public kind: CheckoutErrorKind | undefined;
 
     public constructor(
         httpStatus: number,
         code: string,
         message: string,
         parameters: Readonly<Record<string, string>> = {},
-        errors: readonly string[] = []
+        errors: readonly string[] = [],
+        details: MagentoApiErrorDetails = {}
     ) {
         super(message);
         this.name = 'MagentoApiError';
@@ -41,20 +73,35 @@ export class MagentoApiError extends Error {
         this.code = code;
         this.parameters = parameters;
         this.errors = errors;
+        this.rawMessage = details.rawMessage ?? message;
+        this.nonJsonBody = details.nonJsonBody ?? false;
+        this.retryAfterMs = details.retryAfterMs;
+        this.kind = undefined;
     }
+}
+
+/** The classes a request that got no answer can belong to. */
+export type TransportErrorKind = 'offline' | 'network' | 'timeout';
+
+function browserIsOffline(): boolean {
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
 
 /**
  * Thrown when the network-level fetch itself fails (DNS error,
  * offline, CORS, TLS, etc.) -- i.e. the request never produced an
  * HTTP response. Callers use this to distinguish retryable transport
- * failures from 4xx/5xx responses.
+ * failures from 4xx/5xx responses. `kind` is settled when the failure
+ * happens: `offline` when the browser reported no connection then.
  */
 export class NetworkError extends Error {
-    public constructor(cause: unknown) {
+    public readonly kind: TransportErrorKind;
+
+    public constructor(cause: unknown, kind?: TransportErrorKind) {
         super(cause instanceof Error ? cause.message : 'Network error');
         this.name = 'NetworkError';
         this.cause = cause;
+        this.kind = kind ?? (browserIsOffline() ? 'offline' : 'network');
     }
 }
 
@@ -65,7 +112,7 @@ export class NetworkError extends Error {
  */
 export class RequestTimeoutError extends NetworkError {
     public constructor(cause?: unknown) {
-        super(cause ?? new Error('Request timed out'));
+        super(cause ?? new Error('Request timed out'), 'timeout');
         this.name = 'RequestTimeoutError';
     }
 }
@@ -147,15 +194,22 @@ function fallbackMessage(httpStatus: number): string {
  * of an aggregate), ready to show; i18n of the phrase itself is the
  * server's (`__()` ran before the exception). A body that is not a JSON
  * object, or one without a message, yields a translated message for the
- * status class: the caller passes `undefined` for a body that is not JSON,
- * so a proxy's page never becomes the text.
+ * status class: the caller passes `NON_JSON_BODY` for a body that is not
+ * JSON, so a proxy's page never becomes the text. `retryAfterMs` is the
+ * parsed `Retry-After` header of the answer, when it had one.
  */
 export function normalizeMagentoError(
     httpStatus: number,
-    body: unknown
+    body: unknown,
+    retryAfterMs?: number
 ): MagentoApiError {
+    const header: MagentoApiErrorDetails = retryAfterMs === undefined ? {} : { retryAfterMs };
     if (body === null || typeof body !== 'object') {
-        return new MagentoApiError(httpStatus, 'unknown', fallbackMessage(httpStatus));
+        return new MagentoApiError(httpStatus, 'unknown', fallbackMessage(httpStatus), {}, [], {
+            ...header,
+            rawMessage: '',
+            nonJsonBody: body === NON_JSON_BODY,
+        });
     }
 
     const wire = body as MagentoWireError;
@@ -176,5 +230,5 @@ export function normalizeMagentoError(
         message = fallbackMessage(httpStatus);
     }
 
-    return new MagentoApiError(httpStatus, String(httpStatus), message, parameters, errors);
+    return new MagentoApiError(httpStatus, String(httpStatus), message, parameters, errors, { ...header, rawMessage });
 }

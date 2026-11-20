@@ -77,6 +77,11 @@
     --color-warning-light: 253 224 71; /* #fde047 -- group-hover star icon */
     --color-focus-ring: 99 102 241; /* #6366f1 -- focus ring */
 
+    /* --- Headings --- */
+    /* One color for every heading level; follows the secondary slate
+       unless a child theme gives headings their own. */
+    --color-heading: var(--color-secondary);
+
     /* --- Inverted surface (dark footer, cookie banner) --- */
     /* An inverted surface is a dark band (typically the footer) with
        light text and muted-light secondary text. A child theme can

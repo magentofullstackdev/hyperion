@@ -4,7 +4,7 @@
 /**
  * Typed readers for the Braintree slices of `checkoutConfig`.
  *
- * Shapes follow the PHP providers of PayPal_Braintree 4.6:
+ * Shapes follow the PHP providers of PayPal_Braintree 4.8:
  *   - `payment.braintree`          Model/Ui/ConfigProvider.php
  *   - `payment.braintree_paypal*`  Model/Ui/PayPal/ConfigProvider.php
  *   - `payment.braintree_googlepay` Model/GooglePay/Ui/ConfigProvider.php
@@ -60,6 +60,8 @@ export interface BraintreePayPalConfig {
     vaultCode: string;
     style: PayPalButtonStyle;
     canSendLineItems: boolean;
+    /** Nonce of the page's Content Security Policy, for the scripts the PayPal SDK adds. */
+    cspNonce: string;
 }
 
 export interface BraintreeGooglePayConfig {
@@ -91,7 +93,7 @@ function str(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
 
-/** Magento serialises scope flags as booleans, "1"/"0" strings or integers. */
+/** Magento serializes scope flags as booleans, "1"/"0" strings or integers. */
 function flag(value: unknown): boolean {
     return value === true || value === 1 || value === '1';
 }
@@ -168,7 +170,9 @@ export function getBraintreePayPalConfig(): BraintreePayPalConfig | null {
         locale: str(slice['locale']),
         vaultCode: str(slice['vaultCode']) || BRAINTREE_PAYPAL_VAULT_CODE,
         style: buttonStyle(slice['style']),
-        canSendLineItems: flag(slice['canSendLineItems']),
+        // `canSendLineItems` is the name older module versions emit.
+        canSendLineItems: flag(slice['canSendCartLineItems'] ?? slice['canSendLineItems']),
+        cspNonce: str(slice['cspNonce']),
     };
 }
 

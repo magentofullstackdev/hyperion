@@ -6,11 +6,10 @@ import { LitElement, html, css, nothing } from 'lit';
 /**
  * hyperion-coupon-form -- reusable discount-code UI.
  *
- * Appears on BOTH the Shopping Cart page and the Checkout page. Per the
- * project's SRP rule (see `memory/feedback_srp_components.md`), every
- * discrete piece of UI lives in its own Lit component. This one owns:
+ * The discount code form of the Shopping Cart page. It owns:
  *
  *   - the expand/collapse state of the "Apply Discount Code" section;
+ *   - the state of a refused code (see below);
  *   - the pending/loading toggle on the submit button (htmx:beforeRequest
  *     -> disabled, htmx:afterRequest -> re-enabled);
  *   - the Apply <-> Cancel toggle of the button copy depending on whether
@@ -18,7 +17,7 @@ import { LitElement, html, css, nothing } from 'lit';
  *
  * HTTP side-effects are delegated to HTMX attributes on the internal
  * <form>. The form POSTs to Magento's native `checkout/cart/couponPost`
- * route, which is intercepted by `Hyperion\Core\Plugin\Checkout\
+ * route, which is intercepted by `HyperionCore\Plugin\Checkout\
  * Controller\Cart\CouponPostPlugin` -- that plugin returns the fresh
  * component markup (swapped via hx-target) plus OOB swaps of
  * `#hyperion-cart-totals` and `#hyperion-notification`.
@@ -28,10 +27,20 @@ import { LitElement, html, css, nothing } from 'lit';
  * Shadow DOM boundaries. That also means Tailwind utility classes on
  * the template resolve against the page's main stylesheet.
  *
+ * A refused code. The answer to a failed apply request is a fresh shell
+ * with `attempted-code` (the code that was sent) and `error-message` (why
+ * it was refused). The form then renders open with the code in the field,
+ * `aria-invalid="true"`, the message under the field (linked through
+ * `aria-describedby`) and the focus on the field, so the shopper corrects
+ * the code where it was typed. The error state ends at the first edit of
+ * the field. The toast of the same answer is not touched.
+ *
  * Server rendered children. The phtml shell may carry a
  * `<template data-hyperion-coupon-children>` whose content is the HTML of
- * the block's children: core's `Magento_ReCaptchaCheckoutSalesRule` adds
- * the `coupon_code` reCAPTCHA there (`<hyperion-recaptcha>` with its hidden
+ * the block's children: the image CAPTCHA of the coupon form
+ * (`<hyperion-captcha>` with the `captcha[sales_rule_coupon_request]`
+ * field) and, from core's `Magento_ReCaptchaCheckoutSalesRule`, the
+ * `coupon_code` reCAPTCHA (`<hyperion-recaptcha>` with its hidden
  * `g-recaptcha-response` input and the v3 legal notice). The content is
  * captured in `connectedCallback` and, once the form exists, moved into
  * `[data-coupon-extra-slot]` INSIDE the `<form>`: `<hyperion-recaptcha>`
@@ -49,6 +58,8 @@ import { LitElement, html, css, nothing } from 'lit';
  *   with a readonly input and a "Cancel Coupon" button.
  * - `action-url` -- `checkout/cart/couponPost` URL (store-scoped).
  * - `form-key` -- Magento form_key for CSRF.
+ * - `attempted-code`, `error-message` -- the refused code and the reason;
+ *   ignored while a coupon is applied.
  * - `heading-label`, `placeholder-label`, `apply-label`, `cancel-label`,
  *   `input-label` -- translated copy; the English strings are the defaults.
  */
@@ -57,12 +68,15 @@ export class HyperionCouponForm extends LitElement {
         appliedCoupon: { type: String, attribute: 'applied-coupon' },
         actionUrl: { type: String, attribute: 'action-url' },
         formKey: { type: String, attribute: 'form-key' },
+        attemptedCode: { type: String, attribute: 'attempted-code' },
+        errorMessage: { type: String, attribute: 'error-message' },
         headingLabel: { type: String, attribute: 'heading-label' },
         placeholderLabel: { type: String, attribute: 'placeholder-label' },
         applyLabel: { type: String, attribute: 'apply-label' },
         cancelLabel: { type: String, attribute: 'cancel-label' },
         inputLabel: { type: String, attribute: 'input-label' },
         _loading: { state: true },
+        _edited: { state: true },
     };
 
     // Light DOM -- Tailwind utility classes on the template need to resolve
@@ -79,12 +93,15 @@ export class HyperionCouponForm extends LitElement {
         this.appliedCoupon = '';
         this.actionUrl = '';
         this.formKey = '';
+        this.attemptedCode = '';
+        this.errorMessage = '';
         this.headingLabel = 'Apply Discount Code';
         this.placeholderLabel = 'Enter discount code';
         this.applyLabel = 'Apply Discount';
         this.cancelLabel = 'Cancel Coupon';
         this.inputLabel = 'Discount code';
         this._loading = false;
+        this._edited = false;
         this._extraChildren = null;
         this._onBefore = this._onBefore.bind(this);
         this._onAfter  = this._onAfter.bind(this);
@@ -116,6 +133,21 @@ export class HyperionCouponForm extends LitElement {
         if (form && window.htmx && typeof window.htmx.process === 'function') {
             window.htmx.process(form);
         }
+        // A refused code: the shopper continues in the field. The form sits
+        // below the cart lines, the page must not jump to it.
+        if (this._failedCode() !== '') {
+            form?.querySelector('input[name="coupon_code"]')?.focus({ preventScroll: true });
+        }
+    }
+
+    /** The refused code to show, empty while a coupon is applied. */
+    _failedCode() {
+        if ((this.appliedCoupon || '').trim() !== '') return '';
+        return (this.attemptedCode || '').trim();
+    }
+
+    _onCodeInput() {
+        this._edited = true;
     }
 
     updated() {
@@ -159,6 +191,9 @@ export class HyperionCouponForm extends LitElement {
     render() {
         const applied  = (this.appliedCoupon || '').trim();
         const isCancel = applied !== '';
+        const failedCode = this._failedCode();
+        const error = failedCode !== '' && !this._edited ? (this.errorMessage || '').trim() : '';
+        const invalid = failedCode !== '' && !this._edited;
         const submitLabel = isCancel ? this.cancelLabel : this.applyLabel;
         // shrink-0 + nowrap: the label never breaks ("Applica sconto" wrapped and pushed the row
         // 4px past a 375px viewport); the input gives way (min-w-0) instead.
@@ -176,7 +211,7 @@ export class HyperionCouponForm extends LitElement {
             <section id="hyperion-coupon-form"
                      class="bg-surface rounded-xl border border-subtle p-4"
                      aria-label=${this.headingLabel}>
-                <details class="group" ?open=${isCancel}>
+                <details class="group" ?open=${isCancel || failedCode !== ''}>
                     <summary class="flex cursor-pointer items-center justify-between select-none">
                         <span class="text-sm font-semibold text-primary hover:text-primary-hover transition-colors">
                             ${this.headingLabel}
@@ -200,11 +235,15 @@ export class HyperionCouponForm extends LitElement {
                         <div class="flex items-stretch gap-2 min-w-0">
                             <input type="text"
                                    name="coupon_code"
-                                   .value=${applied}
+                                   .value=${isCancel ? applied : failedCode}
                                    placeholder=${this.placeholderLabel}
                                    class="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface border border-subtle text-secondary
-                                          focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                                          focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+                                          aria-[invalid=true]:border-error"
                                    ?readonly=${isCancel}
+                                   aria-invalid=${invalid ? 'true' : nothing}
+                                   aria-describedby=${error !== '' ? 'hyperion-coupon-error' : nothing}
+                                   @input=${this._onCodeInput}
                                    aria-label=${this.inputLabel}>
                             <button type="submit"
                                     class=${btnClass}
@@ -212,6 +251,9 @@ export class HyperionCouponForm extends LitElement {
                                 ${this._loading ? html`<span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>` : submitLabel}
                             </button>
                         </div>
+                        ${error !== ''
+                            ? html`<p id="hyperion-coupon-error" class="text-sm text-error" data-hyperion-coupon-error>${error}</p>`
+                            : nothing}
                         <div data-coupon-extra-slot class="empty:hidden"></div>
                     </form>
                 </details>

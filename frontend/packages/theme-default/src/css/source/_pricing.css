@@ -138,6 +138,49 @@
     margin-right: 0.25rem;
 }
 
+/* --- Fixed Product Tax (Magento_Weee price adjustment) -------------
+   The display settings of the product page (`tax/weee/display`) and of
+   the listings (`tax/weee/display_list`) share one markup, appended to
+   the price container after the amount:
+
+     Including FPT only                       nothing, the amount holds it
+     Including FPT and FPT description        <span class="weee" data-label="...">
+     Excluding FPT. Including FPT description <span class="weee" data-label="...">
+       and final price                        + <span class="price-final" data-label="Final Price">
+     Excluding FPT                            nothing
+
+   With "both" as the tax display there are two `.weee` spans per tax
+   (incl. and excl. tax, told apart by their label). The label comes from
+   `data-label`. Each line sits under the amount, small and muted; the
+   final price keeps the weight of a price. The container itself carries
+   a `weee` class too, hence the descendant selectors. */
+.price-box .price-container {
+    flex-wrap: wrap;
+}
+
+.price-box .price-container .weee,
+.price-box .price-container .price-final {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: rgb(var(--color-muted));
+}
+
+.price-box .price-container .weee[data-label]:not([data-label=""])::before,
+.price-box .price-container .price-final[data-label]:not([data-label=""])::before {
+    content: attr(data-label) ": ";
+}
+
+.price-box .price-container .weee .price {
+    font-weight: 400;
+    color: inherit;
+}
+
+[data-hyperion-pdp-price] .price-box .price-container .weee,
+[data-hyperion-pdp-price] .price-box .price-container .price-final {
+    font-size: 0.875rem;
+}
+
 /* --- PDP-specific: bigger numerals, stacked when wrapped ---------- */
 [data-hyperion-pdp-price] .price-box {
     font-size: 1.5rem;

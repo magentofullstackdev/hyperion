@@ -89,7 +89,7 @@ describe('<address-form> name prefix / middle name / suffix', () => {
         const middlename = field(el, 'middlename') as HTMLInputElement;
         expect(middlename.tagName).toBe('INPUT');
         expect(middlename.required).toBe(false);
-        expect(middlename.autocomplete).toBe('additional-name');
+        expect(middlename.autocomplete).toBe('shipping additional-name');
 
         const suffix = field(el, 'suffix') as HTMLSelectElement;
         expect(suffix.tagName).toBe('SELECT');
@@ -101,7 +101,7 @@ describe('<address-form> name prefix / middle name / suffix', () => {
         const el = await mount(BASE_ADDRESS);
         const prefix = field(el, 'prefix') as HTMLInputElement;
         expect(prefix.tagName).toBe('INPUT');
-        expect(prefix.autocomplete).toBe('honorific-prefix');
+        expect(prefix.autocomplete).toBe('shipping honorific-prefix');
         expect(prefix.required).toBe(false);
         const suffix = field(el, 'suffix') as HTMLInputElement;
         expect(suffix.tagName).toBe('INPUT');
@@ -120,7 +120,7 @@ describe('<address-form> name prefix / middle name / suffix', () => {
         await el.updateComplete;
         // Any field edit re-evaluates completeness.
         const city = field(el, 'city') as HTMLInputElement;
-        city.value = 'Calder';
+        city.value = 'Calder Heights';
         city.dispatchEvent(new Event('input', { bubbles: true }));
         expect(valid.at(-1)).toBe(false);
 
@@ -259,12 +259,12 @@ describe('<address-form> postcode errors and the "show what is missing" request'
 
     function errorText(el: Element, name: string): string {
         const input = field(el, name);
-        return input?.parentElement?.querySelector(`#${input.id}-err`)?.textContent?.trim() ?? '';
+        return input?.parentElement?.querySelector(`#${input.id}-msg[data-tone="error"]`)?.textContent?.trim() ?? '';
     }
 
     function warningText(el: Element, name: string): string {
         const input = field(el, name);
-        return input?.parentElement?.querySelector(`#${input.id}-warn`)?.textContent?.trim() ?? '';
+        return input?.parentElement?.querySelector(`#${input.id}-msg[data-tone="warning"]`)?.textContent?.trim() ?? '';
     }
 
     it('a postcode outside the country patterns is a warning after blur: described, not invalid, the address stays valid', async () => {
@@ -291,7 +291,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
         expect(postcode.getAttribute('aria-invalid')).toBe('false');
         expect(el.querySelector('[aria-invalid="true"]')).toBeNull();
         const describedBy = postcode.getAttribute('aria-describedby') ?? '';
-        const warning = el.querySelector(`#${postcode.id}-warn`) as HTMLElement;
+        const warning = el.querySelector(`#${postcode.id}-msg`) as HTMLElement;
         expect(describedBy.split(' ')).toContain(warning.id);
         expect(warning.getAttribute('aria-live')).toBeNull();
         expect(warning.getAttribute('role')).toBeNull();
@@ -315,7 +315,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
         expect(errorText(el, 'postcode')).toBe(t('Hyperion_Checkout::validation_required'));
         expect(warningText(el, 'postcode')).toBe('');
         expect(postcode.getAttribute('aria-invalid')).toBe('true');
-        expect(postcode.getAttribute('aria-describedby')).toBe(`${postcode.id}-err`);
+        expect(postcode.getAttribute('aria-describedby')).toBe(`${postcode.id}-msg`);
         expect(valid.at(-1)).toBe(false);
 
         postcode.value = '49628';
@@ -324,7 +324,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
         expect(errorText(el, 'postcode')).toBe('');
         expect(warningText(el, 'postcode')).toBe('');
         expect(postcode.getAttribute('aria-invalid')).toBe('false');
-        expect(postcode.getAttribute('aria-describedby')).toBe('');
+        expect(postcode.hasAttribute('aria-describedby')).toBe(false);
         expect(valid.at(-1)).toBe(true);
     });
 
@@ -367,5 +367,310 @@ describe('<address-form> postcode errors and the "show what is missing" request'
         const el = await mount();
         expect(errorText(el, 'firstname')).toBe('');
         expect(el.querySelector('[aria-invalid="true"]')).toBeNull();
+    });
+});
+
+const DIRECTORY = {
+    US: { name: 'United States', is_region_required: true, regions: { 33: { code: 'MI', name: 'Michigan' }, 12: { code: 'CA', name: 'California' } } },
+    DE: { name: 'Germany', is_region_required: false, regions: { 82: { code: 'BER', name: 'Berlin' } } },
+    GB: { name: 'United Kingdom', is_region_required: false },
+    IE: { name: 'Ireland', is_region_required: false },
+    FR: { name: 'France', is_region_required: false, is_region_visible: false },
+};
+
+function withDirectory(extra: Record<string, unknown> = {}): CheckoutConfig {
+    return { ...(guestFixture as unknown as CheckoutConfig), directoryData: DIRECTORY, ...extra } as unknown as CheckoutConfig;
+}
+
+describe('<address-form> order, ids and attributes', () => {
+    beforeEach(() => {
+        setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
+        setCheckoutConfig(withDirectory());
+        resetValidationRequestsForTests();
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    function names(el: Element): string[] {
+        return Array.from(el.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input:not([type="checkbox"]), select'))
+            .map((control) => control.name);
+    }
+
+    async function mountMode(mode: 'shipping' | 'billing', value: Address | null = null): Promise<AddressForm> {
+        const el = document.createElement('address-form') as AddressForm;
+        el.mode = mode;
+        if (value) el.value = value;
+        document.body.appendChild(el);
+        await settleForm(el);
+        return el;
+    }
+
+    async function settleForm(el: AddressForm): Promise<void> {
+        for (let i = 0; i < 3; i += 1) {
+            await el.updateComplete;
+            await Promise.all(
+                Array.from(el.querySelectorAll('hc-text-input, hc-select-input, hc-checkbox')).map(
+                    (child) => (child as unknown as { updateComplete: Promise<unknown> }).updateComplete
+                )
+            );
+        }
+    }
+
+    function messageOf(el: Element, name: string): string {
+        const control = field(el, name);
+        return control?.parentElement?.querySelector(`#${control.id}-msg`)?.textContent?.trim() ?? '';
+    }
+
+    it('puts the country before the street, then postcode, city and region', async () => {
+        const el = await mountMode('shipping', BASE_ADDRESS);
+        const order = names(el);
+        const at = (name: string): number => order.indexOf(name);
+        expect(at('country_id')).toBeGreaterThan(at('lastname'));
+        expect(at('country_id')).toBeLessThan(at('street_0'));
+        expect(at('street_0')).toBeLessThan(at('postcode'));
+        expect(at('postcode')).toBeLessThan(at('city'));
+        expect(at('city')).toBeLessThan(at('region_id'));
+        expect(at('region_id')).toBeLessThan(at('telephone'));
+    });
+
+    it('mounting the shipping and the billing form together gives no duplicate id', async () => {
+        await mountMode('shipping', BASE_ADDRESS);
+        await mountMode('billing', BASE_ADDRESS);
+        const ids = Array.from(document.querySelectorAll('[id]')).map((node) => node.id);
+        expect(ids.length).toBeGreaterThan(20);
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(document.getElementById('hc-shipping-city')).not.toBeNull();
+        expect(document.getElementById('hc-billing-city')).not.toBeNull();
+        for (const label of Array.from(document.querySelectorAll('label[for]'))) {
+            expect(document.getElementById(label.getAttribute('for') ?? '')).not.toBeNull();
+        }
+    });
+
+    it('carries the section in every autocomplete token and omits empty attributes', async () => {
+        const shipping = await mountMode('shipping', BASE_ADDRESS);
+        const billing = await mountMode('billing', BASE_ADDRESS);
+        expect(field(shipping, 'firstname')?.getAttribute('autocomplete')).toBe('shipping given-name');
+        expect(field(shipping, 'street_0')?.getAttribute('autocomplete')).toBe('shipping address-line1');
+        expect(field(shipping, 'street_1')?.getAttribute('autocomplete')).toBe('shipping address-line2');
+        expect(field(shipping, 'country_id')?.getAttribute('autocomplete')).toBe('shipping country');
+        expect(field(shipping, 'region_id')?.getAttribute('autocomplete')).toBe('shipping address-level1');
+        expect(field(billing, 'postcode')?.getAttribute('autocomplete')).toBe('billing postal-code');
+        expect(field(billing, 'telephone')?.getAttribute('autocomplete')).toBe('billing tel');
+
+        const city = field(shipping, 'city')!;
+        expect(city.hasAttribute('inputmode')).toBe(false);
+        expect(city.hasAttribute('placeholder')).toBe(false);
+        expect(city.getAttribute('autocapitalize')).toBe('words');
+        expect(city.getAttribute('enterkeyhint')).toBe('next');
+        expect(field(shipping, 'firstname')?.getAttribute('autocapitalize')).toBe('words');
+        expect(field(shipping, 'postcode')?.getAttribute('spellcheck')).toBe('false');
+        expect(field(shipping, 'street_0')?.hasAttribute('spellcheck')).toBe(false);
+        // The telephone is the last text field of the default field set.
+        expect(field(shipping, 'telephone')?.hasAttribute('enterkeyhint')).toBe(false);
+    });
+
+    it('shows the street error after the first street line lost the focus', async () => {
+        const el = await mountMode('shipping');
+        const street = field(el, 'street_0') as HTMLInputElement;
+        expect(messageOf(el, 'street_0')).toBe('');
+        street.dispatchEvent(new Event('blur', { bubbles: true }));
+        await settleForm(el);
+        expect(messageOf(el, 'street_0')).toBe(t('Hyperion_Checkout::validation_required'));
+        expect(street.getAttribute('aria-invalid')).toBe('true');
+        expect(street.getAttribute('aria-describedby')).toBe(`${street.id}-msg`);
+    });
+
+    it('a required region shows its error after the select lost the focus, wired to the control', async () => {
+        const el = await mountMode('shipping', { ...BASE_ADDRESS, region_id: null });
+        const region = field(el, 'region_id') as HTMLSelectElement;
+        expect(region.required).toBe(true);
+        expect(messageOf(el, 'region_id')).toBe('');
+        expect(region.hasAttribute('aria-describedby')).toBe(false);
+
+        region.dispatchEvent(new Event('blur', { bubbles: true }));
+        await settleForm(el);
+        expect(messageOf(el, 'region_id')).toBe(t('Hyperion_Checkout::validation_required'));
+        expect(region.getAttribute('aria-invalid')).toBe('true');
+        expect(region.getAttribute('aria-describedby')).toBe(`${region.id}-msg`);
+        expect(document.getElementById(`${region.id}-msg`)).not.toBeNull();
+    });
+
+    it('a country that lists regions without requiring one shows no asterisk and no error', async () => {
+        const el = await mountMode('shipping', { ...BASE_ADDRESS, country_id: 'DE', region_id: null, postcode: '10117' });
+        const valid: boolean[] = [];
+        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+
+        const region = field(el, 'region_id') as HTMLSelectElement;
+        expect(region.tagName).toBe('SELECT');
+        expect(region.required).toBe(false);
+        expect(region.closest('hc-select-input')?.querySelector('label')?.textContent).not.toContain('*');
+
+        requestValidation();
+        region.dispatchEvent(new Event('blur', { bubbles: true }));
+        await settleForm(el);
+        expect(messageOf(el, 'region_id')).toBe('');
+        expect(region.getAttribute('aria-invalid')).toBe('false');
+
+        const city = field(el, 'city') as HTMLInputElement;
+        city.value = 'Berlin';
+        city.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(valid.at(-1)).toBe(true);
+    });
+
+    it('the fax field shows its required error', async () => {
+        setCheckoutConfig(withDirectory({ faxConfig: 'req' }));
+        const el = await mountMode('shipping', BASE_ADDRESS);
+        const fax = field(el, 'fax') as HTMLInputElement;
+        fax.dispatchEvent(new Event('blur', { bubbles: true }));
+        await settleForm(el);
+        expect(messageOf(el, 'fax')).toBe(t('Hyperion_Checkout::validation_required'));
+        expect(fax.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    it('lists the top destinations first, then a divider, then every country, with one option selected', async () => {
+        const base = guestFixture as unknown as CheckoutConfig;
+        setCheckoutConfig(withDirectory({ hyperion: { ...base.hyperion, topDestinations: ['US', 'ZZ'] } }));
+        const el = await mountMode('shipping', BASE_ADDRESS);
+        const country = field(el, 'country_id') as HTMLSelectElement;
+        const options = Array.from(country.options);
+        expect(options[0]?.value).toBe('US');
+        expect(options[1]?.disabled).toBe(true);
+        expect(options.filter((o) => o.value === 'US').length).toBe(2);
+        expect(country.selectedIndex).toBe(0);
+        expect(country.value).toBe('US');
+
+        setCheckoutConfig(withDirectory());
+        document.body.innerHTML = '';
+        const plain = await mountMode('shipping', BASE_ADDRESS);
+        const plainOptions = Array.from((field(plain, 'country_id') as HTMLSelectElement).options);
+        expect(plainOptions.some((o) => o.disabled)).toBe(false);
+    });
+});
+
+describe('<address-form> country change and the region', () => {
+    beforeEach(() => {
+        setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
+        setCheckoutConfig(withDirectory());
+        resetValidationRequestsForTests();
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    async function settleForm(el: AddressForm): Promise<void> {
+        for (let i = 0; i < 3; i += 1) {
+            await el.updateComplete;
+            await Promise.all(
+                Array.from(el.querySelectorAll('hc-text-input, hc-select-input')).map(
+                    (child) => (child as unknown as { updateComplete: Promise<unknown> }).updateComplete
+                )
+            );
+        }
+    }
+
+    async function mountListening(value: Address): Promise<{ el: AddressForm; emitted: Address[] }> {
+        const el = document.createElement('address-form') as AddressForm;
+        const emitted: Address[] = [];
+        el.value = { ...value, save_in_address_book: false };
+        document.body.appendChild(el);
+        await settleForm(el);
+        el.addEventListener('address-change', (e) => emitted.push((e as CustomEvent<Address>).detail));
+        return { el, emitted };
+    }
+
+    async function pickCountry(el: AddressForm, id: string): Promise<void> {
+        const country = field(el, 'country_id') as HTMLSelectElement;
+        country.value = id;
+        country.dispatchEvent(new Event('change', { bubbles: true }));
+        await settleForm(el);
+    }
+
+    it('keeps a typed region when the new country has no region list either', async () => {
+        const { el, emitted } = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: 'Greater London' as never, postcode: 'SW1A 1AA' });
+        await pickCountry(el, 'IE');
+        expect(emitted.at(-1)?.country_id).toBe('IE');
+        expect(emitted.at(-1)?.region).toBe('Greater London');
+        expect(emitted.at(-1)?.postcode).toBe('SW1A 1AA');
+        expect((field(el, 'region') as HTMLInputElement).value).toBe('Greater London');
+    });
+
+    it('matches a typed region by name or by code against the list of the new country', async () => {
+        const byName = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: 'berlin' as never });
+        await pickCountry(byName.el, 'DE');
+        expect(byName.emitted.at(-1)?.region_id).toBe('82');
+        expect(byName.emitted.at(-1)?.region).toMatchObject({ region: 'Berlin', region_code: 'BER' });
+        expect((field(byName.el, 'region_id') as HTMLSelectElement).value).toBe('82');
+
+        document.body.innerHTML = '';
+        const byCode = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: 'MI' as never });
+        await pickCountry(byCode.el, 'US');
+        expect(byCode.emitted.at(-1)?.region_id).toBe('33');
+    });
+
+    it('drops a typed region the new list does not know and a region picked from the previous list', async () => {
+        const typed = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: 'Greater London' as never });
+        await pickCountry(typed.el, 'US');
+        expect(typed.emitted.at(-1)?.region_id).toBeNull();
+        expect(typed.emitted.at(-1)?.region).toBeNull();
+
+        document.body.innerHTML = '';
+        const picked = await mountListening({ ...BASE_ADDRESS, region: { region: 'Michigan', region_code: 'MI', region_id: 33 } });
+        await pickCountry(picked.el, 'GB');
+        expect(picked.emitted.at(-1)?.region_id).toBeNull();
+        expect(picked.emitted.at(-1)?.region).toBeNull();
+        expect((field(picked.el, 'region') as HTMLInputElement).value).toBe('');
+    });
+
+    it('keeps the region as typed, spaces included, while the shopper types it', async () => {
+        const { el, emitted } = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: null });
+        const region = field(el, 'region') as HTMLInputElement;
+        for (const text of ['Greater', 'Greater ', 'Greater L']) {
+            region.value = text;
+            region.dispatchEvent(new Event('input', { bubbles: true }));
+            await settleForm(el);
+            expect(region.value).toBe(text);
+        }
+        expect(emitted.at(-1)?.region).toBe('Greater L');
+    });
+
+    it('keeps no region for a country that shows none, and matches the region object of an address from a country without a list', async () => {
+        const hidden = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: 'Greater London' as never });
+        await pickCountry(hidden.el, 'FR');
+        expect(hidden.emitted.at(-1)?.region).toBeNull();
+        expect(hidden.emitted.at(-1)?.region_id).toBeNull();
+
+        document.body.innerHTML = '';
+        const saved = await mountListening({ ...BASE_ADDRESS, country_id: 'GB', region_id: null, region: { region: 'Berlin' } });
+        await pickCountry(saved.el, 'DE');
+        expect(saved.emitted.at(-1)?.region_id).toBe('82');
+    });
+
+    it('a change event that carries the selected country changes nothing', async () => {
+        const { el, emitted } = await mountListening({ ...BASE_ADDRESS, region: { region: 'Michigan', region_code: 'MI', region_id: 33 } });
+        const country = field(el, 'country_id') as HTMLSelectElement;
+        country.dispatchEvent(new Event('change', { bubbles: true }));
+        await settleForm(el);
+        expect(emitted).toEqual([]);
+        expect((field(el, 'region_id') as HTMLSelectElement).value).toBe('33');
+    });
+
+    it('keeps one place for the region as a select, a text field or hidden', async () => {
+        const { el } = await mountListening(BASE_ADDRESS);
+        const row = (): Element => field(el, 'city')!.closest('.hc-field-row')!;
+        expect(row().children.length).toBe(3);
+        expect(row().querySelector('select[name="region_id"]')).not.toBeNull();
+
+        await pickCountry(el, 'GB');
+        expect(row().children.length).toBe(3);
+        expect(row().querySelector('input[name="region"]')).not.toBeNull();
+
+        await pickCountry(el, 'FR');
+        expect(row().children.length).toBe(3);
+        expect(field(el, 'region')).toBeNull();
+        expect(field(el, 'region_id')).toBeNull();
+        expect(row().querySelector('[data-hyperion-region-placeholder]')?.getAttribute('aria-hidden')).toBe('true');
     });
 });

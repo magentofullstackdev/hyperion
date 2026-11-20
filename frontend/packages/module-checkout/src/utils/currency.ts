@@ -11,7 +11,7 @@
  * doesn't always line up with browser locales, and admin can
  * customize the pattern in `currency/options/format`.
  *
- * Magento serialises money as DECIMAL STRINGS (`"52.0000"`); we parse
+ * Magento serializes money as DECIMAL STRINGS (`"52.0000"`); we parse
  * via `Number(value)`. Inputs that aren't finite parse to NaN and
  * format as the pattern with empty value -- a visible bug signal
  * rather than a silent `"$NaN"`.
@@ -27,7 +27,10 @@ export function formatMoney(
         return format.pattern.replace('%s', '');
     }
 
-    const precision = Math.max(0, format.requiredPrecision ?? format.precision ?? 2);
+    // `integerRequired` marks a currency shown without decimals.
+    const precision = format.integerRequired
+        ? 0
+        : Math.max(0, format.requiredPrecision ?? format.precision ?? 2);
     const fixed = Math.abs(n).toFixed(precision);
 
     const [intPart, fracPart = ''] = fixed.split('.');

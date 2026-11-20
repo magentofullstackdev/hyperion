@@ -32,6 +32,9 @@ import '../ui/text-input.js';
 
 const PURCHASE_ORDER_CODE = 'purchaseorder';
 
+/** The methods this renderer handles. */
+export const OFFLINE_RENDERER_CODES: readonly string[] = ['checkmo', 'banktransfer', 'cashondelivery', 'free', PURCHASE_ORDER_CODE];
+
 /** The purchase order number as typed so far, trimmed. */
 function readPoNumber(): string {
     return String(getStore().paymentMethodData.get()[PURCHASE_ORDER_CODE]?.['po_number'] ?? '').trim();
@@ -138,7 +141,7 @@ if (!customElements.get('payment-offline')) {
 // registered even though it's not in the safe-for-generic set: its
 // renderer requires a PO number, so the registry hit is required.
 export function registerOfflineRenderers(): void {
-    for (const code of ['checkmo', 'banktransfer', 'cashondelivery', 'free', PURCHASE_ORDER_CODE]) {
+    for (const code of OFFLINE_RENDERER_CODES) {
         registerPaymentRenderer({
             code,
             component: 'payment-offline',

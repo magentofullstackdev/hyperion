@@ -2,21 +2,35 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Flow actions -- the real API orchestrations.
+ * Flow actions: the orchestration of every request of the checkout.
  *
- * These wrap `src/api/*` calls, update store slices on success, and
- * set `globalError` / `fieldErrors` on failure. Components call
- * these via `flowActions()` rather than importing the API modules
- * directly, so the critical path stays greppable.
+ * Every request that changes the quote goes through one write queue
+ * (`write-queue.ts`): shipping information, the billing address of a
+ * virtual quote, the payment method, coupons and gift messages. The rates
+ * estimate is a read and stays outside it; its answer is applied only when
+ * the address still has the rate key the estimate was asked for.
+ *
+ * An edit of a form marks it as ahead of the quote (`shippingDirty`,
+ * `billingDirty`) and is saved by whichever comes first: the form losing
+ * the focus, a pause in the typing, or Place Order, which flushes the queue
+ * (`prepareOrder()`), lets the payment renderer do its step and then sends
+ * the order with the queue closed (`submitOrder()`).
+ *
+ * Components call these through `flowActions()` rather than importing the
+ * API modules, so the critical path stays greppable.
  */
 import type { Address, AddressRequestPayload } from '../types/address.js';
-import type { PaymentInformationRequest, PaymentMethodPayload } from '../types/payment.js';
+import type { PaymentInformationRequest, PaymentMethodConfig, PaymentMethodPayload } from '../types/payment.js';
 import type {
     EstimateShippingMethodsRequest,
+    PaymentDetails,
     SelectedShippingMethod,
     ShippingInformationRequest,
     ShippingMethod,
 } from '../types/shipping.js';
+import type { ShippingPreselect } from '../types/config.js';
+import type { SectionId, SectionStatusSource } from '../types/section.js';
+import type { Totals } from '../types/totals.js';
 import {
     estimateCustomerShippingMethods,
     estimateGuestShippingMethods,
@@ -39,17 +53,36 @@ import {
     setCustomerPaymentInformation,
     setGuestPaymentInformation,
 } from '../api/payment.js';
-import { getCustomerCartState, getGuestCartState } from '../api/cart.js';
-import { isAbortError, MagentoApiError, NetworkError, RequestTimeoutError } from '../api/client.js';
+import { saveCustomerGiftMessage, saveGuestGiftMessage, type GiftMessagePayload } from '../api/gift-message.js';
+import { isAbortError } from '../api/client.js';
+import { classifyError, type CheckoutError, type ErrorContext } from '../api/error-kinds.js';
+import { getCheckoutConfig, peekCheckoutConfig } from '../bootstrap-config.js';
+import { discardDrafts } from './drafts.js';
+import { sendWithAntiAbuse } from './anti-abuse.js';
+import { captchaError } from './captcha-state.js';
 import { getStore } from './index.js';
+import { placeOrderBlocker, placeOrderBlockerMessage, checkoutUpdatingMessage, type PlaceOrderBlocker } from './place-order-hint.js';
+import { DEFAULT_RATE_FIELDS, isEstimable, mergeRefreshedRates, pickShippingMethod, rateKey } from './rate-key.js';
+import { handleQuoteGone, handleSessionExpired, recoverFromOrderFailure } from './recovery.js';
+import { clearFailure, reportFailure } from './section-status.js';
+import { createSelectors } from './selectors.js';
+import {
+    createWriteQueue,
+    WriteNotNeeded,
+    type QuoteWrite,
+    type QuoteWriteInfo,
+    type WriteOutcome,
+    type WriteQueue,
+} from './write-queue.js';
 import { t } from '../utils/i18n.js';
 import { isAddressComplete } from '../utils/address-validation.js';
 import { debounce } from '../utils/debounce.js';
-import { executeRecaptcha } from '../components/hyperion-recaptcha.js';
-import { isSafeForGeneric } from '../components/payment-renderers/registry.js';
-import type { PaymentMethodConfig } from '../types/payment.js';
-import type { PaymentDetails } from '../types/shipping.js';
-import type { Totals } from '../types/totals.js';
+import { minimumOrderError } from '../utils/minimum-order.js';
+import { navigateTo } from '../utils/navigate.js';
+import { FREE_PAYMENT_METHOD, isZeroAmount, offeredPaymentMethods } from '../utils/payment-offer.js';
+import { decideRedirectTarget } from '../utils/safe-redirect.js';
+import { EMAIL_SHAPE } from '../validation/rules.js';
+import { getPaymentRenderer, isSafeForGeneric } from '../components/payment-renderers/registry.js';
 
 /**
  * The quote address Magento receives, built from the checkout's address
@@ -57,16 +90,17 @@ import type { Totals } from '../types/totals.js';
  * the current customer is identified by `customer_address_id`, so core can
  * recognize it instead of treating it as new data; a new address carries
  * `save_in_address_book` as 1 or 0 (what the checkbox shows, never a guess).
+ * An address that is only enough for an estimate travels with what it has.
  */
 function addressToRequestPayload(addr: Address): AddressRequestPayload {
-    const street = addr.street.filter((s) => s.trim().length > 0);
+    const street = (addr.street ?? []).filter((s) => typeof s === 'string' && s.trim().length > 0);
     const out: AddressRequestPayload = {
-        country_id: addr.country_id,
+        country_id: addr.country_id ?? '',
         street,
         postcode: addr.postcode ?? '',
-        city: addr.city,
-        firstname: addr.firstname,
-        lastname: addr.lastname,
+        city: addr.city ?? '',
+        firstname: addr.firstname ?? '',
+        lastname: addr.lastname ?? '',
     };
     if (typeof addr.telephone === 'string' && addr.telephone.trim() !== '') {
         out.telephone = addr.telephone;
@@ -80,6 +114,10 @@ function addressToRequestPayload(addr: Address): AddressRequestPayload {
     //   2. Free-text mode (no regions) -> `addr.region` is a bare string
     //      typed by the user. Magento accepts it as `region` only and
     //      derives nothing else server-side.
+    //   3. No region, or only a typed one, on an address typed in the
+    //      checkout -> the missing parts travel as explicit empty values.
+    //      Core merges the request over the quote address, so a key left
+    //      out would keep the region of the country chosen before.
     if (addr.region_id != null && addr.region_id !== '') {
         out.region_id = Number(addr.region_id);
     }
@@ -109,12 +147,14 @@ function addressToRequestPayload(addr: Address): AddressRequestPayload {
         out.customer_address_id = savedId;
     } else {
         out.save_in_address_book = addr.save_in_address_book === true ? 1 : 0;
+        if (out.region_id === undefined) {
+            out.region_id = 0;
+            out.region ??= '';
+            out.region_code = '';
+        }
     }
     return out;
 }
-
-/** The shape `selectors.emailValid` accepts; an email that fails it never travels. */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isSameMethod(a: SelectedShippingMethod, b: SelectedShippingMethod): boolean {
     return a.carrier_code === b.carrier_code && a.method_code === b.method_code;
@@ -133,93 +173,221 @@ function isUsableRate(rate: ShippingMethod): boolean {
     return rate.available !== false && Boolean(rate.method_code);
 }
 
-/** How long the shipping form must stay quiet before its address is estimated. */
-const SHIPPING_ESTIMATE_DELAY_MS = 500;
+/** How long the rate fields of the shipping form must stay quiet before the rates are asked. */
+export const SHIPPING_ESTIMATE_DELAY_MS = 300;
+/** How long a form that is ahead of the quote must stay quiet before it is saved. */
+export const DIRTY_FORM_FLUSH_DELAY_MS = 1500;
+/** How long the billing form must stay quiet before its address is saved. */
+export const BILLING_SYNC_DELAY_MS = 500;
+/** How long the payment method selection must stay unchanged before it is saved. */
+export const PAYMENT_METHOD_SAVE_DELAY_MS = 250;
+/** How long a refused background request waits when the server named no delay. */
+export const RATE_LIMIT_RETRY_DELAY_MS = 5000;
 
-/** What reading the quote says about an order request that lost its answer. */
-type OrderOutcome = 'placed' | 'not-placed' | 'unknown';
+/** The failures a connection that came back can cure. */
+const RECONNECT_KINDS: ReadonlySet<string> = new Set(['offline', 'network', 'timeout']);
 
 /**
- * What `placeOrder()` resolves with: the order id, `'placed-unconfirmed'`
- * when the answer was lost and the quote shows the order exists, or null
- * when no order was placed (the reason is in `globalError`).
+ * What `submitOrder()` and `placeOrder()` resolve with: the order id,
+ * `'placed-unconfirmed'` when the answer was lost and the quote shows the
+ * order exists, or null when no order was placed: a refusal of the server
+ * is in `globalError`, a request that got no answer is resolved by reading
+ * the quote and shows in the `order` section.
  */
 export type PlaceOrderOutcome = number | 'placed-unconfirmed' | null;
 
+export interface PrepareOrderOptions {
+    /** The caller is the selected payment renderer itself: its own readiness is not asked. */
+    skipPaymentReady?: boolean;
+}
+
 /**
- * The estimate, shipping save or billing sync currently running, for
- * `settleShipping()` to wait on. Each run registers itself and clears the
- * slot when it is still the current one.
+ * Why `prepareOrder()` did not take the order further: a piece of the
+ * checkout is missing (the codes of `placeOrderBlocker()`), an order
+ * attempt is already under way (`busy`), a save the order needs failed
+ * (`write-failed`, the message is where the failure was reported), or an
+ * earlier attempt is still of unknown outcome (`outcome-unknown`).
  */
-let pendingShipping: Promise<void> | null = null;
-let pendingBilling: Promise<void> | null = null;
+export type PrepareOrderBlockReason = PlaceOrderBlocker | 'busy' | 'write-failed' | 'outcome-unknown';
+
+export type PrepareOrderResult =
+    /** The latch is taken, every pending save is on the quote and the gate is open. */
+    | { status: 'ready' }
+    | { status: 'blocked'; reason: PrepareOrderBlockReason };
+
+/** What a coupon write answers: whether core took the change, and the rates asked right after it. */
+interface CouponResult {
+    ok: boolean;
+    rates: readonly ShippingMethod[] | null;
+}
+
+/** What a shipping-information request carried. */
+interface ShippingSnapshot {
+    shipping: Address;
+    /** The separate billing address sent with it, null when none was (same as shipping, or incomplete). */
+    billing: Address | null;
+    sameAsShipping: boolean;
+    method: SelectedShippingMethod;
+}
 
 export interface FlowActions {
+    /** The write queue itself, for the modules that enqueue, flush, close or reopen it. */
+    queue: WriteQueue;
+    /** Ask the rates of the shipping address now; resolves once the save it leads to is answered. */
     estimateShipping: () => Promise<void>;
     /**
-     * The shipping address was edited: the quote no longer matches the
-     * form (`shippingDirty`, at once) and the rates are estimated once the
-     * typing pauses.
+     * The shipping address was edited: the quote no longer matches the form
+     * (`shippingDirty`, at once). The rates are asked again once the typing
+     * pauses, and only when the edit changed a field the rates depend on.
      */
     scheduleShippingEstimate: () => void;
-    /** The shipping address was replaced in one step (a saved address): estimate it now. */
+    /**
+     * The shipping address was replaced in one step (a saved address, another
+     * country): rates or save start now instead of after a pause.
+     */
     estimateShippingNow: () => Promise<void>;
     /**
-     * Run a scheduled estimate now and wait until no estimate, shipping save
-     * or billing sync is in flight. When the form is ahead of the quote and
-     * nothing is running (the last attempt failed), the estimate and save
-     * are sent once more first.
+     * Read the rates again behind a list already shown and confirmed,
+     * without closing Place Order and without showing a failure.
      */
-    settleShipping: () => Promise<void>;
+    refreshShippingRatesSilently: () => Promise<void>;
+    /** Save the shipping form now when it is ahead of the quote and can be saved. */
+    flushShippingForm: () => void;
+    /** The shopper picked a rate: select it, show the expected totals and save it. */
+    selectShippingMethod: (method: SelectedShippingMethod) => Promise<void>;
     saveShippingAndEstimateTotals: () => Promise<void>;
     applyCoupon: (code: string) => Promise<boolean>;
     removeCoupon: () => Promise<boolean>;
-    placeOrder: () => Promise<PlaceOrderOutcome>;
+    /** The shopper selected a payment method: save it on the quote once the selection settles. */
+    savePaymentMethod: () => void;
     /**
-     * Save the selected payment method and billing address on the quote
-     * without placing the order. False when it failed (the message is in
-     * `globalError`).
+     * Save the selected payment method, its data and the billing address on
+     * the quote without placing the order. False when it failed (the
+     * message is in `globalError`).
      */
     savePaymentInformation: () => Promise<boolean>;
     /**
-     * Re-read the payment methods and totals of the quote as it is now and
-     * reconcile the selected method with the list (coupon applied or removed,
-     * billing address changed).
+     * Re-read the payment methods and totals of the quote once no write
+     * runs or waits, and reconcile the selected method with the list.
      */
     refreshPaymentInformation: () => Promise<void>;
     /**
-     * Put the billing address entered on its own (virtual quote, or "same as
-     * shipping" unchecked) on the quote and refresh the payment methods and
-     * totals for it. No-op when the billing address is the shipping one or
-     * incomplete. Place Order waits for it (`billingSynced`).
+     * Put the billing address on the quote now: with the shipping
+     * information on a physical quote (also after "same as shipping" was
+     * ticked again), with its own request on a virtual one. Resolves once
+     * the queue is idle.
      */
     syncBillingAddress: () => Promise<void>;
+    /** The billing form was edited: save it once the typing pauses. */
+    scheduleBillingSync: () => void;
     /**
      * The billing address (or the "same as shipping" choice) was edited:
-     * the quote no longer matches it. Any sync still in flight is
-     * superseded at once, so its late answer cannot mark the new address as
-     * synced during the debounce window before the next sync starts.
+     * the quote no longer matches it.
      */
     invalidateBillingSync: () => void;
+    /** Save one gift message: `null` is the order, a number a quote item. */
+    saveGiftMessage: (target: number | null, message: GiftMessagePayload) => Promise<WriteOutcome<boolean>>;
+    /**
+     * The connection is back: send again the background requests that
+     * failed for want of one and save what the forms still owe the quote.
+     */
+    resumeAfterReconnect: () => void;
+    /**
+     * First half of Place Order: take the latch, put every pending edit on
+     * the quote and evaluate the gate on what the server confirmed.
+     */
+    prepareOrder: (options?: PrepareOrderOptions) => Promise<PrepareOrderResult>;
+    /** Second half, after `prepareOrder()` answered `ready`: send the order with the queue closed. */
+    submitOrder: () => Promise<PlaceOrderOutcome>;
+    /** Give back the latch of a prepared order that will not be sent (the payment step was abandoned). */
+    cancelOrder: () => void;
+    /** `prepareOrder()` then `submitOrder()`, for callers with no step between the two. */
+    placeOrder: () => Promise<PlaceOrderOutcome>;
+    /**
+     * An order request sent outside these actions (a wallet's own
+     * endpoint) got no answer: let the quote say what became of it, exactly
+     * as for the checkout's own order request. `'placed-unconfirmed'`:
+     * leave for the success page; null: no order (the latch is released
+     * and the `order` section says so) or not known yet (latched, "Check
+     * again" in the `order` section). `cause`: `unavailable` for a server
+     * error status, behind which the request may still be at work (the
+     * quote is then read several times before it counts as "no order").
+     */
+    resolveLostOrder: (cause?: 'network' | 'unavailable') => Promise<PlaceOrderOutcome>;
 }
 
 export function createFlowActions(): FlowActions {
     const store = getStore();
+    const selectors = createSelectors(store);
     let rateController: AbortController | null = null;
-    // Every estimate and every save gets a generation number. A response
-    // (or failure, or the `finally` reset of a loading flag) is applied only
-    // when its generation is still the latest one: an older request that
-    // resolves after a newer one started must not touch the store.
+    // Every estimate gets a generation number: the answer, the failure and
+    // the reset of the loading flag of an estimate that a newer one replaced
+    // never touch the store.
     let estimateGeneration = 0;
-    let saveGeneration = 0;
-    let billingGeneration = 0;
-    let paymentInfoGeneration = 0;
-
-    pendingShipping = null;
-    pendingBilling = null;
+    /** The rate key the rates were last asked for; null when they must be asked again. */
+    let estimatedKey: string | null = null;
+    let estimateInFlight: Promise<void> | null = null;
+    /** A shipping save sent ahead of the rates was refused: send it again once they are known. */
+    let resendAfterEstimate = false;
+    let shippingTicket = 0;
+    /** The shipping write that waits in the queue; it will read the form when it starts. */
+    let waitingShippingTicket: number | null = null;
+    let runningShipping: ShippingSnapshot | null = null;
+    /** The shopper selected a payment method the quote does not carry yet. */
+    let paymentSaveOwed = false;
+    /** `prepareOrder()` is flushing: saves and estimates are allowed under the latch. */
+    let preparing = false;
+    /** `prepareOrder()` answered `ready` and the order was not sent yet. */
+    let prepared = false;
+    let submitting = false;
+    /** The last `prepareOrder()` gave up because a save failed (the failure is on screen). */
+    let prepareFailed = false;
+    /** How many failed requests were shown to the shopper so far. */
+    let reportedFailures = 0;
+    /** The flush may ask again for rates whose last estimate failed (once per press). */
+    let retryRatesOnFlush = true;
+    /** The request contexts of the payment method saves a selection asked for. */
+    const selectionSaves = new WeakSet<object>();
+    /** The request contexts of the payment saves a renderer asked for; it shows their failure itself. */
+    const rendererSaves = new WeakSet<object>();
+    /** The quote is out of reach (it is gone, or the session ended): nothing is sent any more. */
+    let halted = false;
+    /** The automatic retry each section's refused background request waits for. */
+    const retryTimers = new Map<SectionId, ReturnType<typeof setTimeout>>();
+    /** The sections whose failure on screen already had its automatic retry. */
+    const retried = new Set<SectionId>();
 
     const resolveGuestId = (): string | null => store.maskedQuoteId.get();
     const isGuest = (): boolean => store.isGuest.get();
+    const cartPath = (suffix: string): string =>
+        isGuest() ? `guest-carts/${resolveGuestId() ?? ''}/${suffix}` : `carts/mine/${suffix}`;
+
+    const rateFields = (): readonly string[] => peekCheckoutConfig()?.hyperion?.rateFields ?? DEFAULT_RATE_FIELDS;
+    const preselect = (): ShippingPreselect => peekCheckoutConfig()?.hyperion?.shippingPreselect ?? 'cheapest';
+    const currentRateKey = (): string => rateKey(store.shippingAddress.get(), rateFields());
+
+    // A list that is already there for the address (put by the hydration)
+    // needs no estimate.
+    if (store.estimateState.get() === 'ready') estimatedKey = currentRateKey();
+
+    // The rate key of the address the list in the store was read for.
+    let listedKey: string | null = estimatedKey;
+
+    /**
+     * The rates to list for the current address, pickup rates left out. A
+     * list read again for the address already listed keeps the rows on
+     * screen where they are (`mergeRefreshedRates()`); the list of another
+     * address comes in the order of the answer.
+     */
+    function listRates(methods: readonly ShippingMethod[]): readonly ShippingMethod[] {
+        const listed = methods.filter((m) => !isPickupRate(m));
+        const key = currentRateKey();
+        const ordered = key === listedKey
+            ? mergeRefreshedRates(store.availableShippingMethods.get(), listed)
+            : listed;
+        listedKey = key;
+        return ordered;
+    }
 
     /**
      * The quote address Magento receives, with the guest's email on it.
@@ -253,527 +421,1145 @@ export function createFlowActions(): FlowActions {
         return payload;
     };
 
-    /** No estimate or save may start against a quote that is being ordered. */
-    const isOrdering = (): boolean => store.isPlacingOrder.get() || store.orderPlaced.get();
+    /**
+     * No estimate or save may start against a quote that is being ordered:
+     * not while the payment step runs on the totals `prepareOrder()`
+     * settled, not while the order is sent, not once it exists or may
+     * exist. The flush of `prepareOrder()` itself runs under the latch and
+     * is the exception.
+     */
+    const isOrdering = (): boolean => {
+        const outcome = store.orderOutcome.get();
+        if (halted || submitting || store.orderPlaced.get() || outcome === 'placed' || outcome === 'unknown') return true;
+        return store.isPlacingOrder.get() && !preparing;
+    };
 
-    function trackShipping(run: Promise<void>): Promise<void> {
-        const tracked = run.finally(() => {
-            if (pendingShipping === tracked) pendingShipping = null;
-        });
-        pendingShipping = tracked;
-        return tracked;
+    // -- Failures ---------------------------------------------------------
+
+    const navigateToSuccess = (): void => {
+        navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
+    };
+
+    function expireSession(): void {
+        halted = true;
+        handleSessionExpired({ store, queue });
     }
 
-    function trackBilling(run: Promise<void>): Promise<void> {
-        const tracked = run.finally(() => {
-            if (pendingBilling === tracked) pendingBilling = null;
-        });
-        pendingBilling = tracked;
-        return tracked;
+    function loseQuote(): void {
+        if (halted) return;
+        halted = true;
+        void handleQuoteGone({ store, queue, navigateToSuccess });
     }
 
-    const estimateTimer = debounce((): void => {
-        void estimateShipping();
-    }, SHIPPING_ESTIMATE_DELAY_MS);
-
-    function scheduleShippingEstimate(): void {
-        store.shippingDirty.set(true);
-        estimateTimer();
-    }
-
-    function estimateShippingNow(): Promise<void> {
-        store.shippingDirty.set(true);
-        estimateTimer.cancel();
-        return estimateShipping();
-    }
-
-    async function settleShipping(): Promise<void> {
-        estimateTimer.flush();
-        // The form is ahead of the quote and nothing is on its way to fix
-        // that (an earlier estimate or save failed): try once more, for the
-        // current address and selection. One attempt per call, no loop.
-        const idle = pendingShipping === null
-            && pendingBilling === null
-            && !store.isLoadingShippingMethods.get()
-            && !store.isSavingShipping.get()
-            && !store.isSavingBilling.get();
-        if (idle && store.shippingDirty.get() && !store.isVirtual.get()) {
-            store.globalError.set(null);
-            void estimateShipping();
+    /**
+     * True when the failure is not one of a section but of the whole
+     * checkout, and was dealt with here: the session ended (the shopper is
+     * asked to sign in again) or the quote is gone (it was ordered in
+     * another tab, or the way back to the cart is shown).
+     */
+    function handledGlobally(failure: CheckoutError): boolean {
+        if (failure.kind === 'session-expired') {
+            expireSession();
+            return true;
         }
-        // Bounded: one run can start another (an estimate ends in a save, a
-        // billing sync in a shipping save), never an endless chain.
-        for (let i = 0; i < 5; i += 1) {
-            const pending = pendingShipping ?? pendingBilling;
-            if (pending === null) return;
-            await pending.catch(() => undefined);
-            const busy = store.isLoadingShippingMethods.get()
-                || store.isSavingShipping.get()
-                || store.isSavingBilling.get();
-            if (pendingShipping === null && pendingBilling === null && !busy) return;
+        if (failure.kind === 'quote-gone') {
+            loseQuote();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Show a failed request in its section, the one place its message
+     * appears. `blocksOrder`: Place Order must not go ahead on top of this
+     * failure.
+     */
+    function report(
+        section: SectionId,
+        error: unknown,
+        ctx: ErrorContext,
+        source: SectionStatusSource,
+        retry?: () => void,
+        blocksOrder = true
+    ): void {
+        showFailure(section, classifyError(error, ctx), source, retry, blocksOrder);
+    }
+
+    function showFailure(
+        section: SectionId,
+        failure: CheckoutError,
+        source: SectionStatusSource,
+        retry?: () => void,
+        blocksOrder = true
+    ): void {
+        if (blocksOrder) reportedFailures += 1;
+        if (handledGlobally(failure)) return;
+        reportFailure(section, failure, retry ? { source, retry } : { source });
+        if (retry && source === 'background') scheduleRetry(section, failure, retry);
+    }
+
+    /**
+     * A background request the server asked to wait for is sent again by
+     * itself, once, when the wait is over; a second refusal in a row stays
+     * on screen with its Retry. (A request the shopper started shows the
+     * wait and leaves the retry to them.)
+     */
+    function scheduleRetry(section: SectionId, failure: CheckoutError, retry: () => void): void {
+        const again = retried.delete(section);
+        if (failure.kind !== 'rate-limited' || again) return;
+        const waiting = retryTimers.get(section);
+        if (waiting !== undefined) clearTimeout(waiting);
+        retryTimers.set(section, setTimeout(() => {
+            retryTimers.delete(section);
+            if (isOrdering() || store.sectionStatus.get()[section]?.kind !== 'rate-limited') return;
+            retried.add(section);
+            retry();
+        }, failure.retryAfterMs ?? RATE_LIMIT_RETRY_DELAY_MS));
+    }
+
+    /** A request of `section` went through: its failure and its retry bookkeeping go. */
+    function succeeded(section: SectionId): void {
+        retried.delete(section);
+        clearFailure(section);
+    }
+
+    function resumeAfterReconnect(): void {
+        if (isOrdering()) return;
+        for (const status of Object.values(store.sectionStatus.get())) {
+            if (status !== null && status.source === 'background' && status.retry && RECONNECT_KINDS.has(status.kind)) {
+                status.retry();
+            }
+        }
+        // A save the shopper asked for and that failed is owed again by
+        // its form: the flushers send it.
+        void queue.flush();
+    }
+
+    function onWriteFailure(write: QuoteWriteInfo, error: unknown, retry: () => void): void {
+        const ctx = write.errorContext ?? { path: '', method: 'POST' };
+        if (write.key === 'shipping') {
+            store.optimisticTotals.set(null);
+            // The save went out before the rates of the new address were
+            // known and core refused its method: the rates on their way
+            // decide what is saved, the shopper never sees this refusal.
+            if (estimateInFlight !== null && classifyError(error, ctx).kind === 'shipping-method-rejected') {
+                resendAfterEstimate = true;
+                return;
+            }
+            store.appliedShippingMethod.set(null);
+        }
+        let again = retry;
+        if (write.key === 'shipping') again = () => { void enqueueShipping('action'); };
+        if (write.key === 'billing') again = () => { void enqueueBilling('action'); };
+        // The save of a payment method selection never holds the order
+        // back and shows only in its section: the order request carries
+        // the method again.
+        const selectionSave = selectionSaves.has(ctx);
+        if (rendererSaves.has(ctx)) {
+            // The renderer that asked for this save reads the reason from
+            // `globalError` and shows it with its own control.
+            const failure = classifyError(error, ctx);
+            reportedFailures += 1;
+            if (!handledGlobally(failure)) store.globalError.set(failure.message);
+            return;
+        }
+        const failure = classifyError(error, ctx);
+        // A code or a CAPTCHA answer the server refused is an error of the
+        // coupon form, shown there; sending the same again is no remedy.
+        // A refused CAPTCHA answer already stands at the CAPTCHA field
+        // (`sendWithAntiAbuse()`), the code field stays valid.
+        if (write.key === 'coupon' && (failure.kind === 'validation' || failure.kind === 'captcha')) {
+            reportedFailures += 1;
+            if (failure.kind === 'validation' || captchaError('sales_rule_coupon_request') === null) {
+                store.couponError.set(failure.message);
+            }
+            return;
+        }
+        showFailure(write.section, failure, write.source ?? 'background', again, !selectionSave);
+    }
+
+    const queue = createWriteQueue({
+        store,
+        settle: () => (isGuest()
+            ? getGuestPaymentInformation(resolveGuestId() ?? '')
+            : getCustomerPaymentInformation()),
+        applyDetails: applyPaymentDetails,
+        onFailure: onWriteFailure,
+        onSuccess: (write) => {
+            // A shipping save that went through says nothing about rates
+            // that could not be read: that failure stays on screen.
+            if (write.key === 'shipping' && store.estimateState.get() === 'error') return;
+            succeeded(write.section);
+        },
+        onSettleFailure: (error, retry) => {
+            const ctx = { path: cartPath('payment-information'), method: 'GET' };
+            report('payment', error, ctx, 'background', retry);
+        },
+    });
+
+    /**
+     * Apply a payment-information answer: methods and totals, then the
+     * selection (see `reconcilePaymentSelection()`) and the coupon the
+     * totals carry, so a coupon the server dropped is no longer shown as
+     * applied. The totals expected from an unanswered change give way to
+     * the confirmed ones.
+     */
+    function applyPaymentDetails(details: PaymentDetails): void {
+        store.availablePaymentMethods.set(details.payment_methods);
+        store.totals.set(details.totals);
+        store.optimisticTotals.set(null);
+        // A coupon or another rate can move the order across the minimum amount.
+        const config = peekCheckoutConfig();
+        if (config !== null) store.minimumOrderError.set(minimumOrderError(details.totals, config));
+        store.selectedPaymentMethod.set(
+            reconcilePaymentSelection(store.selectedPaymentMethod.get(), details.payment_methods, details.totals)
+        );
+        const coupon = details.totals.coupon_code;
+        store.appliedCoupon.set(typeof coupon === 'string' && coupon !== '' ? coupon : null);
+    }
+
+    // -- Shipping information ----------------------------------------------
+
+    /** The selection is one of the usable rates of the list on screen. */
+    function selectionIsOffered(): boolean {
+        const selected = store.selectedShippingMethod.get();
+        if (selected === null) return false;
+        return store.availableShippingMethods.get().some((m) => isUsableRate(m) && isSameMethod(m, selected));
+    }
+
+    function canSendShipping(): boolean {
+        return !store.isVirtual.get() && isAddressComplete(store.shippingAddress.get()) && selectionIsOffered();
+    }
+
+    function readShippingSnapshot(): ShippingSnapshot | null {
+        const shipping = store.shippingAddress.get();
+        const method = store.selectedShippingMethod.get();
+        if (store.isVirtual.get() || !isAddressComplete(shipping) || method === null) return null;
+        const sameAsShipping = store.billingSameAsShipping.get();
+        const typed = sameAsShipping ? null : store.billingAddress.get();
+        return { shipping, billing: isAddressComplete(typed) ? typed : null, sameAsShipping, method };
+    }
+
+    /** The quote misses the billing address of the form, or the "same as shipping" choice. */
+    function billingIsOwed(): boolean {
+        if (store.billingSameAsShipping.get()) return store.billingDirty.get();
+        if (!isAddressComplete(store.billingAddress.get())) return false;
+        return !store.billingSynced.get() || store.billingDirty.get();
+    }
+
+    /**
+     * True when a shipping-information request must still be sent for what
+     * the form shows now: no write is waiting (a waiting one reads the form
+     * when it starts) and the one running, if any, carries something else.
+     */
+    function needsShippingWrite(): boolean {
+        if (!canSendShipping()) return false;
+        if (waitingShippingTicket !== null) return false;
+        const now = readShippingSnapshot();
+        if (now === null) return false;
+        if (
+            runningShipping !== null
+            && runningShipping.shipping === now.shipping
+            && runningShipping.billing === now.billing
+            && runningShipping.sameAsShipping === now.sameAsShipping
+            && isSameMethod(runningShipping.method, now.method)
+        ) {
+            return false;
+        }
+        const applied = store.appliedShippingMethod.get();
+        return runningShipping !== null
+            || store.shippingDirty.get()
+            || applied === null
+            || !isSameMethod(applied, now.method)
+            || billingIsOwed();
+    }
+
+    function enqueueShipping(source: SectionStatusSource): Promise<WriteOutcome<PaymentDetails>> {
+        shippingTicket += 1;
+        const ticket = shippingTicket;
+        waitingShippingTicket = ticket;
+        let sent: ShippingSnapshot | null = null;
+        const write: QuoteWrite<PaymentDetails> = {
+            key: 'shipping',
+            section: 'shipping-methods',
+            returnsDetails: true,
+            source,
+            errorContext: { path: cartPath('shipping-information'), method: 'POST' },
+            run: async () => {
+                if (waitingShippingTicket === ticket) waitingShippingTicket = null;
+                const snapshot = readShippingSnapshot();
+                if (snapshot === null) throw new WriteNotNeeded();
+                // A separate billing address that is not complete yet is
+                // left out (core treats it as optional): the shipping
+                // method reaches the quote now, the billing address with
+                // the write its completion asks for.
+                const request: ShippingInformationRequest = {
+                    addressInformation: {
+                        shipping_address: quoteAddress(snapshot.shipping),
+                        ...(snapshot.sameAsShipping
+                            ? { billing_address: billingCopyOf(snapshot.shipping) }
+                            : snapshot.billing !== null ? { billing_address: quoteAddress(snapshot.billing) } : {}),
+                        shipping_method_code: snapshot.method.method_code,
+                        shipping_carrier_code: snapshot.method.carrier_code,
+                    },
+                };
+                sent = snapshot;
+                runningShipping = snapshot;
+                store.isSavingShipping.set(true);
+                try {
+                    return isGuest()
+                        ? await saveGuestShippingInformation(resolveGuestId() ?? '', request)
+                        : await saveCustomerShippingInformation(request);
+                } finally {
+                    runningShipping = null;
+                    store.isSavingShipping.set(false);
+                }
+            },
+            apply: () => {
+                if (sent !== null) confirmShipping(sent);
+            },
+        };
+        return queue.enqueue(write).then((outcome) => {
+            // A write that never ran (the queue was closed) must not leave
+            // the form waiting for it. A newer write that replaced this
+            // one holds its own ticket.
+            if (waitingShippingTicket === ticket) waitingShippingTicket = null;
+            return outcome;
+        });
+    }
+
+    /**
+     * The quote now carries what `sent` describes. Every edit stores a new
+     * address object, so an edit made while the request ran keeps its form
+     * marked as ahead of the quote.
+     */
+    function confirmShipping(sent: ShippingSnapshot): void {
+        store.appliedShippingMethod.set(sent.method);
+        if (store.shippingAddress.get() === sent.shipping) {
+            store.shippingDirty.set(false);
+            shippingIdleTimer.cancel();
+        }
+        if (sent.sameAsShipping) {
+            if (store.billingSameAsShipping.get()) store.billingDirty.set(false);
+        } else if (
+            sent.billing !== null
+            && !store.billingSameAsShipping.get()
+            && store.billingAddress.get() === sent.billing
+        ) {
+            store.billingSynced.set(true);
+            store.billingDirty.set(false);
         }
     }
 
-    function estimateShipping(): Promise<void> {
-        if (isOrdering()) return Promise.resolve();
-        return trackShipping(runEstimate());
+    function flushShippingForm(): void {
+        shippingIdleTimer.cancel();
+        if (isOrdering()) return;
+        // Rates on their way decide the save when they arrive.
+        if (estimateTimer.pending() || estimateInFlight !== null) return;
+        if (needsShippingWrite()) void enqueueShipping('background');
     }
 
-    async function runEstimate(): Promise<void> {
+    async function saveShippingAndEstimateTotals(): Promise<void> {
+        if (isOrdering()) return;
+        if (canSendShipping()) await enqueueShipping('action');
+        await queue.whenIdle();
+    }
+
+    async function selectShippingMethod(method: SelectedShippingMethod): Promise<void> {
+        if (isOrdering()) return;
+        const rates = store.availableShippingMethods.get();
+        const rateOf = (m: SelectedShippingMethod | null): ShippingMethod | null =>
+            m === null ? null : rates.find((rate) => isSameMethod(rate, m)) ?? null;
+        const previous = rateOf(store.selectedShippingMethod.get());
+        const next = rateOf(method);
+        store.selectedShippingMethod.set({ carrier_code: method.carrier_code, method_code: method.method_code });
+        store.optimisticTotals.set(next === null ? null : totalsWithShippingRate(store.totals.get(), previous, next));
+        await saveShippingAndEstimateTotals();
+    }
+
+    // -- Rates ---------------------------------------------------------------
+
+    /**
+     * Ask the rates of the shipping address. Resolves with the list, or
+     * null when there is nothing to apply: the address is not enough for an
+     * estimate, the request failed (reported here), a newer estimate
+     * replaced this one, or the address changed its rate key meanwhile.
+     */
+    async function fetchRates(): Promise<readonly ShippingMethod[] | null> {
         const addr = store.shippingAddress.get();
-        if (!isAddressComplete(addr)) return;
+        if (addr === null || !isEstimable(addr)) return null;
         if (rateController) rateController.abort();
         rateController = new AbortController();
         const signal = rateController.signal;
-        const generation = ++estimateGeneration;
-        // The address changed: whatever the quote carries no longer matches
-        // it, so Place Order stays closed until a save confirms a method.
-        store.appliedShippingMethod.set(null);
+        estimateGeneration += 1;
+        const generation = estimateGeneration;
+        const key = currentRateKey();
+        estimatedKey = key;
         store.isLoadingShippingMethods.set(true);
-        let methods: readonly ShippingMethod[] | null = null;
+        store.estimateState.set('loading');
+        let methods: readonly ShippingMethod[];
         try {
-            const payload: EstimateShippingMethodsRequest = {
-                address: quoteAddress(addr),
-            };
+            const payload: EstimateShippingMethodsRequest = { address: quoteAddress(addr) };
             methods = isGuest()
                 ? await estimateGuestShippingMethods(resolveGuestId() ?? '', payload, signal)
                 : await estimateCustomerShippingMethods(payload, signal);
         } catch (err) {
             if (generation === estimateGeneration && !isAbortError(err)) {
-                store.globalError.set(extractMessage(err));
+                estimatedKey = null;
+                store.estimateState.set('error');
+                const ctx = { path: cartPath('estimate-shipping-methods'), method: 'POST' };
+                report('shipping-methods', err, ctx, 'background', () => { void estimateShipping(); });
             }
+            return null;
         } finally {
             if (generation === estimateGeneration) {
                 store.isLoadingShippingMethods.set(false);
             }
         }
-        if (generation !== estimateGeneration || methods === null) return;
+        if (generation !== estimateGeneration || currentRateKey() !== key) return null;
+        return methods;
+    }
 
-        // Error rows stay in the list so the shopper sees why a carrier
-        // does not serve the address; only usable rates can be selected.
-        const listed = methods.filter((m) => !isPickupRate(m));
+    /**
+     * Show a rate list and settle the selection: a selection the list still
+     * offers is kept, otherwise one is picked by the store's preselection
+     * rule. Error rows stay in the list so the shopper sees why a carrier
+     * does not serve the address; only usable rates can be selected. The
+     * shipping information is then saved when the quote does not carry
+     * what the form shows (`force`: in any case, the totals changed).
+     */
+    function applyRates(methods: readonly ShippingMethod[], force: boolean): void {
+        const listed = listRates(methods);
         store.availableShippingMethods.set(listed);
+        succeeded('shipping-methods');
         const usable = listed.filter(isUsableRate);
         const current = store.selectedShippingMethod.get();
-        const stillThere = current !== null && usable.some((m) => isSameMethod(m, current));
-        if (!stillThere) {
-            const first = usable[0];
-            if (!first) {
-                // Nothing serves this address: drop the stale selection and
-                // everything that was derived from it.
-                store.selectedShippingMethod.set(null);
-                store.availablePaymentMethods.set([]);
-                return;
-            }
+        const picked = pickShippingMethod(usable, current, preselect());
+        store.estimateState.set(usable.length === 0 ? 'empty' : 'ready');
+        if (picked === null) {
+            // Nothing serves this address, or the shopper has to choose:
+            // drop the stale selection and what the quote confirmed for it.
+            store.selectedShippingMethod.set(null);
+            store.appliedShippingMethod.set(null);
+            store.optimisticTotals.set(null);
+            if (usable.length === 0) store.availablePaymentMethods.set([]);
+            resendAfterEstimate = false;
+            return;
+        }
+        if (current === null || !isSameMethod(picked, current)) {
             store.selectedShippingMethod.set({
-                carrier_code: first.carrier_code,
-                method_code: first.method_code,
+                carrier_code: picked.carrier_code,
+                method_code: picked.method_code,
             });
         }
-        // The shipping radios use `@change`, which never fires when the user
-        // clicks an already-checked option. With a single method (or whenever
-        // the auto-pre-selection above lands on the option the user wants),
-        // the user can never trigger saveShippingAndEstimateTotals manually,
-        // so payment methods + totals never load and Place Order stays
-        // disabled. Drive the save from here so the auto-selection follows
-        // the same downstream path as a user click.
-        await saveShippingAndEstimateTotals();
-    }
-
-    function saveShippingAndEstimateTotals(): Promise<void> {
-        if (isOrdering()) return Promise.resolve();
-        return trackShipping(runShippingSave());
-    }
-
-    async function runShippingSave(): Promise<void> {
-        const shipping = store.shippingAddress.get();
-        const selectedMethod = store.selectedShippingMethod.get();
-        if (!isAddressComplete(shipping) || !selectedMethod) return;
-        const sameAsShipping = store.billingSameAsShipping.get();
-        const billingSnapshot = sameAsShipping ? shipping : store.billingAddress.get();
-        if (!isAddressComplete(billingSnapshot)) return;
-        const request: ShippingInformationRequest = {
-            addressInformation: {
-                shipping_address: quoteAddress(shipping),
-                billing_address: sameAsShipping ? billingCopyOf(shipping) : quoteAddress(billingSnapshot),
-                shipping_method_code: selectedMethod.method_code,
-                shipping_carrier_code: selectedMethod.carrier_code,
-            },
-        };
-        const generation = ++saveGeneration;
-        store.isSavingShipping.set(true);
-        try {
-            const details = isGuest()
-                ? await saveGuestShippingInformation(resolveGuestId() ?? '', request)
-                : await saveCustomerShippingInformation(request);
-            if (generation !== saveGeneration) return;
-            // Methods, totals and the selection follow the answer, exactly as
-            // after a coupon: a method the new list no longer offers is
-            // dropped, `free` is picked at a zero total, and when nothing is
-            // selected the first offline method is (gateways are never
-            // pre-selected: their SDK loads when the shopper picks them).
-            applyPaymentDetails(details);
-            store.appliedShippingMethod.set(selectedMethod);
-            // The quote now carries the address this request was built
-            // from. Every edit stores a new address object, so an edit made
-            // meanwhile keeps the form marked as ahead of the quote.
-            if (store.shippingAddress.get() === shipping) {
-                store.shippingDirty.set(false);
-            }
-        } catch (err) {
-            if (generation !== saveGeneration) return;
-            store.appliedShippingMethod.set(null);
-            store.globalError.set(extractMessage(err));
-        } finally {
-            if (generation === saveGeneration) {
-                store.isSavingShipping.set(false);
-            }
+        const resend = resendAfterEstimate;
+        resendAfterEstimate = false;
+        if (canSendShipping() && (force || resend || needsShippingWrite())) {
+            void enqueueShipping('background');
         }
+    }
+
+    function startEstimate(): Promise<void> {
+        if (isOrdering()) return Promise.resolve();
+        const run = (async (): Promise<void> => {
+            // The address is complete and the selected rate was offered for
+            // the previous one: save at the same moment the rates are
+            // asked. When the new list drops that rate, the save that
+            // follows the new selection supersedes this one.
+            if (needsShippingWrite()) void enqueueShipping('background');
+            const methods = await fetchRates();
+            if (methods !== null) applyRates(methods, false);
+        })();
+        const tracked = run.finally(() => {
+            if (estimateInFlight === tracked) estimateInFlight = null;
+        });
+        estimateInFlight = tracked;
+        return tracked;
+    }
+
+    async function estimateShipping(): Promise<void> {
+        estimateTimer.cancel();
+        await startEstimate();
+        await queue.whenIdle();
+    }
+
+    const estimateTimer = debounce((): void => {
+        void startEstimate();
+    }, SHIPPING_ESTIMATE_DELAY_MS);
+
+    const shippingIdleTimer = debounce(flushShippingForm, DIRTY_FORM_FLUSH_DELAY_MS);
+
+    /** The shipping address in the store was replaced by an edit of the shopper. */
+    function shippingAddressEdited(immediate: boolean): void {
+        // Marked in any case: an edit made while an order is being prepared
+        // must keep that order from being sent for the address before it.
+        store.shippingDirty.set(true);
+        if (isOrdering()) return;
+        const key = currentRateKey();
+        if (key === estimatedKey) {
+            // Back on the address the list on screen belongs to.
+            estimateTimer.cancel();
+        } else if (isEstimable(store.shippingAddress.get())) {
+            if (immediate) {
+                estimateTimer.cancel();
+                void startEstimate();
+            } else {
+                estimateTimer();
+            }
+        } else {
+            // Not enough for rates any more: an answer on its way is for
+            // an address the form no longer shows.
+            estimateTimer.cancel();
+            if (rateController) rateController.abort();
+            estimateGeneration += 1;
+            estimatedKey = null;
+            store.isLoadingShippingMethods.set(false);
+            store.estimateState.set('idle');
+        }
+        shippingIdleTimer();
+    }
+
+    function scheduleShippingEstimate(): void {
+        shippingAddressEdited(false);
+    }
+
+    async function estimateShippingNow(): Promise<void> {
+        shippingAddressEdited(true);
+        if (estimateInFlight === null) flushShippingForm();
+        if (estimateInFlight !== null) await estimateInFlight;
+        await queue.whenIdle();
     }
 
     /**
-     * Apply a payment-information answer: methods and totals, then the
-     * selection. `free` is the only method at a zero grand total, so it is
-     * picked whenever the totals reach zero; a selection that the list no
-     * longer offers falls back to the first offline method (or none).
+     * Read the rates of the address again behind a list that is already
+     * shown and confirmed (a list the page was rendered with can miss
+     * carriers). Nothing is marked as loading and Place Order stays open
+     * while it runs; a failure is not shown. The answer is applied when
+     * the address still has the rate key it was asked for and no other
+     * estimate started meanwhile: the rows on screen keep their positions
+     * and the rates the list missed go below them (`listRates()`). A
+     * selection the new list still offers is kept with what the quote
+     * confirmed for it; one it no longer offers
+     * goes through the normal path (another rate is selected and saved).
      */
-    function applyPaymentDetails(details: PaymentDetails): void {
-        store.availablePaymentMethods.set(details.payment_methods);
-        store.totals.set(details.totals);
-        store.selectedPaymentMethod.set(
-            reconcilePaymentSelection(store.selectedPaymentMethod.get(), details.payment_methods, details.totals)
-        );
-    }
-
-    async function refreshPaymentInformation(): Promise<void> {
-        const generation = ++paymentInfoGeneration;
-        store.isRefreshingTotals.set(true);
+    async function refreshShippingRatesSilently(): Promise<void> {
+        const addr = store.shippingAddress.get();
+        if (isOrdering() || store.isVirtual.get() || addr === null || !isEstimable(addr)) return;
+        if (store.estimateState.get() !== 'ready' || estimateInFlight !== null || estimateTimer.pending()) return;
+        const key = currentRateKey();
+        const generation = estimateGeneration;
+        let methods: readonly ShippingMethod[];
         try {
-            const details = isGuest()
-                ? await getGuestPaymentInformation(resolveGuestId() ?? '')
-                : await getCustomerPaymentInformation();
-            if (generation !== paymentInfoGeneration) return;
-            applyPaymentDetails(details);
-        } catch (err) {
-            if (generation !== paymentInfoGeneration) return;
-            store.globalError.set(extractMessage(err));
-        } finally {
-            if (generation === paymentInfoGeneration) {
-                store.isRefreshingTotals.set(false);
-            }
+            const payload: EstimateShippingMethodsRequest = { address: quoteAddress(addr) };
+            methods = isGuest()
+                ? await estimateGuestShippingMethods(resolveGuestId() ?? '', payload)
+                : await estimateCustomerShippingMethods(payload);
+        } catch {
+            return;
         }
+        if (
+            generation !== estimateGeneration
+            || estimateInFlight !== null
+            || currentRateKey() !== key
+            || store.estimateState.get() !== 'ready'
+            || isOrdering()
+        ) {
+            return;
+        }
+        const selected = store.selectedShippingMethod.get();
+        if (selected !== null && methods.some((m) => !isPickupRate(m) && isUsableRate(m) && isSameMethod(m, selected))) {
+            store.availableShippingMethods.set(listRates(methods));
+            return;
+        }
+        applyRates(methods, false);
     }
 
-    function billingNeedsOwnSync(): boolean {
-        return store.isVirtual.get() || !store.billingSameAsShipping.get();
-    }
+    // -- Billing address -------------------------------------------------------
 
     function invalidateBillingSync(): void {
-        billingGeneration++;
+        store.billingDirty.set(true);
         store.billingSynced.set(false);
-        store.isSavingBilling.set(false);
     }
 
-    function syncBillingAddress(): Promise<void> {
-        return trackBilling(runBillingSync());
+    function enqueueBilling(source: SectionStatusSource): Promise<WriteOutcome<number>> {
+        let sent: Address | null = null;
+        return queue.enqueue<number>({
+            key: 'billing',
+            section: 'billing',
+            returnsDetails: false,
+            source,
+            errorContext: { path: cartPath('billing-address'), method: 'POST' },
+            run: async () => {
+                const billing = store.billingAddress.get();
+                if (!isAddressComplete(billing)) throw new WriteNotNeeded();
+                sent = billing;
+                const request = { address: quoteAddress(billing), useForShipping: false };
+                store.isSavingBilling.set(true);
+                try {
+                    return isGuest()
+                        ? await assignGuestBillingAddress(resolveGuestId() ?? '', request)
+                        : await assignCustomerBillingAddress(request);
+                } finally {
+                    store.isSavingBilling.set(false);
+                }
+            },
+            apply: () => {
+                if (store.billingAddress.get() !== sent) return;
+                store.billingSynced.set(true);
+                store.billingDirty.set(false);
+            },
+        });
     }
+
+    /** A virtual quote whose billing address is complete and not on the quote as it stands. */
+    function virtualBillingIsOwed(): boolean {
+        if (!store.isVirtual.get() || !isAddressComplete(store.billingAddress.get())) return false;
+        return !store.billingSynced.get() || store.billingDirty.get();
+    }
+
+    function startBillingSync(source: SectionStatusSource): void {
+        billingTimer.cancel();
+        if (isOrdering()) return;
+        if (store.isVirtual.get()) {
+            if (virtualBillingIsOwed()) void enqueueBilling(source);
+        } else if (estimateInFlight === null && needsShippingWrite()) {
+            // One writer on a physical quote: the shipping information
+            // carries the billing address.
+            void enqueueShipping(source);
+        }
+    }
+
+    async function syncBillingAddress(): Promise<void> {
+        startBillingSync('background');
+        await queue.whenIdle();
+    }
+
+    const billingTimer = debounce((): void => {
+        startBillingSync('background');
+    }, BILLING_SYNC_DELAY_MS);
+
+    function scheduleBillingSync(): void {
+        billingTimer();
+    }
+
+    // -- Coupon -----------------------------------------------------------------
+
+    async function changeCoupon(code: string | null): Promise<boolean> {
+        store.couponError.set(null);
+        const outcome = await queue.enqueue<CouponResult>({
+            key: 'coupon',
+            section: 'coupon',
+            returnsDetails: false,
+            source: 'action',
+            errorContext: {
+                path: cartPath(code === null ? 'coupons' : `coupons/${code}`),
+                method: code === null ? 'DELETE' : 'PUT',
+            },
+            run: async () => {
+                let ok: boolean;
+                if (code === null) {
+                    ok = isGuest() ? await removeGuestCoupon(resolveGuestId() ?? '') : await removeCustomerCoupon();
+                } else {
+                    ok = await sendWithAntiAbuse(store, 'coupon', ({ headers: _headers, ...proof }) => (isGuest()
+                        ? applyGuestCoupon(resolveGuestId() ?? '', code, proof)
+                        : applyCustomerCoupon(code, proof)));
+                }
+                // A coupon can change the rates (free shipping): ask them
+                // inside the write, so the shipping save that follows is
+                // the last write of the drain and answers with the totals.
+                const rates = ok && !store.isVirtual.get() ? await fetchRates() : null;
+                return { ok, rates };
+            },
+            apply: (result) => {
+                if (!result.ok) return;
+                store.appliedCoupon.set(code);
+                if (result.rates !== null) applyRates(result.rates, true);
+            },
+        });
+        if (outcome.status !== 'applied') return false;
+        if (!outcome.value.ok) {
+            if (code !== null) store.couponError.set(t('Hyperion_Checkout::coupon_invalid'));
+            return false;
+        }
+        await queue.whenIdle();
+        return true;
+    }
+
+    // -- Payment -----------------------------------------------------------------
 
     /**
-     * True when the quote does not carry the shipping selection although
-     * one exists: a shipping save was skipped while the separate billing
-     * address was incomplete, and nothing else is about to send it.
+     * The payment-information body. `forSelection`: only what tells the
+     * quote which method is selected, without the data and the agreements
+     * that belong to the order request.
      */
-    function shippingSaveIsOwed(): boolean {
-        if (store.isVirtual.get()) return false;
-        const selected = store.selectedShippingMethod.get();
-        if (selected === null) return false;
-        if (estimateTimer.pending() || store.isLoadingShippingMethods.get() || store.isSavingShipping.get()) {
-            return false;
-        }
-        const applied = store.appliedShippingMethod.get();
-        return store.shippingDirty.get() || applied === null || !isSameMethod(applied, selected);
-    }
-
-    async function runBillingSync(): Promise<void> {
-        if (!billingNeedsOwnSync()) return;
-        const billing = store.billingAddress.get();
-        if (!isAddressComplete(billing)) return;
-        const generation = ++billingGeneration;
-        store.billingSynced.set(false);
-        store.isSavingBilling.set(true);
-        let synced = false;
-        try {
-            const request = { address: quoteAddress(billing), useForShipping: false };
-            if (isGuest()) {
-                await assignGuestBillingAddress(resolveGuestId() ?? '', request);
-            } else {
-                await assignCustomerBillingAddress(request);
-            }
-            const details = isGuest()
-                ? await getGuestPaymentInformation(resolveGuestId() ?? '')
-                : await getCustomerPaymentInformation();
-            if (generation !== billingGeneration) return;
-            applyPaymentDetails(details);
-            store.billingSynced.set(true);
-            synced = true;
-        } catch (err) {
-            if (generation !== billingGeneration) return;
-            store.globalError.set(extractMessage(err));
-        } finally {
-            if (generation === billingGeneration) {
-                store.isSavingBilling.set(false);
-            }
-        }
-        // The shipping save carries the billing address too, so sending it
-        // after the billing sync leaves the quote with both.
-        if (synced && shippingSaveIsOwed()) {
-            await saveShippingAndEstimateTotals();
-        }
-    }
-
-    async function applyCoupon(code: string): Promise<boolean> {
-        try {
-            const ok = isGuest()
-                ? await applyGuestCoupon(resolveGuestId() ?? '', code)
-                : await applyCustomerCoupon(code);
-            if (ok) {
-                store.appliedCoupon.set(code);
-                store.couponError.set(null);
-                await refreshPaymentInformation();
-                return true;
-            }
-            store.couponError.set(t('Hyperion_Checkout::coupon_invalid'));
-            return false;
-        } catch (err) {
-            store.couponError.set(extractMessage(err));
-            return false;
-        }
-    }
-
-    async function removeCoupon(): Promise<boolean> {
-        try {
-            const ok = isGuest()
-                ? await removeGuestCoupon(resolveGuestId() ?? '')
-                : await removeCustomerCoupon();
-            if (ok) {
-                store.appliedCoupon.set(null);
-                store.couponError.set(null);
-                await refreshPaymentInformation();
-                return true;
-            }
-            return false;
-        } catch (err) {
-            store.couponError.set(extractMessage(err));
-            return false;
-        }
-    }
-
-    function buildPaymentRequest(): PaymentInformationRequest | null {
+    function buildPaymentRequest(forSelection = false): PaymentInformationRequest | null {
         const method = store.selectedPaymentMethod.get();
         if (!method) return null;
         const sameAsShipping = store.billingSameAsShipping.get() && !store.isVirtual.get();
         const billingSnapshot = sameAsShipping ? store.shippingAddress.get() : store.billingAddress.get();
         if (!isAddressComplete(billingSnapshot)) return null;
 
-        const data = store.paymentMethodData.get()[method] ?? {};
-        const agreements = store.acceptedAgreements.get();
-        const email = store.email.get();
-
-        // The purchase order number is a field of the payment itself; core
-        // ignores it inside `additional_data`.
-        const { po_number: poNumber, ...additionalData } = data;
         const paymentMethod: PaymentMethodPayload = { method };
-        if ('po_number' in data) paymentMethod.po_number = String(poNumber ?? '').trim();
-        if (Object.keys(additionalData).length > 0) paymentMethod.additional_data = additionalData;
-        if (agreements.length > 0) {
-            paymentMethod.extension_attributes = {
-                agreement_ids: agreements.map((id) => String(id)),
-            };
+        if (!forSelection) {
+            const data = store.paymentMethodData.get()[method] ?? {};
+            const agreements = store.acceptedAgreements.get();
+            // The purchase order number is a field of the payment itself; core
+            // ignores it inside `additional_data`.
+            const { po_number: poNumber, ...additionalData } = data;
+            if ('po_number' in data) paymentMethod.po_number = String(poNumber ?? '').trim();
+            if (Object.keys(additionalData).length > 0) paymentMethod.additional_data = additionalData;
+            if (agreements.length > 0) {
+                paymentMethod.extension_attributes = {
+                    agreement_ids: agreements.map((id) => String(id)),
+                };
+            }
         }
         const request: PaymentInformationRequest = {
             paymentMethod,
             billingAddress: sameAsShipping ? billingCopyOf(billingSnapshot) : quoteAddress(billingSnapshot),
         };
+        const email = store.email.get();
         if (isGuest() && email) request.email = email;
         return request;
     }
 
-    /**
-     * Read the quote to learn whether an order request that lost its answer
-     * placed the order. An ordered guest quote answers 200 with `is_active`
-     * false (404 once it is gone); a customer's `carts/mine` answers 404, or
-     * another quote when a new cart was started since. The quote of this
-     * checkout, still active, means no order exists. Anything else (no
-     * answer, a session that ended, a server error) decides nothing.
-     */
-    async function probeOrderOutcome(): Promise<OrderOutcome> {
-        try {
-            if (isGuest()) {
-                const maskedId = resolveGuestId();
-                if (!maskedId) return 'unknown';
-                const cart = await getGuestCartState(maskedId);
-                return outcomeOfActiveFlag(cart?.is_active);
-            }
-            // `quoteData.entity_id` of the checkout config, hydrated into the store.
-            const quoteId = Number(store.quoteId.get());
-            if (!Number.isInteger(quoteId) || quoteId <= 0) return 'unknown';
-            const cart = await getCustomerCartState();
-            if (cart === null || typeof cart !== 'object' || cart.id === undefined) return 'unknown';
-            if (Number(cart.id) !== quoteId) return 'placed';
-            return outcomeOfActiveFlag(cart.is_active);
-        } catch (err) {
-            return err instanceof MagentoApiError && err.httpStatus === 404 ? 'placed' : 'unknown';
-        }
+    function enqueuePaymentMethod(forSelection: boolean): Promise<WriteOutcome<boolean>> {
+        const errorContext = { path: cartPath('set-payment-information'), method: 'POST' };
+        (forSelection ? selectionSaves : rendererSaves).add(errorContext);
+        return queue.enqueue<boolean>({
+            key: 'payment-method',
+            section: 'payment',
+            returnsDetails: false,
+            source: 'action',
+            errorContext,
+            run: async () => {
+                const request = buildPaymentRequest(forSelection);
+                if (request === null) throw new WriteNotNeeded();
+                return sendWithAntiAbuse(store, 'payment-method', ({ headers }) => (isGuest()
+                    ? setGuestPaymentInformation(resolveGuestId() ?? '', request, headers)
+                    : setCustomerPaymentInformation(request, headers)));
+            },
+        });
+    }
+
+    /** The quote carries the shipping information of the form (core refuses a payment method without it). */
+    function shippingIsConfirmed(): boolean {
+        if (store.isVirtual.get()) return !virtualBillingIsOwed();
+        const selected = store.selectedShippingMethod.get();
+        const applied = store.appliedShippingMethod.get();
+        return selected !== null
+            && applied !== null
+            && isSameMethod(applied, selected)
+            && !store.shippingDirty.get()
+            && !billingIsOwed();
     }
 
     /**
-     * The order request got no answer: decide from the quote. Resolves like
-     * `placeOrder()`. After a timeout the server may still be working on
-     * the request, so a quote that is still active proves nothing yet.
+     * Send the owed save of the selected payment method when core would
+     * accept it. `flushing`: the saves it depends on were just put in the
+     * queue ahead of it. A save that cannot go yet stays owed.
      */
-    async function resolveLostAnswer(timedOut: boolean): Promise<PlaceOrderOutcome> {
-        let outcome = await probeOrderOutcome();
-        if (timedOut && outcome === 'not-placed') outcome = 'unknown';
-        if (outcome === 'placed') {
-            store.orderOutcomeUnknown.set(false);
-            store.orderPlaced.set(true);
-            return 'placed-unconfirmed';
+    function attemptPaymentMethodSave(flushing: boolean): void {
+        if (!paymentSaveOwed || isOrdering()) return;
+        const method = store.selectedPaymentMethod.get();
+        if (method === null || getPaymentRenderer(method)?.savesOnSelection === false) {
+            paymentSaveOwed = false;
+            return;
         }
-        store.isPlacingOrder.set(false);
-        if (outcome === 'not-placed') {
-            store.orderOutcomeUnknown.set(false);
-            store.globalError.set(t('Hyperion_Checkout::order_not_placed_network'));
-            return null;
-        }
-        store.orderOutcomeUnknown.set(true);
-        store.globalError.set(t('Hyperion_Checkout::order_outcome_unknown'));
-        return null;
+        if (buildPaymentRequest(true) === null) return;
+        // Core requires the email of a guest with this request.
+        if (isGuest() && !EMAIL_SHAPE.test(store.email.get().trim())) return;
+        const sendable = flushing
+            ? store.isVirtual.get() || canSendShipping()
+            : shippingIsConfirmed();
+        if (!sendable) return;
+        paymentSaveOwed = false;
+        void enqueuePaymentMethod(true);
     }
 
-    async function placeOrder(): Promise<PlaceOrderOutcome> {
-        if (store.isPlacingOrder.get() || store.orderPlaced.get()) return null;
-        // The form holds an address the quote does not: no order request
-        // may leave until a shipping save confirmed it.
-        if (!store.isVirtual.get() && store.shippingDirty.get()) return null;
+    const paymentTimer = debounce((): void => {
+        attemptPaymentMethodSave(false);
+    }, PAYMENT_METHOD_SAVE_DELAY_MS);
 
-        if (store.orderOutcomeUnknown.get()) {
-            // An earlier attempt may have placed the order: ask the quote
-            // before sending anything.
-            store.isPlacingOrder.set(true);
-            store.globalError.set(null);
-            const outcome = await probeOrderOutcome();
-            if (outcome === 'placed') {
-                store.orderOutcomeUnknown.set(false);
-                store.orderPlaced.set(true);
-                return 'placed-unconfirmed';
-            }
-            store.isPlacingOrder.set(false);
-            if (outcome === 'unknown') {
-                store.globalError.set(t('Hyperion_Checkout::order_outcome_unknown'));
-                return null;
-            }
-            store.orderOutcomeUnknown.set(false);
-        }
-
-        if (billingNeedsOwnSync() && !store.billingSynced.get()) {
-            await syncBillingAddress();
-            if (!store.billingSynced.get()) return null;
-        }
-        const request = buildPaymentRequest();
-        if (!request) return null;
-
-        store.isPlacingOrder.set(true);
-        store.globalError.set(null);
-        try {
-            const recaptchaToken = await executeRecaptcha('place_order');
-            const orderId = isGuest()
-                ? await placeGuestOrder(resolveGuestId() ?? '', request, recaptchaToken)
-                : await placeCustomerOrder(request, recaptchaToken);
-            // Terminal: the loading state holds until the browser leaves.
-            store.orderPlaced.set(true);
-            return orderId;
-        } catch (err) {
-            if (err instanceof NetworkError) {
-                return resolveLostAnswer(err instanceof RequestTimeoutError);
-            }
-            store.isPlacingOrder.set(false);
-            store.globalError.set(extractMessage(err));
-            return null;
-        }
+    function savePaymentMethod(): void {
+        if (isOrdering()) return;
+        paymentSaveOwed = true;
+        paymentTimer();
     }
 
     async function savePaymentInformation(): Promise<boolean> {
-        const request = buildPaymentRequest();
-        if (!request) return false;
+        if (buildPaymentRequest() === null) return false;
         store.globalError.set(null);
-        try {
-            if (isGuest()) {
-                await setGuestPaymentInformation(resolveGuestId() ?? '', request);
-            } else {
-                await setCustomerPaymentInformation(request);
+        paymentTimer.cancel();
+        paymentSaveOwed = false;
+        const outcome = await enqueuePaymentMethod(false);
+        return outcome.status === 'applied';
+    }
+
+    async function refreshPaymentInformation(): Promise<void> {
+        await queue.settle();
+    }
+
+    // -- Gift messages -----------------------------------------------------------
+
+    function saveGiftMessage(target: number | null, message: GiftMessagePayload): Promise<WriteOutcome<boolean>> {
+        const suffix = target === null ? 'gift-message' : `gift-message/${target}`;
+        return queue.enqueue<boolean>({
+            key: `gift:${target === null ? 'order' : String(target)}`,
+            section: 'gift',
+            returnsDetails: false,
+            source: 'action',
+            errorContext: { path: cartPath(suffix), method: 'POST' },
+            run: () => (isGuest()
+                ? saveGuestGiftMessage(resolveGuestId() ?? '', target, message)
+                : saveCustomerGiftMessage(target, message)),
+        });
+    }
+
+    // -- Place Order ---------------------------------------------------------------
+
+    /**
+     * Turn every pending edit into its write now. Registered with the
+     * queue, so `flush()` runs it first.
+     */
+    function flushPendingEdits(): void {
+        shippingIdleTimer.cancel();
+        billingTimer.cancel();
+        if (isOrdering()) return;
+        if (store.isVirtual.get()) {
+            if (virtualBillingIsOwed()) void enqueueBilling('background');
+        } else {
+            if (estimateTimer.pending()) {
+                estimateTimer.flush();
+            } else if ((retryRatesOnFlush && ratesAreOwed()) || ratesAreStale()) {
+                void startEstimate();
             }
-            return true;
-        } catch (err) {
-            store.globalError.set(extractMessage(err));
-            return false;
+            if (estimateInFlight === null && needsShippingWrite()) void enqueueShipping('background');
+        }
+        if (paymentSaveOwed) {
+            paymentTimer.cancel();
+            if (estimateInFlight === null) attemptPaymentMethodSave(true);
+        }
+    }
+    queue.registerFlusher(flushPendingEdits);
+
+    /** The last estimate failed and nothing asks the rates again yet. */
+    function ratesAreOwed(): boolean {
+        return estimateInFlight === null
+            && !store.isVirtual.get()
+            && store.estimateState.get() === 'error'
+            && isEstimable(store.shippingAddress.get());
+    }
+
+    /**
+     * The list on screen was asked for another rate key and nothing asks
+     * for the current one: an edit that arrived while requests were held
+     * back.
+     */
+    function ratesAreStale(): boolean {
+        return estimateInFlight === null
+            && !estimateTimer.pending()
+            && !store.isVirtual.get()
+            && estimatedKey !== null
+            && estimatedKey !== currentRateKey()
+            && isEstimable(store.shippingAddress.get());
+    }
+
+    /** Something is on its way to the quote, or owed to it. */
+    function hasPendingWork(): boolean {
+        return queue.isBusy()
+            || ratesAreOwed()
+            || estimateInFlight !== null
+            || estimateTimer.pending()
+            || billingTimer.pending()
+            || paymentSaveOwed
+            || virtualBillingIsOwed()
+            || needsShippingWrite();
+    }
+
+    function releaseOrder(): void {
+        prepared = false;
+        store.orderOutcome.set('none');
+        store.orderStep.set('idle');
+        store.isPlacingOrder.set(false);
+        if (!halted) queue.reopen();
+    }
+
+    /**
+     * Terminal: the loading state holds until the browser leaves, and what
+     * the shopper typed is no longer kept for a reload.
+     */
+    function markPlaced(): void {
+        prepared = false;
+        store.orderOutcome.set('placed');
+        store.orderStep.set('idle');
+        store.orderPlaced.set(true);
+        store.isPlacingOrder.set(true);
+        discardDrafts();
+    }
+
+    /**
+     * The order request failed. A refusal the server answered with releases
+     * the latch and shows its message. Without a usable answer (none at
+     * all, or a cart still locked by an earlier request for it) the quote
+     * decides, see `recoverFromOrderFailure()`: this function then resolves
+     * with what the quote said by the time the first reads were made, and
+     * a verdict that arrives later (the quote could not be read at first)
+     * leaves for the success page, or releases the latch, from there.
+     */
+    async function resolveOrderFailure(error: unknown): Promise<PlaceOrderOutcome> {
+        const failure = classifyError(error, { path: cartPath('payment-information'), method: 'POST' });
+        if (failure.kind !== 'order-unknown' && failure.kind !== 'cart-locked') {
+            releaseOrder();
+            if (handledGlobally(failure)) return null;
+            if (failure.kind === 'stock') {
+                // Shown next to Place Order, where it comes with the way
+                // to the cart.
+                reportFailure('order', failure, { source: 'action' });
+            } else {
+                store.globalError.set(failure.message);
+            }
+            return null;
+        }
+        return recoverOrder(failure);
+    }
+
+    async function recoverOrder(failure: CheckoutError): Promise<PlaceOrderOutcome> {
+        prepared = false;
+        const verdict = await recoverFromOrderFailure(failure, {
+            store,
+            queue,
+            navigateToSuccess,
+            onNotPlaced: () => {
+                const method = store.selectedPaymentMethod.get();
+                if (method !== null) getPaymentRenderer(method)?.afterPlaceOrderFailed?.();
+            },
+            onSessionExpired: expireSession,
+        });
+        return verdict === 'placed' || verdict === 'gone' ? 'placed-unconfirmed' : null;
+    }
+
+    function resolveLostOrder(cause: 'network' | 'unavailable' = 'network'): Promise<PlaceOrderOutcome> {
+        if (halted || store.orderPlaced.get() || store.orderOutcome.get() === 'unknown') return Promise.resolve(null);
+        store.isPlacingOrder.set(true);
+        return recoverOrder({ kind: 'order-unknown', message: '', underlyingKind: cause });
+    }
+
+    async function prepareOrder(options: PrepareOrderOptions = {}): Promise<PrepareOrderResult> {
+        const outcome = store.orderOutcome.get();
+        if (
+            halted
+            || outcome === 'placing'
+            || outcome === 'placed'
+            || store.orderPlaced.get()
+            || store.isPlacingOrder.get()
+        ) {
+            return { status: 'blocked', reason: 'busy' };
+        }
+        // An earlier attempt may have placed the order and the quote is
+        // being asked: nothing is sent, and no press shortens that.
+        if (outcome === 'unknown') return { status: 'blocked', reason: 'outcome-unknown' };
+        prepareFailed = false;
+        // Nothing to wait for and a piece missing: answer without the latch.
+        if (!hasPendingWork()) {
+            const missing = placeOrderBlocker(store, selectors, options);
+            if (missing !== null) return { status: 'blocked', reason: missing };
+        }
+
+        store.orderOutcome.set('placing');
+        store.orderStep.set('preparing');
+        store.isPlacingOrder.set(true);
+        store.globalError.set(null);
+        clearFailure('order');
+        preparing = true;
+        const failuresBefore = reportedFailures;
+        try {
+            // An estimate is not part of the queue and ends in a save, and
+            // a save that depends on it waits for the next flush: flush,
+            // wait for the rates, and flush again when rates were asked
+            // meanwhile. Bounded, and one attempt per press for rates that
+            // failed before.
+            for (let round = 0; round < 4; round += 1) {
+                const estimatesBefore = estimateGeneration;
+                await queue.flush();
+                retryRatesOnFlush = false;
+                const estimate: Promise<void> | null = estimateInFlight;
+                if (estimate !== null) await estimate;
+                if (estimateGeneration === estimatesBefore) break;
+            }
+            await queue.whenIdle();
+        } finally {
+            retryRatesOnFlush = true;
+            preparing = false;
+        }
+        const saved = reportedFailures === failuresBefore;
+        prepareFailed = !saved;
+        const missing = placeOrderBlocker(store, selectors, options);
+        if (!saved || missing !== null) {
+            releaseOrder();
+            const reason: PrepareOrderBlockReason = missing !== null && (saved || missing !== 'updating')
+                ? missing
+                : 'write-failed';
+            return { status: 'blocked', reason };
+        }
+        prepared = true;
+        // From here to `submitOrder()` the payment method has the page.
+        store.orderStep.set('payment');
+        return { status: 'ready' };
+    }
+
+    async function submitOrder(): Promise<PlaceOrderOutcome> {
+        if (!prepared || submitting) return null;
+        prepared = false;
+        submitting = true;
+        queue.close();
+        store.orderStep.set('submitting');
+        try {
+            // Second line of defense: an edit made while the payment step
+            // ran left a form ahead of the quote.
+            if ((!store.isVirtual.get() && store.shippingDirty.get()) || store.billingDirty.get()) {
+                releaseOrder();
+                store.globalError.set(checkoutUpdatingMessage());
+                return null;
+            }
+            const request = buildPaymentRequest();
+            if (request === null) {
+                releaseOrder();
+                return null;
+            }
+            let orderId: number;
+            try {
+                // The proof that the request comes from a person travels as headers.
+                orderId = await sendWithAntiAbuse(store, 'order', ({ headers }) => (isGuest()
+                    ? placeGuestOrder(resolveGuestId() ?? '', request, headers)
+                    : placeCustomerOrder(request, headers)));
+            } catch (err) {
+                return await resolveOrderFailure(err);
+            }
+            markPlaced();
+            return orderId;
+        } finally {
+            submitting = false;
         }
     }
 
+    function cancelOrder(): void {
+        if (!prepared || submitting) return;
+        releaseOrder();
+    }
+
+    async function placeOrder(): Promise<PlaceOrderOutcome> {
+        if (!prepared) {
+            const result = await prepareOrder({ skipPaymentReady: true });
+            if (result.status === 'blocked') {
+                const { reason } = result;
+                // A save that failed is on screen in its section: what
+                // is missing because of it is not named a second time.
+                if (reason !== 'busy' && reason !== 'write-failed' && reason !== 'outcome-unknown' && !prepareFailed) {
+                    store.globalError.set(placeOrderBlockerMessage(store, reason));
+                }
+                return null;
+            }
+        }
+        return submitOrder();
+    }
+
     return {
+        queue,
         estimateShipping,
         scheduleShippingEstimate,
         estimateShippingNow,
-        settleShipping,
+        refreshShippingRatesSilently,
+        flushShippingForm,
+        selectShippingMethod,
         saveShippingAndEstimateTotals,
-        applyCoupon,
-        removeCoupon,
-        placeOrder,
+        resumeAfterReconnect,
+        applyCoupon: (code) => changeCoupon(code),
+        removeCoupon: () => changeCoupon(null),
+        savePaymentMethod,
         savePaymentInformation,
         refreshPaymentInformation,
         syncBillingAddress,
+        scheduleBillingSync,
         invalidateBillingSync,
+        saveGiftMessage,
+        prepareOrder,
+        submitOrder,
+        cancelOrder,
+        placeOrder,
+        resolveLostOrder,
     };
 }
 
-function isZero(amount: unknown): boolean {
-    const n = typeof amount === 'number' ? amount : parseFloat(String(amount ?? ''));
-    return Number.isFinite(n) && Math.abs(n) < 0.005;
-}
-
 /**
- * The payment method to keep selected after the list changed. Exported for
- * the unit tests.
+ * The payment method to keep selected after the list changed: `free` at a
+ * zero grand total (it is the only method offered then, see
+ * `offeredPaymentMethods()`), the selection while the
+ * list still offers it, the only offered method when the generic renderer
+ * can handle it. Otherwise nothing: the shopper chooses, and a gateway is
+ * never selected for them (its SDK loads on selection). Exported for the
+ * unit tests.
  */
 export function reconcilePaymentSelection(
     selected: string | null,
     methods: readonly PaymentMethodConfig[],
     totals: Totals | null
 ): string | null {
-    const offered = (code: string | null): boolean => code !== null && methods.some((m) => m.code === code);
-    if (totals !== null && isZero(totals.grand_total) && offered('free')) {
-        return 'free';
+    const offer = offeredPaymentMethods(methods, totals);
+    if (totals !== null && isZeroAmount(totals.grand_total) && offer.length === 1 && offer[0]?.code === FREE_PAYMENT_METHOD) {
+        return FREE_PAYMENT_METHOD;
     }
-    if (offered(selected)) {
+    if (selected !== null && offer.some((m) => m.code === selected)) {
         return selected;
     }
-    return methods.find((m) => isSafeForGeneric(m.code))?.code ?? null;
+    const only = offer.length === 1 ? offer[0] : undefined;
+    return only !== undefined && isSafeForGeneric(only.code) ? only.code : null;
 }
 
-function outcomeOfActiveFlag(isActive: unknown): OrderOutcome {
-    if (isActive === true) return 'not-placed';
-    if (isActive === false) return 'placed';
-    return 'unknown';
+function shifted(value: unknown, delta: number): string {
+    const n = typeof value === 'number' ? value : parseFloat(String(value ?? ''));
+    return ((Number.isFinite(n) ? n : 0) + delta).toFixed(4);
 }
 
-function extractMessage(err: unknown): string {
-    if (err instanceof MagentoApiError) return err.message;
-    // The browser's own text ("Failed to fetch") says nothing to a shopper.
-    if (err instanceof NetworkError) return t('Hyperion_Checkout::error_network');
-    if (err instanceof Error) return err.message;
-    return t('Hyperion_Checkout::unexpected_error');
+/**
+ * The totals expected once the quote carries `next` instead of `previous`
+ * as its shipping rate: the shipping amounts, the tax on shipping (the
+ * difference between the price with and without tax) and the grand total
+ * move by the difference between the two rates, in the fields and in the
+ * `shipping`, `tax` and `grand_total` segments. Without a previous rate the
+ * amounts the totals carry are the starting point. A cart rule that depends
+ * on the method is not known here: the answer of the save corrects it.
+ * Null without totals. Exported for the unit tests.
+ */
+export function totalsWithShippingRate(
+    totals: Totals | null,
+    previous: ShippingMethod | null,
+    next: ShippingMethod
+): Totals | null {
+    if (totals === null) return null;
+    const amount = (value: unknown): number => {
+        const n = typeof value === 'number' ? value : parseFloat(String(value ?? ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+    const exclDelta = amount(next.price_excl_tax) - amount(previous ? previous.price_excl_tax : totals.shipping_amount);
+    const inclDelta = amount(next.price_incl_tax) - amount(previous ? previous.price_incl_tax : totals.shipping_incl_tax);
+    const taxDelta = inclDelta - exclDelta;
+    const segmentDelta: Readonly<Record<string, number>> = { shipping: exclDelta, tax: taxDelta, grand_total: inclDelta };
+    return {
+        ...totals,
+        shipping_amount: shifted(totals.shipping_amount, exclDelta),
+        shipping_incl_tax: shifted(totals.shipping_incl_tax, inclDelta),
+        shipping_tax_amount: shifted(totals.shipping_tax_amount, taxDelta),
+        tax_amount: shifted(totals.tax_amount, taxDelta),
+        grand_total: shifted(totals.grand_total, inclDelta),
+        total_segments: totals.total_segments.map((segment) => {
+            const delta = segmentDelta[segment.code];
+            return delta === undefined ? segment : { ...segment, value: shifted(segment.value, delta) };
+        }),
+    };
 }
 
-// Module singleton -- initialized by bootstrap after the store.
+// Module singleton: initialized by bootstrap after the store.
 let singleton: FlowActions | null = null;
 
 export function initFlowActions(): FlowActions {
@@ -791,6 +1577,4 @@ export function flowActions(): FlowActions {
 
 export function resetFlowActionsForTests(): void {
     singleton = null;
-    pendingShipping = null;
-    pendingBilling = null;
 }

@@ -4,16 +4,20 @@
   Copyright (c) 2026 Sergiu Ro - magentofullstackdev
 -->
 <!--
-    Admin configuration UI for Magentofullstackdev_HyperionCheckout.
+    Admin configuration of Magentofullstackdev_HyperionCheckout, under
+    Stores > Configuration > Hyperion Theme > Checkout.
 
-    Surfaces the feature flag `hyperion_checkout/general/enabled` under:
-        Stores -> Configuration -> Hyperion -> Checkout -> General
-            -> Enable Lit Checkout
+    General: `hyperion_checkout/general/enabled` (the Lit checkout on /checkout,
+    default 0 so an install opts in) and `.../persist_drafts` (typed input kept
+    in the browser tab's session storage).
+    Shipping: `hyperion_checkout/shipping/rate_fields` (the address fields whose
+    change asks for new rates) and `.../preselect` (which rate is selected for a
+    shopper who has not chosen one).
 
-    Per Q3: flag defaults to `0` so every new environment opts in
-    explicitly; switching to `1` flips the /checkout page from stock
-    Knockout to the Lit mount shell via CheckoutHandlePlugin. One-flag
-    rollback - cache flush is all that's needed after toggling.
+    One field joins the Security group of the Hyperion Theme section
+    (Magentofullstackdev_HyperionCore):
+    `hyperion/security/cart_estimate_limit` (the request budget of the cart
+    page's shipping estimate).
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
@@ -53,6 +57,65 @@
                         checkout. When disabled, stock Magento Knockout checkout is served.
                         Flush cache after changing this setting.
                     ]]></comment>
+                </field>
+                <field id="persist_drafts"
+                       translate="label comment"
+                       type="select"
+                       sortOrder="20"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Keep Typed Checkout Data in the Browser</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Keeps the address a shopper typed in the browser's session storage so a reload or a sign-in does not lose it. Cleared after the order.</comment>
+                </field>
+            </group>
+            <group id="shipping"
+                   translate="label"
+                   type="text"
+                   sortOrder="20"
+                   showInDefault="1"
+                   showInWebsite="1"
+                   showInStore="1">
+                <label>Shipping</label>
+                <field id="rate_fields"
+                       translate="label comment"
+                       type="multiselect"
+                       sortOrder="10"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Address fields that change shipping rates</label>
+                    <source_model>Magentofullstackdev\HyperionCheckout\Model\Config\Source\RateFields</source_model>
+                    <can_be_empty>1</can_be_empty>
+                    <comment>The checkout asks the carriers for rates again only when one of these fields changes. Country, state and postcode always count, whatever is selected here.</comment>
+                </field>
+                <field id="preselect"
+                       translate="label comment"
+                       type="select"
+                       sortOrder="20"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Preselected shipping method</label>
+                    <source_model>Magentofullstackdev\HyperionCheckout\Model\Config\Source\ShippingPreselect</source_model>
+                    <comment>Used when the shopper has not chosen a method and more than one is offered. A single offered method is always selected.</comment>
+                </field>
+            </group>
+        </section>
+        <section id="hyperion">
+            <group id="security">
+                <field id="cart_estimate_limit"
+                       translate="label comment"
+                       type="text"
+                       sortOrder="35"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Cart Estimate Requests per 10 Seconds</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>Budget of one client for the shipping estimate of the cart page (hyperion/cart/estimate). 0 disables the limit.</comment>
+                    <depends><field id="rate_limit_enabled">1</field></depends>
                 </field>
             </group>
         </section>

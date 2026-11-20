@@ -6,3 +6,160 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+    /*
+     * Field block rhythm, shared by every text and select field: the label
+     * line, 6px, the control, 4px, the message line. The message line is
+     * always in the flow, so a message that appears and a control that
+     * changes type keep the height of the block (5.75rem with one-line
+     * texts). Blocks are 1rem apart, in a column and in a row alike.
+     */
+    .hc-field {
+        display: block;
+    }
+
+    /* A custom element that lays out as a block (custom elements are inline by default). */
+    .hc-host {
+        display: block;
+    }
+
+    .hc-field-label {
+        display: block;
+        min-height: 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1.25rem;
+    }
+
+    .hc-field-control {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        height: 2.625rem;
+        margin: 0.375rem 0 0;
+        padding: 0.5rem 0.75rem;
+        border-width: 1px;
+        border-style: solid;
+        border-radius: var(--radius-control, 0.5rem);
+        font-size: 1rem;
+        line-height: 1.5rem;
+    }
+
+    .hc-field-message {
+        min-height: 1.25rem;
+        margin: 0.25rem 0 0;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    /* The place of a field the current country does not show. */
+    .hc-field-placeholder {
+        display: block;
+        min-height: 5.75rem;
+    }
+
+    .hc-fields > * + * {
+        margin-top: 1rem;
+    }
+
+    .hc-field-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+    }
+
+    @media (min-width: 768px) {
+        .hc-field-row-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .hc-field-row-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    /*
+     * One reserved line under a field for a notice that arrives later (the
+     * account found for the typed email): its arrival moves nothing.
+     */
+    .hc-reserved-line {
+        min-height: 1.25rem;
+        margin: 0.25rem 0 0;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+}
+
+/*
+ * Layout and shared look of the checkout shell. Plain rules scoped to the
+ * app root: they style elements whose classes belong to other components
+ * (the `hc-*` controls, the option rows), so the selectors carry one class
+ * or attribute more than a scoped utility to win over it.
+ */
+
+/* The summary rail sticks below the sticky site header. */
+@media (min-width: 1024px) {
+    checkout-app [data-hyperion-summary-rail] {
+        position: sticky;
+        top: calc(var(--hyperion-header-height, 0px) + 1rem);
+    }
+}
+
+/* Below the rail layout Place Order sticks to the bottom of the viewport:
+   a field scrolled into view must stop above that bar. */
+@media (max-width: 1023.98px) {
+    html:has(checkout-app) {
+        scroll-padding-bottom: 8rem;
+    }
+}
+
+/* Place Order fills its bar and is a 48px touch target. */
+checkout-app place-order-button hc-button > button[class] {
+    width: 100%;
+    min-height: 3rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+/* Control radius on buttons, inputs and option rows; card radius is the
+   `rounded-card` utility on the cards themselves. */
+checkout-app hc-button > button[class],
+checkout-app :is(hc-text-input, hc-select-input) :is(input, select, textarea)[class],
+checkout-app textarea[class],
+checkout-app :is(payment-method-row, address-card, coupon-form, error-banner, hc-section-status) .rounded-md[class] {
+    border-radius: var(--radius-control, 0.5rem);
+}
+
+/* The select draws the chevron of the storefront instead of the
+   platform's arrow. */
+checkout-app hc-select-input select[class] {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+}
+
+/* A section status is a block between its neighbors, set off from the
+   control above it; without a status it takes no room at all. */
+checkout-app hc-section-status {
+    display: block;
+    margin-top: 0.75rem;
+}
+
+checkout-app hc-section-status:empty {
+    display: none;
+}
+
+/* The bar of the collapsed summary: no platform marker, the chevron turns. */
+checkout-app order-summary summary {
+    list-style: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    checkout-app order-summary summary svg {
+        transition: transform var(--hyperion-motion-fast, 120ms) ease-out;
+    }
+}

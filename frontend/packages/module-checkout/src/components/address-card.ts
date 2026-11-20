@@ -2,14 +2,24 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <address-card> -- read-only display of a saved address. Used by
- * <address-selector> to render each saved-address row.
+ * <address-card>: read-only display of a saved address. Used by
+ * <address-selector> to render each saved-address row. The country is
+ * printed by its name from the directory data, its code when the
+ * directory does not know it.
  */
 import { LitElement, html } from 'lit';
 import { property } from 'lit/decorators.js';
 
 import type { Address } from '../types/address.js';
+import { peekCheckoutConfig } from '../bootstrap-config.js';
 import { formatFullName } from '../utils/name-fields.js';
+
+function countryName(countryId: string): string {
+    const directory = (peekCheckoutConfig() as unknown as { directoryData?: Record<string, unknown> } | null)?.directoryData;
+    const entry = directory?.[countryId];
+    const name = entry && typeof entry === 'object' ? (entry as { name?: unknown }).name : null;
+    return typeof name === 'string' && name !== '' ? name : countryId;
+}
 
 export class AddressCard extends LitElement {
     @property({ type: Object }) public address!: Address;
@@ -28,7 +38,7 @@ export class AddressCard extends LitElement {
                 <p>
                     ${[a.city, region, a.postcode].filter(Boolean).join(', ')}
                 </p>
-                <p>${a.country_id}</p>
+                <p>${countryName(a.country_id)}</p>
                 ${a.telephone ? html`<p class="text-muted">${a.telephone}</p>` : null}
             </div>
         `;

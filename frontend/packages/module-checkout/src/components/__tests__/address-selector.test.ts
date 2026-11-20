@@ -138,3 +138,191 @@ describe('<address-selector> "Add new address"', () => {
         expect(el.querySelector('address-form')).toBeNull();
     });
 });
+
+describe('<address-selector> saved address step', () => {
+    let store: Store;
+
+    const SECOND: Address = {
+        ...SAVED,
+        id: '2',
+        street: ['1 Second Street'],
+        city: 'Austin',
+        default_shipping: false,
+        default_billing: false,
+    };
+
+    const DIRECTORY = {
+        US: { name: 'United States', is_region_required: true, regions: { 33: { code: 'MI', name: 'Michigan' } } },
+        DE: { name: 'Germany', is_region_required: false },
+    };
+
+    async function mountBare(mode: 'shipping' | 'billing' = 'shipping'): Promise<{ el: AddressSelector; picks: Address[] }> {
+        const el = document.createElement('address-selector') as AddressSelector;
+        el.mode = mode;
+        const picks: Address[] = [];
+        el.addEventListener('saved-address-select', (e) => picks.push((e as CustomEvent<{ address: Address }>).detail.address));
+        document.body.appendChild(el);
+        await settle(el);
+        return { el, picks };
+    }
+
+    function button(el: Element, marker: string): HTMLButtonElement {
+        const node = el.querySelector<HTMLButtonElement>(`hc-button[${marker}] button`);
+        if (!node) throw new Error(`no button ${marker}`);
+        return node;
+    }
+
+    beforeEach(() => {
+        setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
+        setCheckoutConfig({ ...(customerFixture as unknown as CheckoutConfig), directoryData: DIRECTORY } as unknown as CheckoutConfig);
+        store = createStore();
+        setStoreForTests(store);
+        store.isGuest.set(false);
+        store.customer.set({ ...(customerFixture as unknown as CheckoutConfig).customerData, firstname: 'Veronica', lastname: 'Costello' } as never);
+        store.savedAddresses.set([SAVED, SECOND]);
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        setStoreForTests(null);
+    });
+
+    it('renders the cards as one labeled radio group with the country by name', async () => {
+        store.selectedShippingAddressId.set('1');
+        store.shippingAddress.set(SAVED);
+        const { el } = await mountBare();
+        const group = el.querySelector('[role="radiogroup"]')!;
+        expect(group.getAttribute('aria-label')).toBe('Shipping Address');
+        expect(group.querySelectorAll('input[type="radio"]').length).toBe(2);
+        expect(group.querySelector('address-card')?.textContent).toContain('United States');
+        expect(group.querySelector('address-card')?.textContent).not.toMatch(/\bUS\b/);
+    });
+
+    it('"Cancel" gives back the card that was selected and tells the step', async () => {
+        store.selectedShippingAddressId.set('2');
+        store.shippingAddress.set(SECOND);
+        const { el, picks } = await mountBare();
+        button(el, 'data-hyperion-address-new').click();
+        await settle(el);
+        expect(store.selectedShippingAddressId.get()).toBeNull();
+        expect(store.shippingAddress.get()).not.toHaveProperty('id');
+
+        button(el, 'data-hyperion-address-cancel').click();
+        await settle(el);
+        expect(el.querySelector('address-form')).toBeNull();
+        expect(store.selectedShippingAddressId.get()).toBe('2');
+        expect(store.shippingAddress.get()).toBe(SECOND);
+        expect(picks).toEqual([SECOND]);
+        const radios = Array.from(el.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
+        expect(radios.map((r) => r.checked)).toEqual([false, true]);
+    });
+
+    it('opening the new form makes the shipping step wait for an address again (shipping mode only)', async () => {
+        store.selectedShippingAddressId.set('1');
+        store.shippingAddress.set(SAVED);
+        store.estimateState.set('ready');
+        const shipping = await mountBare();
+        button(shipping.el, 'data-hyperion-address-new').click();
+        expect(store.estimateState.get()).toBe('idle');
+
+        document.body.innerHTML = '';
+        store.estimateState.set('ready');
+        store.selectedBillingAddressId.set('1');
+        store.billingAddress.set(SAVED);
+        const billing = await mountBare('billing');
+        button(billing.el, 'data-hyperion-address-new').click();
+        expect(store.estimateState.get()).toBe('ready');
+    });
+
+    it('without a default address the first saved address of an allowed country is selected at mount', async () => {
+        const abroad: Address = { ...SAVED, id: '9', country_id: 'ZZ' };
+        store.savedAddresses.set([abroad, SECOND, SAVED]);
+        const { el, picks } = await mountBare();
+        expect(store.selectedShippingAddressId.get()).toBe('2');
+        expect(store.shippingAddress.get()).toBe(SECOND);
+        expect(picks).toEqual([SECOND]);
+        expect(el.querySelector('address-form')).toBeNull();
+    });
+
+    it('a customer without saved addresses gets the form with the name and the address book box ticked', async () => {
+        store.savedAddresses.set([]);
+        const { el } = await mountBare();
+        expect(el.querySelector('[role="radiogroup"]')).toBeNull();
+        expect(input(el, 'firstname').value).toBe('Veronica');
+        expect(input(el, 'lastname').value).toBe('Costello');
+        const box = el.querySelector('hc-checkbox[name="save_in_address_book"]') as (HTMLElement & { checked: boolean }) | null;
+        expect(box?.checked).toBe(true);
+        expect(store.shippingAddress.get()?.save_in_address_book).toBe(true);
+        expect(store.shippingAddress.get()).not.toHaveProperty('id');
+    });
+
+    it('a typed address already in the store opens the form filled from it and nothing is emitted at mount', async () => {
+        const typed: Address = {
+            firstname: 'Veronica',
+            lastname: 'Costello',
+            street: ['12 Typed Road'],
+            city: 'Lansing',
+            postcode: '48901',
+            country_id: 'US',
+            region_id: '33',
+            telephone: '555',
+            save_in_address_book: false,
+        };
+        for (const saved of [[SAVED, SECOND], []] as const) {
+            document.body.innerHTML = '';
+            store.savedAddresses.set(saved);
+            store.selectedShippingAddressId.set(null);
+            store.shippingAddress.set(typed);
+            const el = document.createElement('address-selector') as AddressSelector;
+            el.mode = 'shipping';
+            const changes: unknown[] = [];
+            const picks: unknown[] = [];
+            el.addEventListener('address-change', (e) => changes.push((e as CustomEvent).detail));
+            el.addEventListener('saved-address-select', (e) => picks.push((e as CustomEvent).detail));
+            document.body.appendChild(el);
+            await settle(el);
+
+            expect(el.querySelector('address-form')).not.toBeNull();
+            expect(input(el, 'street_0').value).toBe('12 Typed Road');
+            expect(input(el, 'city').value).toBe('Lansing');
+            const box = el.querySelector('hc-checkbox[name="save_in_address_book"]') as (HTMLElement & { checked: boolean }) | null;
+            expect(box?.checked).toBe(false);
+            expect(changes).toEqual([]);
+            expect(picks).toEqual([]);
+            expect(store.shippingAddress.get()).toBe(typed);
+            expect(store.selectedShippingAddressId.get()).toBeNull();
+            if (saved.length > 0) {
+                const radios = Array.from(el.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
+                expect(radios.some((r) => r.checked)).toBe(false);
+            }
+        }
+    });
+
+    it('a saved address that lacks a required field names it, and "Edit" opens the form on a copy without its id', async () => {
+        const incomplete: Address = { ...SECOND, id: '3', region_id: null, region: null, telephone: '' };
+        store.savedAddresses.set([SAVED, incomplete]);
+        store.selectedShippingAddressId.set('1');
+        store.shippingAddress.set(SAVED);
+        const { el } = await mountBare();
+
+        expect(el.querySelector('[data-hyperion-address-card="1"] [data-hyperion-address-incomplete]')).toBeNull();
+        const notice = el.querySelector('[data-hyperion-address-card="3"] [data-hyperion-address-incomplete]');
+        expect(notice?.textContent?.trim()).toBe('This address is missing: State/Province, Phone Number.');
+
+        button(el, 'data-hyperion-address-edit').click();
+        await settle(el);
+        // One form at a time: no second "Edit" while it is open.
+        expect(el.querySelector('[data-hyperion-address-edit]')).toBeNull();
+        expect(input(el, 'street_0').value).toBe('1 Second Street');
+        expect(input(el, 'city').value).toBe('Austin');
+        const current = store.shippingAddress.get();
+        expect(current).not.toHaveProperty('id');
+        expect(current).not.toHaveProperty('customer_id');
+        expect(current?.save_in_address_book).toBe(true);
+        expect(store.selectedShippingAddressId.get()).toBeNull();
+
+        button(el, 'data-hyperion-address-cancel').click();
+        await settle(el);
+        expect(store.selectedShippingAddressId.get()).toBe('1');
+    });
+});

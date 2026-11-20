@@ -1,0 +1,88 @@
+{
+    "guest": {
+        "shippingMethods": [
+            {
+                "carrier_code": "flatrate",
+                "method_code": "flatrate",
+                "carrier_title": "Flat Rate",
+                "method_title": "Fixed",
+                "amount": 15,
+                "base_amount": 15,
+                "available": true,
+                "error_message": "",
+                "price_excl_tax": 15,
+                "price_incl_tax": 16.5
+            }
+        ],
+        "paymentMethods": [
+            { "code": "checkmo", "title": "Check / Money order" }
+        ],
+        "appliedShippingMethod": { "carrier_code": "flatrate", "method_code": "flatrate" },
+        "quoteAddresses": null,
+        "fingerprint": "c3dbef99651da6d94705247cf3462fb1fe008dc5"
+    },
+    "customer": {
+        "shippingMethods": [
+            {
+                "carrier_code": "flatrate",
+                "method_code": "flatrate",
+                "carrier_title": "Flat Rate",
+                "method_title": "Fixed",
+                "amount": 15,
+                "base_amount": 15,
+                "available": true,
+                "error_message": "",
+                "price_excl_tax": 15,
+                "price_incl_tax": 16.5
+            }
+        ],
+        "paymentMethods": [
+            { "code": "checkmo", "title": "Check / Money order" }
+        ],
+        "appliedShippingMethod": { "carrier_code": "flatrate", "method_code": "flatrate" },
+        "quoteAddresses": {
+            "shipping": {
+                "firstname": "Jane",
+                "lastname": "Doe",
+                "company": null,
+                "city": "Calder",
+                "region": "Michigan",
+                "region_code": "MI",
+                "postcode": "49628-7978",
+                "country_id": "US",
+                "telephone": "5125550100",
+                "fax": null,
+                "vat_id": null,
+                "prefix": null,
+                "middlename": null,
+                "suffix": null,
+                "region_id": "33",
+                "street": ["6146 Honey Bluff Parkway"],
+                "customer_address_id": 12,
+                "same_as_billing": false
+            },
+            "billing": {
+                "firstname": "Jane",
+                "lastname": "Doe",
+                "company": null,
+                "city": "Austin",
+                "region": "Texas",
+                "region_code": "TX",
+                "postcode": "49628-7978",
+                "country_id": "US",
+                "telephone": "5125550100",
+                "fax": null,
+                "vat_id": null,
+                "prefix": null,
+                "middlename": null,
+                "suffix": null,
+                "region_id": "57",
+                "street": ["6146 Honey Bluff Parkway"],
+                "customer_address_id": null,
+                "same_as_billing": false
+            },
+            "billingSameAsShipping": false
+        },
+        "fingerprint": "c3dbef99651da6d94705247cf3462fb1fe008dc5"
+    }
+}

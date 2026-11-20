@@ -10,10 +10,12 @@
  * stays untyped on purpose -- every future Magento patch or third-
  * party extension can add keys without invalidating this contract.
  */
+import type { CaptchaConfig, RecaptchaConfig } from './captcha.js';
 import type { CustomerData } from './customer.js';
 import type { ExtensionAttributes } from './common.js';
 import type { PaymentMethodConfig } from './payment.js';
 import type { QuoteData, CartItem } from './quote.js';
+import type { SelectedShippingMethod, ShippingMethod } from './shipping.js';
 import type { Totals } from './totals.js';
 
 /**
@@ -121,6 +123,89 @@ export interface HyperionConfig {
      * there) and on older payloads.
      */
     guestQuote?: GuestQuoteConfig | null;
+    /**
+     * What the quote already holds when the page is rendered (stored
+     * shipping rates, payment methods, the applied shipping method), so the
+     * checkout can start without asking for them. Null when the quote has
+     * no confirmed shipping method or the visitor does not own its data;
+     * absent on older payloads.
+     */
+    initial?: InitialStateConfig | null;
+    /**
+     * The address fields whose change asks for new shipping rates
+     * (`country_id`, `region`, `postcode`, optionally `city`, `street`).
+     * `region` stands for the region id and the free-text region.
+     */
+    rateFields?: readonly string[];
+    /** `checkout/options/enable_guest_checkout_login`: a guest may sign in from the email step. */
+    guestCheckoutLoginEnabled?: boolean;
+    /** Which shipping rate is selected when the shopper has not chosen one. */
+    shippingPreselect?: ShippingPreselect;
+    /** Typed input is kept in the tab's session storage until the order is placed. */
+    persistDrafts?: boolean;
+    /** Google reCAPTCHA per protected action; an unprotected action has no entry. */
+    recaptcha?: RecaptchaConfig;
+    /** Magento's image CAPTCHA: its URLs and the state of each form. */
+    captcha?: CaptchaConfig;
+    /** The sign in page, set to return to the checkout afterwards. */
+    loginUrl?: string;
+    /** The cart page. */
+    cartUrl?: string;
+    /** The "Forgot your password?" page. */
+    forgotPasswordUrl?: string;
+    /** Country ids listed first in the country select (`general/country/destinations`). */
+    topDestinations?: readonly string[];
+    /**
+     * The minimum order rule in numbers, so it can be evaluated again from
+     * each totals answer. Null when the rule is off.
+     */
+    minimumOrder?: MinimumOrderConfig | null;
+    /**
+     * Core's phrases the checkout recognizes a failure by (cart locked,
+     * out of stock, CAPTCHA), English wire phrase to the store's
+     * translation, for answers that arrive already translated.
+     */
+    errorPhrases?: Readonly<Record<string, string>>;
+    /**
+     * The store's totals sort order (Stores > Configuration > Sales >
+     * Checkout Totals Sort Order): total code to position. The summary
+     * orders its rows by it, like the cart page.
+     */
+    totalsSort?: Readonly<Record<string, number>>;
+}
+
+export type ShippingPreselect = 'cheapest' | 'first' | 'none';
+
+/**
+ * The quote addresses of a logged in customer: the same flat fields as
+ * `GuestQuoteConfig` plus `customer_address_id` and `same_as_billing`.
+ */
+export interface InitialQuoteAddressesConfig {
+    shipping: QuoteAddressConfig | null;
+    billing: QuoteAddressConfig | null;
+    billingSameAsShipping: boolean;
+}
+
+export interface InitialStateConfig {
+    /** The stored rates of the quote shipping address, keyed like the REST answer. */
+    shippingMethods: readonly ShippingMethod[];
+    paymentMethods: readonly PaymentMethodConfig[];
+    appliedShippingMethod: SelectedShippingMethod;
+    /** Null for a guest, whose addresses come with `guestQuote`. */
+    quoteAddresses: InitialQuoteAddressesConfig | null;
+    /** Hash of what the stored rates were collected for; diagnostics only. */
+    fingerprint: string;
+}
+
+export interface MinimumOrderConfig {
+    /** The threshold in the base currency. */
+    amount: number;
+    /** The discount is subtracted before the comparison. */
+    includeDiscount: boolean;
+    /** The tax is added before the comparison. */
+    includeTax: boolean;
+    /** The message shown while the cart is below the threshold. */
+    description: string;
 }
 
 /**
@@ -183,17 +268,20 @@ export interface PaypalPayLaterConfig {
 /**
  * `Magentofullstackdev\HyperionCheckout\Model\Checkout\PaypalExpressConfigProvider`.
  * `startUrls` is keyed by method code and lists the available express
- * methods (`paypal_express`, `payflow_express`).
+ * methods (`paypal_express`, `payflow_express`). `styles` keeps the scalar
+ * types of the server.
+ * `billingAgreementCode` maps a method code to the `additional_data` key
+ * of the billing agreement choice, for the methods that ask the customer.
  */
 export interface PaypalExpressConfig {
     inContext: boolean;
     sdkUrl: string;
     dataAttributes: Readonly<Record<string, string>>;
-    styles: Readonly<Record<string, string>>;
+    styles: Readonly<Record<string, string | number | boolean>>;
     getTokenUrl: string;
     onAuthorizeUrl: string;
-    onCancelUrl: string;
     startUrls: Readonly<Record<string, string>>;
+    billingAgreementCode: Readonly<Record<string, string>>;
     markImageUrl: string;
     whatIsPaypalUrl: string;
     payLater: PaypalPayLaterConfig | null;

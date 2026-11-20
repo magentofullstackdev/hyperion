@@ -61,7 +61,27 @@ export type {
     AgreementEntry,
     AgreementsConfig,
     HyperionConfig,
+    InitialStateConfig,
+    InitialQuoteAddressesConfig,
+    MinimumOrderConfig,
+    ShippingPreselect,
     CheckoutConfig,
 } from './config.js';
-export type { MagentoWireError } from './errors.js';
-export type { CheckoutState } from './state.js';
+export type { CheckoutErrorKind, MagentoWireError } from './errors.js';
+export type { CheckoutState, EstimateState, OrderOutcomeState, OrderStep } from './state.js';
+export type {
+    SectionId,
+    SectionStatus,
+    SectionStatusMap,
+    SectionStatusSource,
+} from './section.js';
+export type {
+    CaptchaConfig,
+    CaptchaFormId,
+    CaptchaFormState,
+    CaptchaStateMap,
+    RecaptchaAction,
+    RecaptchaActionConfig,
+    RecaptchaConfig,
+    RecaptchaType,
+} from './captcha.js';

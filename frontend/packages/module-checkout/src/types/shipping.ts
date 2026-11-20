@@ -42,10 +42,15 @@ export interface ShippingMethod {
 /**
  * POST /V1/guest-carts/:cartId/estimate-shipping-methods
  *
- * Magento accepts a partial shipping address -- only country_id is
- * strictly required by the endpoint; additional fields refine the
- * rate. The bundle debounces to 500 ms after the minimum fields for
- * the selected country have been typed.
+ * Magento accepts a partial shipping address: only country_id is
+ * strictly required by the endpoint, additional fields refine the
+ * rate. The checkout asks for rates when the rate key of the address
+ * changes (the fields that decide the rates: country, region and
+ * postcode unless the configuration names others) and the address is
+ * estimable (a country, a postcode and a region where the country
+ * requires them), see `store/rate-key.ts`. An edit of any other field
+ * asks for nothing, and an answer is applied only while the key it was
+ * asked for is still the current one.
  */
 export interface EstimateShippingMethodsRequest {
     address: Partial<AddressRequestPayload>;
@@ -62,7 +67,8 @@ export interface EstimateShippingMethodsRequest {
 export interface ShippingInformationRequest {
     addressInformation: {
         shipping_address: AddressRequestPayload;
-        billing_address: AddressRequestPayload;
+        /** Left out while a billing address entered on its own is not complete yet. */
+        billing_address?: AddressRequestPayload;
         shipping_method_code: string;
         shipping_carrier_code: string;
         extension_attributes?: ExtensionAttributes;

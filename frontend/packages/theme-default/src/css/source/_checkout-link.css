@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * Busy state of the "Proceed to Checkout" links.
+ *
+ * Imported by entry.css only: the links are never part of the fold of a page
+ * with a critical sheet (the cart page links the theme stylesheet
+ * synchronously, the mini-cart drawer is closed), so the inline sheets do
+ * not carry these rules.
+ */
+
+/* `lib/checkout-link-busy.js` marks a "Proceed to Checkout" link
+   `aria-busy="true"` on the click that starts the navigation. The label ink
+   turns transparent (the text keeps its box and stays the accessible name;
+   `currentColor` keeps the link's color for the ring) and a spinner sits
+   over its center, so the link keeps its size. Offsets and margins place
+   the ring: the spin animation owns `transform`. Under reduced motion the
+   universal rule of `_motion.css` ends the animation at once and leaves a
+   still ring. The theme sheet is adopted by the mini-cart, so the rule also
+   reaches the link of its drawer. */
+[data-hyperion-checkout-link][aria-busy="true"],
+[data-hyperion-checkout-bar-link][aria-busy="true"] {
+    position: relative;
+    cursor: progress;
+    opacity: 0.85;
+    -webkit-text-fill-color: transparent;
+}
+
+[data-hyperion-checkout-link][aria-busy="true"]::after,
+[data-hyperion-checkout-bar-link][aria-busy="true"]::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    box-sizing: border-box;
+    width: 1rem;
+    height: 1rem;
+    margin: -0.5rem 0 0 -0.5rem;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 9999px;
+    animation: hyperion-checkout-link-spin 0.75s linear infinite;
+}
+
+@keyframes hyperion-checkout-link-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

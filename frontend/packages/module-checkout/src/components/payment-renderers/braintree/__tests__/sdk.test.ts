@@ -21,6 +21,13 @@ describe('Braintree SDK loader', () => {
         document.head.querySelectorAll('script').forEach((el) => el.remove());
     });
 
+    it('pins the SDK version of PayPal_Braintree 4.8', () => {
+        expect(BRAINTREE_SDK_VERSION).toBe('3.123.1');
+        expect(braintreeScriptUrl('paypal-checkout')).toBe(
+            'https://js.braintreegateway.com/web/3.123.1/js/paypal-checkout.min.js'
+        );
+    });
+
     it('builds every script URL from the single pinned version', () => {
         expect(braintreeScriptUrl('client')).toBe(CLIENT_URL);
         for (const name of ['hosted-fields', 'data-collector', 'three-d-secure', 'paypal-checkout', 'google-payment'] as const) {

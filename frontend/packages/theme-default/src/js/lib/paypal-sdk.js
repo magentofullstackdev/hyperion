@@ -66,6 +66,11 @@ export function loadPaypalSdk(url, attributes = {}) {
             if (window.paypal) {
                 resolve(window.paypal);
             } else {
+                // The file arrived and left no SDK behind: the next caller
+                // gets a fresh request, not this rejection.
+                sdkPromise = null;
+                sdkUrl = '';
+                script.remove();
                 reject(new Error('PayPal SDK did not initialize'));
             }
         };

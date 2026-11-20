@@ -1,6 +1,6 @@
 # Known limitations
 
-State of 0.9.0-beta.5: 187 native storefront features of Magento Open
+State of 0.9.0-beta.6: 187 native storefront features of Magento Open
 Source were checked one by one against the theme, and the list below is
 what is left.
 Every default-configuration flow exercised by the end-to-end suite works
@@ -9,24 +9,17 @@ with the explicit exceptions documented below: multishipping is enabled by
 core but only reachable by URL and renders core markup. What follows is
 the long tail. Items are grouped by how they affect a store.
 
-Payment sign-off perimeter: only the methods marked "verified" in the
-"Payment methods" table of `docs/checkout.md` were verified live (offline methods, PayPal Express
-sandbox, Braintree card with vault and 3D Secure against a Braintree
-sandbox; the two gateway verifications were made on platforms that are now
-in the "Previously tested" table of `docs/compatibility.md`). There is no
+Payment sign-off perimeter: only the methods with a record in the "Payment
+methods" and "Braintree" tables of `docs/checkout.md` were verified live:
+the offline methods, PayPal Express in a sandbox (on a platform that is now
+in the "Previously tested" table of `docs/compatibility.md`), and the
+Braintree card with 3D Secure, the stored card and Braintree PayPal
+against a Braintree sandbox on Magento 2.4.9. Saving a PayPal account
+through Braintree, a Google Pay payment and a card stored through Google
+Pay have no completed sandbox payment. There is no
 general sign-off on 3D Secure for other gateways, wallets, Payment Services
 or the remaining PayPal variants; a gateway not named there has not been
 tested with this checkout.
-
-## Not supported in this release
-
-- **HTML minification (`dev/template/minify_html`).** Keep it off. Magento's
-  template minifier joins a template into one line, which breaks PHP heredoc
-  and nowdoc blocks, and seven Hyperion templates use them (the head scripts
-  of every page among them): with the option on, every page answers an
-  error. JS and CSS minification (`dev/js/minify_files`,
-  `dev/css/minify_files`) are supported, see
-  [Install](./install.md#production-checklist).
 
 ## Not available (planned, architecture exists)
 
@@ -42,17 +35,21 @@ tested with this checkout.
 
 ## Should-have features missing for 1.0
 
-1. Image CAPTCHA for the checkout's inline login (core enables it after
-   failed logins); the storefront login page has it.
-2. Persistent cart ("Remember Me"): renders core markup, never tested.
-3. Braintree: PayPal, express buttons on product / cart / mini-cart
-   (including the Google Pay ones), Apple Pay, saved payment methods page.
-4. Payment Services (Adobe): no renderer, no express buttons, no Pay Later
+1. Persistent cart ("Remember Me"): renders core markup, never tested.
+2. Braintree: express buttons on product / cart / mini-cart
+   (including the Google Pay ones), Apple Pay, Venmo, ACH and local payment
+   methods in the checkout, the "add a card / PayPal / Google Pay" forms of
+   the saved payment methods page. Saving a PayPal account through
+   Braintree has a renderer and no completed sandbox record yet
+   ([Checkout](./checkout.md#braintree)).
+3. Payment Services (Adobe): no renderer, no express buttons, no Pay Later
    message, stored cards list / delete only.
-5. Remaining PayPal methods: Hosted Pro, Payflow Pro / Link / Advanced,
+4. Remaining PayPal methods: Hosted Pro, Payflow Pro / Link / Advanced,
    billing agreement method; the billing agreements account page is core
-   markup and its create form is rejected.
-6. Google Analytics: only GA4 / Google Ads through `google/gtag/*` are
+   markup and its create form is rejected. The image CAPTCHA form of
+   Payflow Pro (`co-payment-form`) is not rendered either: Payflow Pro has
+   no renderer.
+5. Google Analytics: only GA4 / Google Ads through `google/gtag/*` are
    emitted; the legacy Universal Analytics module (`Magento_GoogleAnalytics`)
    and Google Tag Manager containers are not.
 
@@ -60,9 +57,10 @@ tested with this checkout.
 
 Reorder sidebar ("Recently Ordered"), recently viewed products in the
 account dashboard (the widgets and sidebars are client-side, see
-[Configuration](./configuration.md)), category and order RSS links, fixed product tax
-(FPT / Weee) on the product page and listings (the mini-cart, cart and
-checkout show it), custom address attributes beyond the VAT number (the address form
+[Configuration](./configuration.md)), category and order RSS links, the Fixed Product Tax
+(FPT / Weee) lines of a configurable product following the variant picked
+(the product page and the listings show the FPT of the product itself),
+custom address attributes beyond the VAT number (the address form
 renders a `customer_form_address_user_attributes` child when a module
 schedules one), instant purchase, `payflow_express` live verification, PayPal review page without a
 coupon form, search term popularity and result
@@ -136,19 +134,45 @@ own default setting it removes the theme's microdata from product pages
 
 ## Checkout and cart behavior to know
 
-- **Lost answers.** The order request has a 60 second limit, and when its
-  answer is lost (timeout, connection dropped) the checkout reads the cart
-  to tell "placed", "not placed" and "unknown" apart. That recovery covers
-  the order request only: every other call of the checkout (rates, shipping
-  save, totals, coupon, gift message) has no timeout of its own and no
-  offline handling yet, and a failed estimate or shipping save is not
-  retried in the background: a press of Place Order, an address edit or
-  another shipping method sends it again. A shopper who placed the order in
-  one tab while a second tab lost its answer is not recognized as such. A
-  broader recovery is planned for the next release.
-- **The first available shipping rate is preselected** when the quote has no
-  method yet; a carrier's error rate is listed as a notice and never
-  selected.
+- **An order placed in another tab** leaves the first tab on the cart page.
+  When the same session orders in one tab while another tab still shows the
+  checkout, the second tab finds the cart ordered and leaves for the success
+  page; core shows that page once per order, so it sends the second tab on
+  to the empty cart without a message.
+- **An order whose outcome cannot be read** (the answer was lost and the
+  cart cannot be read either) keeps Place Order locked and offers "Check
+  again"; the checkout keeps reading the cart for a minute and whenever the
+  connection comes back, then waits for the shopper. It never sends the
+  order a second time by itself.
+- **An authorization of a failed order is voided only when the order was
+  not saved.** When the order submission fails after the order row was
+  written (an observer of the success event or the cart save threw),
+  Hyperion leaves the order and its authorization alone and logs a warning;
+  what happens next is the payment module's business (the Braintree module
+  cancels such an order and voids it, core's offline and PayPal Express
+  methods do nothing). A payment that was captured at once ("authorize and
+  capture") is not refunded: the warning names the transaction. A PHP
+  `Error` (not an `Exception`) inside the submission skips core's failure
+  event, so nothing is voided. Adobe Payment Services methods are skipped,
+  that module releases the authorization of its own failed orders. The
+  observer acts through the payment method's own void command; it was
+  exercised against a Braintree sandbox with a new card (guest and
+  customer) and with a stored card, and not with PayPal Express or a
+  Braintree wallet.
+- **Google Pay needs a second press after an edit that was still saving.**
+  A browser only lets the Google Pay sheet open inside the click itself, so
+  the click cannot wait for pending saves: it saves them and says so, and
+  the next click opens the sheet.
+- **Google Pay stored cards and CVV.** A card stored through Google Pay
+  (`braintree_googlepay_vault`) is ordered without a CVV step, as the
+  Braintree module's own script does. This path has not been verified
+  against a sandbox.
+- **A single offered shipping rate is selected**, and among several the one
+  `hyperion_checkout/shipping/preselect` names (the cheapest by default); a
+  carrier's error rate is listed as a notice and never selected.
+- **Typed checkout data is kept in the browser tab** (`sessionStorage`)
+  while `hyperion_checkout/general/persist_drafts` is on, see
+  [Checkout](./checkout.md#drafts-typed-data-kept-in-the-browser).
 - **The purchase order number is required** when the Purchase Order method
   is selected.
 - **The cart estimator lists unavailable carriers as notices** (carrier

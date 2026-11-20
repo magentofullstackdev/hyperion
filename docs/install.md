@@ -36,13 +36,13 @@ the Magento root:
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.5
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.5   # optional, see below
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.6
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.6   # optional, see below
 ```
 
 `minimum-stability beta` is needed while the release is a beta: the theme
-requires its modules at the exact version `0.9.0-beta.5`, and a stability
-flag on the root constraint (`^0.9.0-beta.5`) does not reach those
+requires its modules at the exact version `0.9.0-beta.6`, and a stability
+flag on the root constraint (`^0.9.0-beta.6`) does not reach those
 transitive requirements. `prefer-stable` keeps every other package on its
 stable release, and Magento projects already ship with it set. The step
 disappears with the first stable release.
@@ -249,10 +249,14 @@ Anti-Abuse Shield ([Configuration](./configuration.md)).
   `bin/magento config:set` refuses the path, an override goes through
   `app/etc/env.php` / `config.php` or an environment variable. Redeploy the
   static content after switching minification on or off.
-- **HTML minification is not supported** in this release: keep
-  `dev/template/minify_html` at 0. Magento's template minifier breaks the
-  PHP heredoc blocks several Hyperion templates use, and every page answers
-  an error with it on ([Known limitations](./known-limitations.md)).
+- **HTML minification is supported** (`dev/template/minify_html`).
+  Magento's template minifier joins a template into one line, so no Hyperion
+  template carries a PHP heredoc or nowdoc block: the inline scripts are
+  built from single-line strings and print the same JavaScript with the
+  option on or off. A child theme or a module that adds templates must
+  follow the same rule. Redeploy the static content and flush the cache
+  after switching it (the minified templates live under
+  `var/view_preprocessed`).
 - **Child themes**: a theme scaffolded with this release is covered by the
   same excludes; one scaffolded earlier may need three lines in its
   `vite.config.js`, see [Child themes](./child-themes.md#minification).
@@ -296,8 +300,9 @@ bin/magento cache:flush
 All twelve packages (eleven modules and the theme) carry the same version and
 require each other with `self.version`, so they always move together. Read the [changelog](../CHANGELOG.md)
 for the release you upgrade to: a release that needs more than these
-commands has an "Upgrade notes" block (`0.9.0-beta.5` asks for a new VCL, a
-cache flush and a look at the page head). If `pub/static` keeps symlinks to old hashed
+commands has an "Upgrade notes" block (`0.9.0-beta.6` asks for
+`setup:upgrade`, a compile, a cache flush and a look at three new store
+settings). If `pub/static` keeps symlinks to old hashed
 assets (developer mode), remove the dangling ones before the deploy:
 `find pub/static -xtype l -delete`.
 

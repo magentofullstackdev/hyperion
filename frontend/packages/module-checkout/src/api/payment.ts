@@ -13,8 +13,12 @@
  *   POST /carts/mine/set-payment-information           (customer)
  *
  * Same body, but the payment method and billing address are only saved
- * on the quote. Used by methods whose order is placed by the gateway's
- * own controllers afterwards (PayPal Express).
+ * on the quote: when the shopper selects a method (so the totals follow a
+ * cart rule that depends on it), and for methods whose order is placed by
+ * the gateway's own controllers afterwards (PayPal Express).
+ *
+ * The saves that put the same state on the quote whenever they are sent
+ * (billing-address, set-payment-information) are marked `idempotent`.
  */
 import { apiFetch } from './client.js';
 import type { AddressRequestPayload } from '../types/address.js';
@@ -59,18 +63,23 @@ export interface BillingAddressRequest {
 export function assignGuestBillingAddress(maskedCartId: string, req: BillingAddressRequest): Promise<number> {
     return apiFetch<number>(
         `guest-carts/${encodeURIComponent(maskedCartId)}/billing-address`,
-        { method: 'POST', body: req, auth: 'guest' }
+        { method: 'POST', body: req, auth: 'guest', idempotent: true }
     );
 }
 
 export function assignCustomerBillingAddress(req: BillingAddressRequest): Promise<number> {
-    return apiFetch<number>('carts/mine/billing-address', { method: 'POST', body: req, auth: 'customer' });
+    return apiFetch<number>('carts/mine/billing-address', { method: 'POST', body: req, auth: 'customer', idempotent: true });
 }
 
+/**
+ * POST payment-information: places the order. `headers` carries the
+ * anti-abuse proof of the request (reCAPTCHA token, CAPTCHA answer). Never
+ * retried: the quote is read instead to learn what a lost answer meant.
+ */
 export function placeGuestOrder(
     maskedCartId: string,
     req: PaymentInformationRequest,
-    recaptchaToken?: string | null
+    headers: Readonly<Record<string, string>> = {}
 ): Promise<number> {
     return apiFetch<number>(
         `guest-carts/${encodeURIComponent(maskedCartId)}/payment-information`,
@@ -80,14 +89,14 @@ export function placeGuestOrder(
             auth: 'guest',
             retry: false,
             timeoutMs: PLACE_ORDER_TIMEOUT_MS,
-            ...(recaptchaToken ? { recaptchaToken } : {}),
+            headers,
         }
     );
 }
 
 export function placeCustomerOrder(
     req: PaymentInformationRequest,
-    recaptchaToken?: string | null
+    headers: Readonly<Record<string, string>> = {}
 ): Promise<number> {
     return apiFetch<number>(
         'carts/mine/payment-information',
@@ -97,26 +106,33 @@ export function placeCustomerOrder(
             auth: 'customer',
             retry: false,
             timeoutMs: PLACE_ORDER_TIMEOUT_MS,
-            ...(recaptchaToken ? { recaptchaToken } : {}),
+            headers,
         }
     );
 }
 
+/**
+ * POST set-payment-information: puts the payment method (and the billing
+ * address) on the quote without ordering. `headers` carries the image
+ * CAPTCHA answer for a store whose saving limiter asks for one.
+ */
 export function setGuestPaymentInformation(
     maskedCartId: string,
-    req: PaymentInformationRequest
+    req: PaymentInformationRequest,
+    headers: Readonly<Record<string, string>> = {}
 ): Promise<boolean> {
     return apiFetch<boolean>(
         `guest-carts/${encodeURIComponent(maskedCartId)}/set-payment-information`,
-        { method: 'POST', body: req, auth: 'guest' }
+        { method: 'POST', body: req, auth: 'guest', idempotent: true, headers }
     );
 }
 
 export function setCustomerPaymentInformation(
-    req: PaymentInformationRequest
+    req: PaymentInformationRequest,
+    headers: Readonly<Record<string, string>> = {}
 ): Promise<boolean> {
     return apiFetch<boolean>(
         'carts/mine/set-payment-information',
-        { method: 'POST', body: req, auth: 'customer' }
+        { method: 'POST', body: req, auth: 'customer', idempotent: true, headers }
     );
 }

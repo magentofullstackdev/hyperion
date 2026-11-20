@@ -39,12 +39,12 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 
 | Tier | Platform | PHP | Varnish | Install | Mode | Release | Date | E2E suite | Feature scripts | PHPUnit | phpstan L5 errors | phpcs errors |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, counts below | 692 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9, same install, JS and CSS minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | `pw-cls` 6, `pw-critical` 39, `pw-a11y` 14, `pw-ui-polish` 26, `pw-listing-state` 26, `pw-cart-features` 51 | not rerun (same code as the row above) | not rerun | not rerun |
-| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | all green, see the note on counts below | 692 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green, see the note on counts below | 701 (PHPUnit 12) | 0 | 0 |
-| 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.5` | 2026-11-11 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 10) | 0 | not in the smoke battery |
-| 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | smoke set: `pw-a11y` 14, `pw-cls` 6, `pw-listing-state` 26 | 692 (PHPUnit 12) | 0 | not in the smoke battery |
+| 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, counts below | 926 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.6` | 2026-11-18 | 86 / 86 | `pw-cls` 51, `pw-a11y` 19, `pw-checkout-flow` 182, `pw-critical` 39, `pw-fallback-pages` 72 | not rerun (see the row above) | not rerun | not rerun |
+| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.5` | 2026-11-12 | 84 / 84 | all green on that release (its script set and counts) | 701 (PHPUnit 12) | 0 | 0 |
+| 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 10) | 0 | not in the smoke battery |
+| 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 12) | 0 | not in the smoke battery |
 
 The plugin target check passed on every row run for this release (every
 plugin method of the modules targets an existing public method of its
@@ -52,78 +52,96 @@ subject).
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row is an install that takes the
 packages from the published Composer repository, so its battery runs after
-the publication of the release (`0.9.0-beta.5` on 2026-11-12). It is the
-only row that ran the published release exactly: after the batteries of the
-other rows the release gained two data patches of HyperionSampleData (store
-name, footer block), the guest checkout notice for carts with downloadable
-products in HyperionCheckout and their nine unit tests, hence 701 PHPUnit
-tests here and 692 on the other rows. Those changes were checked on the
-Magento 2.4.9 / PHP 8.4 install with PHPUnit, phpstan, phpcs, `pw-a11y`,
-`pw-cls`, `pw-critical`, `pw-ui-polish` and in a browser, not with a new
-full battery. The shipped VCL of this release compiles
-(`varnishd -C`) on Varnish 8.0, 7.7, 7.6 and 7.4.
+the publication of a release. It still shows `0.9.0-beta.5` (published and
+run on 2026-11-12, 701 PHPUnit tests at that release, and on that release
+production mode was checked by hand on its storefront); the row moves to
+`0.9.0-beta.6` once that release is published and the battery has run there.
+The shipped VCL, unchanged since `0.9.0-beta.5`, compiled (`varnishd -C`)
+on Varnish 8.0, 7.7, 7.6 and 7.4 at that release.
 
-On the Mage-OS 4.0 row every script passed too; four of them count fewer
-checks there because the install has one store view, one currency and no
-reCAPTCHA keys (`pw-megamenu-admin.mjs` 21, `pw-cart-features.mjs` 45,
-`pw-fallback-pages.mjs` 57, `pw-catalog-completeness.mjs` 38). On that row
-the Open Graph and JSON-LD checks ran against the platform SEO module, see
-"Mage-OS 4.0 SEO module" below.
+On the Mage-OS 4.0 row the full battery passed on 2026-11-19. Six scripts
+count fewer checks there because the install has one store view, one
+currency, no reCAPTCHA v3 keys and no Braintree module
+(`pw-megamenu-admin.mjs` 21, `pw-cart-features.mjs` 89,
+`pw-fallback-pages.mjs` 62, `pw-catalog-completeness.mjs` 38,
+`pw-checkout-flow.mjs` 160 without the Braintree card orders,
+`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped). An earlier run of
+that battery failed two checks of `pw-captcha.mjs`: the platform answers a
+refused CAPTCHA word at Place Order with HTTP 429 where Magento answers
+400, and the checkout now shows that refusal at the CAPTCHA field on both.
+On that row the Open Graph and JSON-LD checks ran against the platform SEO
+module, see "Mage-OS 4.0 SEO module" below.
 
-On the Magento 2.4.9 / PHP 8.5 / Varnish 8 row every script passed; two of
-them count fewer checks because the install has no reCAPTCHA keys
-(`pw-cart-features.mjs` 45, `pw-fallback-pages.mjs` 57), every other script
-has the counts of the first row.
+One row ran on a build that lacks the last changes of the release: the
+production mode row predates the HTTP 429 change above, the rule that hides
+a Braintree method without a client token, and the last additions (the void
+of an authorization after a failed order, the Braintree client token cache
+and icon read, the busy state of the checkout links, the configurable
+product image default). All of them have unit tests and are part of the
+runs of every other `0.9.0-beta.6` row.
 
 Counts of the first row (Magento 2.4.9, PHP 8.4, developer mode,
-2026-11-11), one line per script, every check passed:
+2026-11-19), one line per script, every check passed, with a note under
+the table:
 
 | Script | Checks |
 |---|---|
-| `pw-suite.mjs` (guest and customer journeys) | 84 |
-| `pw-a11y.mjs` (accessibility gate) | 14 |
-| `pw-ui-polish.mjs` | 26 |
-| `pw-cls.mjs` (layout shift, CLS 0) | 6 |
+| `pw-suite.mjs` (guest and customer journeys) | 86 |
+| `pw-a11y.mjs` (accessibility gate) | 19 |
+| `pw-ui-polish.mjs` | 34 |
+| `pw-cls.mjs` (layout shift, CLS 0) | 51 |
 | `pw-critical.mjs` | 39 |
 | `pw-search-shield.mjs` | 45 |
 | `pw-catalogmode.mjs` | 35 |
 | `pw-megamenu.mjs` | 19 |
 | `pw-megamenu-admin.mjs` | 22 |
 | `pw-infinite-scroll.mjs` | 15 |
-| `pw-cart-features.mjs` | 51 |
+| `pw-cart-features.mjs` | 95 |
 | `pw-agreements.mjs` | 15 |
 | `pw-orders-widgets-ga4.mjs` | 49 |
-| `pw-fallback-pages.mjs` | 62 |
+| `pw-fallback-pages.mjs` | 72 |
 | `pw-catalog-completeness.mjs` | 39 |
-| `pw-checkout-login.mjs` | 9 |
+| `pw-checkout-login.mjs` | 13 |
 | `pw-sidebars.mjs` | 12 |
 | `pw-cart-edit.mjs` | 20 |
 | `pw-variant-stock.mjs` | 7 |
 | `pw-listing-state.mjs` | 26 |
+| `pw-checkout-flow.mjs --with-braintree` | 182 |
+| `pw-checkout-resilience.mjs` | 93 |
+| `pw-captcha.mjs --with-braintree` | 127 |
 
-Frontend unit tests (Vitest) on the release tree: theme 374, checkout 407.
+`pw-cart-features.mjs` with `--with-fpt --with-custom-total` ran 115 checks
+on 2026-11-18.
+
+Frontend unit tests (Vitest) on the release tree: theme 431, checkout 1154.
 PHPUnit: all eleven modules have tests; the count in the matrix is what
 the PHPUnit version of the platform reports.
 
-Lighthouse, run locally against the first row's install on 2026-11-11
-(mobile and desktop presets, CPU slowdown 4x) on the home page, a category,
-a product page and the cart: performance 100 on all eight runs, cumulative
-layout shift 0. It is a lab number on a developer machine, not a field
-measurement.
+Lighthouse 12.8, run locally against the first row's install in production
+mode on 2026-11-18 (mobile and desktop presets, CPU slowdown 4x, one run per
+page) on the home page, a category, a product page and the empty cart:
+performance 100 on seven runs and 99 on the home page with the mobile preset
+(largest contentful paint 2114 ms there; 1351 to 1721 ms on the other mobile
+pages, 381 to 558 ms on desktop), cumulative layout shift 0 on all eight.
+The home page mobile run of the previous release scored 100 with 1651 ms;
+whether the difference is the machine or the release is not established.
+It is a lab number on a developer machine, not a field measurement.
 
 ### Production mode
 
-The second row is a battery in production mode on Magento 2.4.9 with
-Magento's JS and CSS minification on (`dev/js/minify_files`,
-`dev/css/minify_files`), run on 2026-11-11: every Hyperion asset kept its file name and answered 200 (71 static files, every import between them), and the seven scripts of that row passed (246 checks). The
+The second row is a run in production mode on Magento 2.4.9 with
+Magento's JS, CSS and HTML minification on (`dev/js/minify_files`,
+`dev/css/minify_files`, `dev/template/minify_html`), on 2026-11-18: 216 of
+216 Hyperion templates were minified and pass `php -l`, every Hyperion asset
+kept its built file name, and the six scripts of that row passed (449
+checks, 15 orders placed, two of them with a Braintree sandbox card). The
+image CAPTCHA template and the date of birth field were not rendered in
+that run (minified and lint clean only). The
 public demo ([demo.hyperionfront.dev](https://demo.hyperionfront.dev),
 Magento 2.4.9, PHP 8.5, Varnish 8) runs in production mode and is the
-standing production-mode install. On the Mage-OS 4.0 row and on the
-Magento 2.4.9 / PHP 8.5 / Varnish 8 row the battery ran in developer mode;
-production mode was checked by hand on the storefront of both installs, not
-with a battery. HTML minification
-(`dev/template/minify_html`) is not supported in this release, see
-[Known limitations](./known-limitations.md).
+standing production-mode install. On every other row the battery ran in
+developer mode. HTML minification is supported from `0.9.0-beta.6` on, see
+[Install](./install.md#production-checklist).
 
 ### What the suite covers
 
@@ -151,11 +169,11 @@ Composer and the dropped platforms: Magento 2.4.7 ships `magento/framework`
 and therefore still resolves although it is dropped: not supported, not
 blocked.
 
-Two verifications were made on these platforms only and were not repeated
-on the supported ones: PayPal Express with real sandbox payments (Mage-OS
-2.3.0) and Braintree card, vault and 3D Secure against a Braintree sandbox
-(Magento 2.4.7-p10). The renderers and their unit tests are unchanged in
-that respect; see "Not tested" below.
+One verification was made on these platforms only and was not repeated on
+the supported ones: PayPal Express with real sandbox payments (Mage-OS
+2.3.0). The Braintree card, stored card and 3D Secure payments first made
+on Magento 2.4.7-p10 were made again on Magento 2.4.9 on 2026-11-18
+([Checkout](./checkout.md#braintree)); see "Not tested" below.
 
 ## CI
 
@@ -228,8 +246,8 @@ Graph tags and the microdata.
 ## Not tested
 
 - Production mode on Mage-OS (the production battery ran on Magento 2.4.9).
-- HTML minification (`dev/template/minify_html`): not supported in this
-  release, see [Known limitations](./known-limitations.md).
+- HTML minification (`dev/template/minify_html`) outside Magento 2.4.9: the
+  production row ran with it on, no other platform did.
 - A child theme deployed with Magento's JS minification on: the file names
   of the scaffold were checked against the exclude patterns by a unit test
   and a real build, not by a static content deploy.
@@ -246,15 +264,17 @@ Graph tags and the microdata.
 - PHP 8.2 (not in the Composer constraints).
 - Adobe Commerce, B2B, Dynamic Blocks, gift cards and every other
   Commerce-only feature.
-- Braintree PayPal in the checkout (renderer exists, no PayPal account was
-  linked to the sandbox). Braintree Google Pay: the button and the sheet
-  request were verified against the Braintree sandbox, the payment itself was
-  not completed by the automated checks.
+- Saving a PayPal account through Braintree (`braintree_paypal_vault`): the
+  attempt of 2026-11-18 ended on the PayPal sandbox's own error page after
+  the consent step. Braintree Google Pay: the button and the sheet request
+  were verified against the Braintree sandbox, the payment itself was not
+  made (it needs a Google account in a real browser).
 - PayPal Express redirect flow (`in_context = 0`) through to the placed
   order, and `payflow_express` against a live account (unit tested only).
-- Real gateway payments on the supported platforms: the PayPal Express and
-  Braintree card sandbox payments were made on the platforms of "Previously
-  tested".
+- Real PayPal Express payments on the supported platforms: the sandbox
+  payments were made on a platform of "Previously tested". Braintree sandbox
+  payments (card, 3D Secure, stored card, PayPal) were made on Magento 2.4.9
+  only.
 - Downloadable link download limits and shareable links.
 - Persistent cart ("Remember Me"): not exercised. Fixed product tax is
   covered by the cart features check (`pw-cart-features.mjs --with-fpt`) and

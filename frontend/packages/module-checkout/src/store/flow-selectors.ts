@@ -6,7 +6,7 @@
  *
  * Separated from `selectors.ts` (which exports a factory) because the
  * Place Order button needs a stable reference independent of render
- * cycles. `initFlowSelectors()` memoises after bootstrap.
+ * cycles. `initFlowSelectors()` memoizes after bootstrap.
  */
 import { getStore } from './index.js';
 import { createSelectors } from './selectors.js';

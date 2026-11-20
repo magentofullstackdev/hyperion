@@ -6,13 +6,16 @@
  *
  * Every top-level slice is a `Signal.State`; derivations
  * (`canPlaceOrder`, etc.) are `Signal.Computed` and live in
- * `selectors.ts`. Components NEVER call `.set()` directly; every
- * mutation goes through an action in `actions.ts` so the log is
- * greppable and side effects are centralized.
+ * `selectors.ts`. Components write the slices their own controls edit
+ * (the email, an address, a selection) and call a flow action
+ * (`flow-actions.ts`) for everything that reaches the server; the slices
+ * that mirror the quote are written by the flow actions and the write
+ * queue only.
  */
 import { Signal } from 'signal-polyfill';
 
 import type { Address } from '../types/address.js';
+import type { CaptchaStateMap } from '../types/captcha.js';
 import type {
     AddressId,
     MaskedQuoteId,
@@ -21,10 +24,12 @@ import type {
 import type { CustomerDataAuthenticated } from '../types/customer.js';
 import type { PaymentMethodConfig } from '../types/payment.js';
 import type { CartItem } from '../types/quote.js';
+import type { SectionStatusMap } from '../types/section.js';
 import type {
     SelectedShippingMethod,
     ShippingMethod,
 } from '../types/shipping.js';
+import type { EstimateState, OrderOutcomeState, OrderStep } from '../types/state.js';
 import type { Totals } from '../types/totals.js';
 
 export interface Store {
@@ -33,7 +38,6 @@ export interface Store {
     maskedQuoteId: Signal.State<MaskedQuoteId | null>;
     isGuest: Signal.State<boolean>;
     customer: Signal.State<CustomerDataAuthenticated | null>;
-    customerToken: Signal.State<string | null>;
 
     // Cart
     items: Signal.State<readonly CartItem[]>;
@@ -59,8 +63,8 @@ export interface Store {
     isLoadingShippingMethods: Signal.State<boolean>;
     /**
      * The method the quote actually carries: set by the last successful
-     * `shipping-information` save, cleared when an address change starts a
-     * new estimate or a save fails. `canPlaceOrder` requires it to equal
+     * `shipping-information` save, cleared when that save fails or the
+     * address has no usable rate. `canPlaceOrder` requires it to equal
      * `selectedShippingMethod`, so a selection the server never confirmed
      * cannot be ordered.
      */
@@ -73,6 +77,8 @@ export interface Store {
      * while it is true.
      */
     shippingDirty: Signal.State<boolean>;
+    /** Where the rate list stands for the address in the form. */
+    estimateState: Signal.State<EstimateState>;
 
     // Billing (only meaningful when the billing address is entered on its
     // own: virtual quote, or "same as shipping" unchecked). `billingSynced`
@@ -80,6 +86,20 @@ export interface Store {
     // payment methods / totals were refreshed for it.
     isSavingBilling: Signal.State<boolean>;
     billingSynced: Signal.State<boolean>;
+    /**
+     * The separate billing form holds an address the quote has not
+     * confirmed yet; `billingSynced` stays the confirmed flag.
+     */
+    billingDirty: Signal.State<boolean>;
+
+    // Quote writes (written by the write queue only)
+    /** Writes running plus writes waiting. */
+    quoteWritesPending: Signal.State<number>;
+    /**
+     * A write whose answer will change the totals is running or waiting,
+     * or the read that settles them is in flight.
+     */
+    isSettlingTotals: Signal.State<boolean>;
 
     // Payment
     availablePaymentMethods: Signal.State<readonly PaymentMethodConfig[]>;
@@ -92,8 +112,11 @@ export interface Store {
 
     // Totals
     totals: Signal.State<Totals | null>;
-    /** A re-read of the payment methods and totals is in flight (coupon, gift message). */
-    isRefreshingTotals: Signal.State<boolean>;
+    /**
+     * The totals expected from a change the server has not answered yet;
+     * null once the confirming answer is applied.
+     */
+    optimisticTotals: Signal.State<Totals | null>;
 
     // UI
     isPlacingOrder: Signal.State<boolean>;
@@ -103,11 +126,20 @@ export interface Store {
      */
     orderPlaced: Signal.State<boolean>;
     /**
-     * The order request lost its answer and the quote could not be read
-     * either: the next Place Order checks the quote before it sends
-     * anything.
+     * Where the order stands; `orderPlaced` is true exactly when this is
+     * `placed`. `placed` and `unknown` keep Place Order latched.
      */
-    orderOutcomeUnknown: Signal.State<boolean>;
+    orderOutcome: Signal.State<OrderOutcomeState>;
+    /** What the order attempt under way is doing; `idle` between attempts. */
+    orderStep: Signal.State<OrderStep>;
+    /** The order number learned from the quote after an order request lost its answer. */
+    orderNumber: Signal.State<string | null>;
+    /** The failed request each section shows next to its controls, null when none. */
+    sectionStatus: Signal.State<SectionStatusMap>;
+    /** The customer session ended while the checkout was open. */
+    sessionExpired: Signal.State<boolean>;
+    /** A request was answered "this cart no longer exists": nothing more can be saved or ordered here. */
+    quoteGone: Signal.State<boolean>;
     globalError: Signal.State<string | null>;
     fieldErrors: Signal.State<Readonly<Record<string, string>>>;
 
@@ -118,6 +150,10 @@ export interface Store {
     // Holds the localized description when the cart fails the
     // minimum-amount check; null when valid or feature inactive.
     minimumOrderError: Signal.State<string | null>;
+
+    // Image CAPTCHA: the state of each form the configuration lists, with
+    // what the shopper typed.
+    captcha: Signal.State<CaptchaStateMap>;
 }
 
 export function createStore(): Store {
@@ -126,7 +162,6 @@ export function createStore(): Store {
         maskedQuoteId: new Signal.State<MaskedQuoteId | null>(null),
         isGuest: new Signal.State<boolean>(true),
         customer: new Signal.State<CustomerDataAuthenticated | null>(null),
-        customerToken: new Signal.State<string | null>(null),
 
         items: new Signal.State<readonly CartItem[]>([]),
         isVirtual: new Signal.State<boolean>(false),
@@ -149,9 +184,14 @@ export function createStore(): Store {
         appliedShippingMethod: new Signal.State<SelectedShippingMethod | null>(null),
         isSavingShipping: new Signal.State<boolean>(false),
         shippingDirty: new Signal.State<boolean>(false),
+        estimateState: new Signal.State<EstimateState>('idle'),
 
         isSavingBilling: new Signal.State<boolean>(false),
         billingSynced: new Signal.State<boolean>(false),
+        billingDirty: new Signal.State<boolean>(false),
+
+        quoteWritesPending: new Signal.State<number>(0),
+        isSettlingTotals: new Signal.State<boolean>(false),
 
         availablePaymentMethods: new Signal.State<readonly PaymentMethodConfig[]>([]),
         selectedPaymentMethod: new Signal.State<string | null>(null),
@@ -161,17 +201,33 @@ export function createStore(): Store {
         couponError: new Signal.State<string | null>(null),
 
         totals: new Signal.State<Totals | null>(null),
-        isRefreshingTotals: new Signal.State<boolean>(false),
+        optimisticTotals: new Signal.State<Totals | null>(null),
 
         isPlacingOrder: new Signal.State<boolean>(false),
         orderPlaced: new Signal.State<boolean>(false),
-        orderOutcomeUnknown: new Signal.State<boolean>(false),
+        orderOutcome: new Signal.State<OrderOutcomeState>('none'),
+        orderStep: new Signal.State<OrderStep>('idle'),
+        orderNumber: new Signal.State<string | null>(null),
+        sectionStatus: new Signal.State<SectionStatusMap>({
+            contact: null,
+            'shipping-address': null,
+            'shipping-methods': null,
+            billing: null,
+            payment: null,
+            coupon: null,
+            gift: null,
+            order: null,
+        }),
+        sessionExpired: new Signal.State<boolean>(false),
+        quoteGone: new Signal.State<boolean>(false),
         globalError: new Signal.State<string | null>(null),
         fieldErrors: new Signal.State<Readonly<Record<string, string>>>({}),
 
         acceptedAgreements: new Signal.State<readonly number[]>([]),
 
         minimumOrderError: new Signal.State<string | null>(null),
+
+        captcha: new Signal.State<CaptchaStateMap>({}),
     };
 }
 

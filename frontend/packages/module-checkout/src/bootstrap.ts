@@ -9,29 +9,39 @@
  *   2. Initialize the reactive store + seed it with the slices the
  *      config payload already provides (customer or guest quote, cart,
  *      shipping method, totals): `store/hydrate.ts`.
- *   3. Configure the REST client with storeCode + form-key reader +
- *      customer-token reader.
+ *   3. Configure the REST client with storeCode + form-key reader.
  *   4. Install the translations: Magento's `__()` dictionary from the
  *      config (`hyperion.translations`) over the static catalog of the
- *      resolved locale (`hyperion.locale`, then the store code).
- *   5. Mount `<checkout-app>` into `#checkout-root`.
+ *      resolved locale (`hyperion.locale`, then the store code), and the
+ *      store's wording of the core phrases a failure is recognized by.
+ *   5. Start the flow actions, the draft of what the shopper types and
+ *      the watch on the connection.
+ *   6. Mount `<checkout-app>` into `#checkout-root`.
  *
  * Any failure is non-recoverable -- we do NOT render stock checkout
  * as a fallback (the admin flag is the rollback mechanism).
- * On failure the mount is replaced with a minimal error message so
- * the user sees *something* and the page doesn't look frozen.
+ * On failure the mount is replaced with one translated line so the user
+ * sees *something* and the page doesn't look frozen; the reason goes to
+ * the console.
  */
 import type { CheckoutConfig, HyperionConfig } from './types/config.js';
 import { configureApiClient } from './api/client.js';
+import { setPhraseTranslations } from './api/error-kinds.js';
+import { setPaymentVisibility } from './utils/payment-offer.js';
 import { initStore } from './store/index.js';
+import { seedCaptchaState } from './store/captcha-state.js';
+import { startDraftPersistence } from './store/drafts.js';
 import { hydrateStore, startInitialRequests } from './store/hydrate.js';
+import { watchConnection } from './store/recovery.js';
 import { normaliseCheckoutConfig } from './utils/checkout-config.js';
 import { deriveBaseUrl } from './utils/base-url.js';
 import { flowActions, initFlowActions } from './store/flow-actions.js';
 import { initFlowSelectors } from './store/flow-selectors.js';
 import { readFormKeyCookie } from './utils/form-key.js';
 import { loadLocale, t } from './utils/i18n.js';
+import { minimumOrderError } from './utils/minimum-order.js';
 import { setCheckoutConfig } from './bootstrap-config.js';
+import { loadOptionalSections } from './components/optional-sections.js';
 
 const CONFIG_ELEMENT_ID = 'checkout-config';
 const ROOT_ELEMENT_ID = 'checkout-root';
@@ -49,16 +59,15 @@ export async function bootstrap(): Promise<void> {
         // method, totals, payment methods, the agreements gate.
         hydrateStore(store, config);
 
-        // Min-order gate (F-3): seed from Magento_Sales::MinimumOrderConfigProvider.
-        const minOrderError = computeMinOrderError(config);
-        store.minimumOrderError.set(minOrderError);
+        // The minimum order gate, for the totals the page was rendered
+        // with; every totals answer evaluates it again.
+        store.minimumOrderError.set(minimumOrderError(store.totals.get(), config));
 
         // Wire the REST client.
         configureApiClient({
             baseUrl: deriveBaseUrl(config, window.location.origin),
             storeCode: config.storeCode,
             readFormKey: readFormKeyCookie,
-            readCustomerToken: () => store.customerToken.get(),
         });
 
         // Translations: Magento's `__()` dictionary over the static catalog,
@@ -68,21 +77,39 @@ export async function bootstrap(): Promise<void> {
             storeCode: config.storeCode,
             translations: config.hyperion.translations ?? config.translations ?? null,
         });
+        // An order refused by core arrives already translated: the phrases
+        // that tell a locked cart or an item out of stock are matched in
+        // the store's wording too.
+        setPhraseTranslations(config.hyperion.errorPhrases ?? null);
+        // A method its gateway module marks as not presentable is not offered.
+        setPaymentVisibility(config.payment);
+
+        // The image CAPTCHA forms the page was rendered with; a failed
+        // attempt asks the server again whether one became required.
+        seedCaptchaState(config.hyperion.captcha?.forms);
 
         // Flow orchestrator + selectors.
         initFlowActions();
         initFlowSelectors();
 
+        // What the shopper types is kept for a reload or a sign in, and a
+        // connection that comes back sends again what failed without it.
+        startDraftPersistence(store, config);
+        watchConnection(store, () => flowActions().resumeAfterReconnect());
+
         // The rates of an address already known and the sync of a billing
         // address entered on its own, right away instead of after a click.
         startInitialRequests(store, flowActions());
+        // An address put back from a draft is ahead of the quote: save it
+        // now when the rates it needs are already there.
+        if (store.shippingDirty.get() || store.billingDirty.get()) flowActions().flushShippingForm();
 
         // A page restored from the back/forward cache after the order went
         // through would show its frozen state over a quote that is gone.
         window.addEventListener('pageshow', reloadWhenRestored);
 
         // Mount.
-        await mountCheckoutApp();
+        await mountCheckoutApp(config);
     } catch (err) {
         renderBootstrapError(err);
         throw err;
@@ -130,49 +157,39 @@ function assertHyperionEnabled(hyperion: HyperionConfig | undefined): void {
     }
 }
 
-/**
- * Read the minimum-order gate fields from `cartData`. Returns the
- * server-rendered description when the cart fails the check; null
- * when the gate passes or the feature is disabled.
- */
-export function computeMinOrderError(config: CheckoutConfig): string | null {
-    const cartData = config.cartData;
-    if (!cartData) return null;
-    if (cartData.isMinimumAmountValid === false) {
-        return cartData.minimumAmountDescription ?? t('Hyperion_Checkout::min_order_amount_invalid');
-    }
-    return null;
-}
-
-async function mountCheckoutApp(): Promise<void> {
+async function mountCheckoutApp(config: CheckoutConfig): Promise<void> {
     const root = document.getElementById(ROOT_ELEMENT_ID);
     if (!root) {
         throw new Error(`#${ROOT_ELEMENT_ID} not found.`);
     }
     // Lazy import so the app module is only fetched after the config
-    // island has been accepted.
-    await import('./components/checkout-app.js');
+    // island has been accepted. The sections only some stores show are
+    // chunks of their own; the ones this store uses are defined before the
+    // first render, so they are part of the first frame.
+    await Promise.all([
+        import('./components/checkout-app.js'),
+        loadOptionalSections(config),
+    ]);
     const el = document.createElement('checkout-app');
+    // The sign in prompt of an ended session lives inside the app element,
+    // where the checkout stylesheet applies, and outside what the app
+    // renders: Lit appends its own content after an existing child.
+    el.appendChild(document.createElement('hc-session-expired'));
     root.replaceChildren(el);
 }
 
 function renderBootstrapError(err: unknown): void {
+    // The reason is for whoever maintains the store, not for the shopper.
+    console.error('[hyperion-checkout] the checkout could not start', err);
     const root = document.getElementById(ROOT_ELEMENT_ID);
     if (!root) return;
-    const message =
-        err instanceof Error ? err.message : 'Unknown bootstrap error.';
-    root.innerHTML = '';
     const wrap = document.createElement('div');
     wrap.setAttribute('role', 'alert');
     wrap.className =
         'max-w-xl mx-auto my-8 p-4 rounded-md bg-danger/10 text-danger border border-danger/30';
-    const heading = document.createElement('p');
-    heading.className = 'font-semibold';
-    heading.textContent = t('Hyperion_Checkout::bootstrap_error');
-    wrap.appendChild(heading);
-    const detail = document.createElement('p');
-    detail.className = 'mt-1 text-sm opacity-80';
-    detail.textContent = message;
-    wrap.appendChild(detail);
-    root.appendChild(wrap);
+    const line = document.createElement('p');
+    line.className = 'font-semibold';
+    line.textContent = t('Hyperion_Checkout::bootstrap_error');
+    wrap.appendChild(line);
+    root.replaceChildren(wrap);
 }

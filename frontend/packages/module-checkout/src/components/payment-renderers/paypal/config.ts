@@ -13,16 +13,32 @@ export const PAYPAL_EXPRESS_CODE = 'paypal_express';
 export const PAYFLOW_EXPRESS_CODE = 'payflow_express';
 export const PAYPAL_EXPRESS_CODES: readonly string[] = [PAYPAL_EXPRESS_CODE, PAYFLOW_EXPRESS_CODE];
 
+export type PaypalScalar = string | number | boolean;
+
 function str(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
 
-/** PHP serialises an empty array as `[]`, a filled one as an object. */
-function stringMap(value: unknown): Readonly<Record<string, string>> {
-    const map: Record<string, string> = {};
+function isScalar(value: unknown): value is PaypalScalar {
+    return (typeof value === 'string' && value !== '')
+        || (typeof value === 'number' && Number.isFinite(value))
+        || typeof value === 'boolean';
+}
+
+/** PHP serializes an empty array as `[]`, a filled one as an object. */
+function scalarMap(value: unknown): Readonly<Record<string, PaypalScalar>> {
+    const map: Record<string, PaypalScalar> = {};
     if (!value || typeof value !== 'object' || Array.isArray(value)) return map;
     for (const [key, entry] of Object.entries(value)) {
-        if (typeof entry === 'string' && entry !== '') map[key] = entry;
+        if (isScalar(entry)) map[key] = entry;
+    }
+    return map;
+}
+
+function stringMap(value: unknown): Readonly<Record<string, string>> {
+    const map: Record<string, string> = {};
+    for (const [key, entry] of Object.entries(scalarMap(value))) {
+        map[key] = String(entry);
     }
     return map;
 }
@@ -39,6 +55,11 @@ function payLater(value: unknown): PaypalPayLaterConfig | null {
     };
 }
 
+/**
+ * The section as the renderer uses it. `styles` goes to the PayPal SDK as it
+ * is, with the types the server gave (the SDK wants numbers as numbers);
+ * the other maps end up in URLs and attributes and are strings.
+ */
 export function getPaypalExpressConfig(): PaypalExpressConfig | null {
     const raw: unknown = getCheckoutConfig().hyperion?.paypalExpress;
     if (!raw || typeof raw !== 'object') return null;
@@ -47,11 +68,11 @@ export function getPaypalExpressConfig(): PaypalExpressConfig | null {
         inContext: slice['inContext'] === true,
         sdkUrl: str(slice['sdkUrl']),
         dataAttributes: stringMap(slice['dataAttributes']),
-        styles: stringMap(slice['styles']),
+        styles: scalarMap(slice['styles']),
         getTokenUrl: str(slice['getTokenUrl']),
         onAuthorizeUrl: str(slice['onAuthorizeUrl']),
-        onCancelUrl: str(slice['onCancelUrl']),
         startUrls: stringMap(slice['startUrls']),
+        billingAgreementCode: stringMap(slice['billingAgreementCode']),
         markImageUrl: str(slice['markImageUrl']),
         whatIsPaypalUrl: str(slice['whatIsPaypalUrl']),
         payLater: payLater(slice['payLater']),
@@ -74,4 +95,9 @@ export function isInContext(code: string): boolean {
 
 export function getStartUrl(code: string): string | null {
     return getPaypalExpressConfig()?.startUrls[code] ?? null;
+}
+
+/** The `additional_data` key of the billing agreement choice, null when the shopper is not asked. */
+export function getBillingAgreementCode(code: string): string | null {
+    return getPaypalExpressConfig()?.billingAgreementCode[code] ?? null;
 }

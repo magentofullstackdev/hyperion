@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 // hyperion-coupon-form -- translated labels from attributes, the server
-// rendered children (the coupon_code reCAPTCHA) moved into the form, and the
-// `remove` flag sent only when a coupon is applied.
+// rendered children (the coupon_code reCAPTCHA) moved into the form, the
+// `remove` flag sent only when a coupon is applied, and the state of a
+// refused code.
 
 import { describe, test, expect, afterEach, vi } from 'vitest';
 import '../hyperion-coupon-form.js';
@@ -78,6 +79,77 @@ describe('hyperion-coupon-form -- remove flag', () => {
     test('a cancel request carries remove=1', async () => {
         const el = await mount(shell({ applied: 'H20' }));
         expect(form(el).querySelector('input[name="remove"]').value).toBe('1');
+    });
+});
+
+describe('hyperion-coupon-form -- refused code', () => {
+    const FAILED = 'attempted-code="NOTACODE42" error-message="The coupon code &quot;NOTACODE42&quot; is not valid."';
+    const code = (el) => form(el).querySelector('input[name="coupon_code"]');
+
+    test('renders open with the code in the field, marked invalid and described by the message', async () => {
+        const el = await mount(shell({ attributes: FAILED }));
+        expect(el.querySelector('details').hasAttribute('open')).toBe(true);
+        expect(code(el).value).toBe('NOTACODE42');
+        expect(code(el).hasAttribute('readonly')).toBe(false);
+        expect(code(el).getAttribute('aria-invalid')).toBe('true');
+        const message = el.querySelector('[data-hyperion-coupon-error]');
+        expect(message.textContent).toBe('The coupon code "NOTACODE42" is not valid.');
+        expect(code(el).getAttribute('aria-describedby')).toBe(message.id);
+        expect(form(el).contains(message)).toBe(true);
+        expect(el.querySelector('button[type="submit"]').textContent.trim()).toBe('Apply Discount');
+        expect(form(el).querySelector('input[name="remove"]')).toBeNull();
+    });
+
+    test('puts the focus on the field without scrolling the page', async () => {
+        const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+        try {
+            const el = await mount(shell({ attributes: FAILED }));
+            expect(document.activeElement).toBe(code(el));
+            expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+        } finally {
+            focus.mockRestore();
+        }
+    });
+
+    test('the first edit of the field ends the error state and keeps what was typed', async () => {
+        const el = await mount(shell({ attributes: FAILED }));
+        code(el).value = 'NOTACODE4';
+        code(el).dispatchEvent(new Event('input', { bubbles: true }));
+        await el.updateComplete;
+        expect(code(el).hasAttribute('aria-invalid')).toBe(false);
+        expect(code(el).hasAttribute('aria-describedby')).toBe(false);
+        expect(el.querySelector('[data-hyperion-coupon-error]')).toBeNull();
+        expect(code(el).value).toBe('NOTACODE4');
+        expect(el.querySelector('details').hasAttribute('open')).toBe(true);
+    });
+
+    test('a refused code without a message is still given back to the field', async () => {
+        const el = await mount(shell({ attributes: 'attempted-code="ABC"' }));
+        expect(code(el).value).toBe('ABC');
+        expect(code(el).getAttribute('aria-invalid')).toBe('true');
+        expect(code(el).hasAttribute('aria-describedby')).toBe(false);
+        expect(el.querySelector('[data-hyperion-coupon-error]')).toBeNull();
+    });
+
+    test('an applied coupon wins over a stale attempt', async () => {
+        const el = await mount(shell({ applied: 'H20', attributes: FAILED }));
+        expect(code(el).value).toBe('H20');
+        expect(code(el).hasAttribute('aria-invalid')).toBe(false);
+        expect(el.querySelector('[data-hyperion-coupon-error]')).toBeNull();
+    });
+
+    test('without an attempt the form is closed, valid and takes no focus', async () => {
+        const el = await mount(shell());
+        expect(el.querySelector('details').hasAttribute('open')).toBe(false);
+        expect(code(el).hasAttribute('aria-invalid')).toBe(false);
+        expect(document.activeElement).not.toBe(code(el));
+    });
+
+    test('the children keep their place under the message', async () => {
+        const el = await mount(shell({ attributes: FAILED, children: CHILDREN }));
+        const message = el.querySelector('[data-hyperion-coupon-error]');
+        expect(message.nextElementSibling).toBe(slot(el));
+        expect(slot(el).querySelector('hyperion-recaptcha')).not.toBeNull();
     });
 });
 

@@ -95,6 +95,7 @@ $checkoutUrl = $cart?->getCheckoutUrl() ?? $block->getUrl('checkout');
             </dl>
 
             <a href="<?= $escaper->escapeUrl($checkoutUrl) ?>"
+               data-hyperion-checkout-link
                class="block mt-6 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
                       bg-primary text-on-primary shadow-sm
                       hover:bg-primary-hover hover:shadow-md transition-all

@@ -11,9 +11,9 @@
  * cached so concurrent callers share it. A failed load is evicted from the
  * cache, so picking the method again retries the download.
  *
- * All scripts come from ONE pinned SDK version. It matches the version the
- * PayPal_Braintree module pins in `view/base/requirejs-config.js`, which
- * keeps the client in step with the server-side integration.
+ * All scripts come from ONE pinned SDK version: the one PayPal_Braintree 4.8
+ * pins in `view/base/requirejs-config.js` (3.123.1), which keeps the client
+ * in step with the server-side integration.
  *
  * The PayPal JS SDK is not loaded here: the Braintree `paypal-checkout`
  * component loads it itself through `loadPayPalSDK()`. The Google Pay API
@@ -30,7 +30,7 @@ import type {
     ThreeDSecureModule,
 } from './types.js';
 
-export const BRAINTREE_SDK_VERSION = '3.112.0';
+export const BRAINTREE_SDK_VERSION = '3.123.1';
 
 const SDK_BASE_URL = `https://js.braintreegateway.com/web/${BRAINTREE_SDK_VERSION}/js`;
 

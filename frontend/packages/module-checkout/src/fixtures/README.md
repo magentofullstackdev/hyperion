@@ -17,7 +17,9 @@ PayPal_Braintree 4.6.1 (`Model/Ui/ConfigProvider.php`,
 `Model/Ui/PayPal/ConfigProvider.php`, `Model/Ui/ThreeDeeSecure/ConfigProvider.php`,
 `Model/Ui/Vault/ConfigProvider.php`, `Model/Ui/TokenUiComponentProvider.php`)
 and Magento_Vault (`TokensConfigProvider`, `VaultConfigProvider`). The
-renderer tests merge it over the customer fixture. Replace it with a real
+renderer tests merge it over the customer fixture. The PayPal slices carry
+the keys of PayPal_Braintree 4.8 where they differ (`canSendCartLineItems`,
+`cspNonce`). Replace it with a real
 capture once a sandbox account is configured.
 
 ## How to re-capture
@@ -30,6 +32,16 @@ new customer attribute, etc.), regenerate the fixtures by:
       grep -oP 'id="checkout-config">\K[^<]*' \
       | python3 -m json.tool --sort-keys > <fixture>.json`
 3. Commit, and update the "Captured against" column above.
+
+## `hyperion.initial.json`
+
+Not a capture: the `checkoutConfig.hyperion.initial` value the server
+provider emits for a guest and for a customer (a saved shipping address, a
+typed billing address), as JSON. It is asserted from both sides, so a key or
+a type cannot drift between them: `InitialStateConfigProviderTest` of the
+`HyperionCheckout` module compares what the provider emits with this file,
+and `store/__tests__/hydrate.test.ts` hydrates the store from it. Change it
+together with the provider and its test.
 
 ## Known gaps
 

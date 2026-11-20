@@ -35,10 +35,12 @@ export function getCustomerCart(): Promise<QuoteData> {
 export interface CartStateProbe {
     id?: number | string;
     is_active?: boolean;
+    /** The increment id the order got, present once the quote was submitted. */
+    reserved_order_id?: string | null;
 }
 
 /** How long a cart state read may take before its answer counts as missing. */
-export const CART_STATE_TIMEOUT_MS = 15000;
+export const CART_STATE_TIMEOUT_MS = 10000;
 
 /**
  * One read of the cart, never retried, with a time limit: used after an
@@ -79,13 +81,22 @@ export interface IsEmailAvailableRequest {
     websiteId?: number;
 }
 
+export interface IsEmailAvailableOptions {
+    /** Cancels a check that a newer one supersedes. */
+    signal?: AbortSignal;
+}
+
 export function isEmailAvailable(
-    req: IsEmailAvailableRequest
+    req: IsEmailAvailableRequest,
+    options: IsEmailAvailableOptions = {}
 ): Promise<boolean> {
     return apiFetch<boolean>('customers/isEmailAvailable', {
         method: 'POST',
         body: req,
         auth: 'none',
+        // A lookup: it changes nothing, so it may be repeated.
+        idempotent: true,
+        ...(options.signal ? { signal: options.signal } : {}),
     });
 }
 
@@ -114,15 +125,21 @@ export interface StorefrontLoginResponse {
  * plugin (`Magento\Captcha\Model\Customer\Plugin\AjaxLogin`) looks the
  * form up by that id and, when the body has none, asks the helper for a
  * `null` form. On PHP 8.5 that is a deprecation Magento turns into an
- * exception (HTTP 500). Luma always sends `user_login`; so do we.
+ * exception (HTTP 500). Luma always sends `user_login`; so do we. The
+ * same plugin reads the answer of that form's image CAPTCHA from
+ * `captcha_string` and refuses the login with `{ errors: true }` when the
+ * form requires one and the answer is wrong or missing.
  */
 export const LOGIN_CAPTCHA_FORM_ID = 'user_login';
 
 export function loginOnStorefront(
     req: StorefrontLoginRequest,
-    recaptchaToken?: string | null
+    recaptchaToken?: string | null,
+    captchaString?: string | null
 ): Promise<StorefrontLoginResponse> {
-    const body = { captcha_form_id: LOGIN_CAPTCHA_FORM_ID, ...req };
+    const body = captchaString
+        ? { captcha_form_id: LOGIN_CAPTCHA_FORM_ID, captcha_string: captchaString, ...req }
+        : { captcha_form_id: LOGIN_CAPTCHA_FORM_ID, ...req };
     return storefrontPostJson<StorefrontLoginResponse>(
         'customer/ajax/login',
         recaptchaToken ? { ...body, 'g-recaptcha-response': recaptchaToken } : body,

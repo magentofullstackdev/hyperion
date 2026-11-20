@@ -14,9 +14,14 @@
 // the newsletter form with Google's reCAPTCHA script blocked
 // (`recaptcha_frontend/type_for/newsletter` set for the run when the store has
 // a key pair but does not protect the form, skipped without keys), and the
-// home and category pages at phone widths (no sideways scroll). The customer
-// login needs the customer_login reCAPTCHA type cleared for the run (see
-// docs/development.md). Exit code 1 on any failure.
+// home and category pages at phone widths (no sideways scroll), the checkout
+// failure page (opened in the session that just placed the order: core sends
+// any other visitor to the cart) and a stored PayPal account of the Braintree
+// gateway on the Stored Payment Methods page (a fixture row,
+// e2e/fixtures/vault-token-fixture.php; skipped when that module is absent).
+// The customer of the run is created by e2e/fixtures/customer-fixture.php and
+// deleted at the end. The customer login needs the customer_login reCAPTCHA
+// type cleared for the run (see docs/development.md). Exit code 1 on any failure.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
@@ -35,8 +40,12 @@ if (!/^https?:\/\//.test(base)) {
     process.exit(2);
 }
 const slotDir = path.resolve(process.argv[3] || '.');
-const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'sprint4-fixtures.php');
-const CUSTOMER = { email: 'roni_cost@example.com', password: 'roni_cost3@example.com', lastname: 'Costello' };
+const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const FIXTURES = path.join(FIXTURE_DIR, 'sprint4-fixtures.php');
+// The customer of the run: created by the fixture (last name "Checker"), deleted at the end.
+const CUSTOMER = { email: `hyperion.e2e.pages.${Date.now()}@example.com`, password: `Hyp-${Date.now().toString(36)}-Pages9!`, lastname: 'Checker' };
+// Three products, one unit each: the order of the run.
+const ORDER_PRODUCTS = ['/joust-duffle-bag.html', '/fusion-backpack.html', '/push-it-messenger-bag.html'];
 
 const results = [];
 const check = (name, ok, detail = '') => {
@@ -50,6 +59,9 @@ function compose(service, cmd, user) {
 const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
 const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
 const fixtures = (args) => compose('php-fpm', `cd /var/www/html && php /tmp/sprint4-fixtures.php /var/www/html ${args}`, 'www-data').trim();
+// The other fixtures of the run: copied into the container, their last output line is a JSON object.
+const copyFixture = (name) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', path.join(FIXTURE_DIR, name), `php-fpm:/tmp/${name}`]);
+const runFixture = (name, fixtureArgs) => JSON.parse(compose('php-fpm', `cd /var/www/html && php /tmp/${name} /var/www/html ${fixtureArgs}`, 'www-data').trim().split('\n').pop());
 const { configSnapshot, configValue, restoreConfig } = makeConfigSnapshot(sql);
 // The settings the run changes, as stored before it (no row, SQL NULL or a value).
 const previousConfig = {
@@ -68,10 +80,13 @@ const layoutShift = (page) => page.evaluate(() => new Promise((resolve) => {
     }).observe({ type: 'layout-shift', buffered: true });
     setTimeout(() => resolve(total), 500);
 }));
-const SEED_TERM = 'hyperion spec034 popular term';
+const SEED_TERM = 'hyperion popular term check';
 let seededTerm = false;
 execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint4-fixtures.php']);
 console.log(fixtures('page'));
+copyFixture('customer-fixture.php');
+copyFixture('vault-token-fixture.php');
+console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} '${CUSTOMER.password}' --apply`)));
 magento('cache:flush');
 
 const browser = await chromium.launch({ headless: true, ...launchOptions() });
@@ -195,9 +210,11 @@ try {
         const j = await newJourney();
         const { page } = j;
         check('customer: login', await login(page), page.url().replace(base, ''));
-        await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
-        await page.click('#product_addtocart_form button[type="submit"]');
-        await toast(page);
+        for (const productPath of ORDER_PRODUCTS) {
+            await page.goto(base + u(productPath), { waitUntil: 'networkidle' });
+            await page.click('#product_addtocart_form button[type="submit"]');
+            await toast(page);
+        }
         await page.goto(base + '/checkout/', { waitUntil: 'networkidle' });
         await page.waitForSelector('shipping-method-row', { timeout: 40000 }).catch(() => {});
         await page.waitForSelector('#hc-pay-checkmo', { timeout: 40000 }).catch(() => {});
@@ -208,12 +225,100 @@ try {
         await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
         orderId = await page.evaluate(() => (document.body.innerText.match(/#\s*(\d{9})/) || [])[1] || '');
         check('customer: order placed', !!orderId, orderId);
+
+        // The failure page: core serves it only to the session of the last order.
+        const failureResponse = await page.goto(base + '/checkout/onepage/failure/', { waitUntil: 'networkidle' });
+        const failureFacts = await pageFacts(page);
+        const failure = await page.evaluate(() => {
+            const root = document.querySelector('[data-hyperion-checkout-failure]');
+            const links = [...(root?.querySelectorAll('a[href]') ?? [])].map((a) => ({ text: a.textContent.replace(/\s+/g, ' ').trim(), path: new URL(a.href).pathname.replace(/\/+$/, '') || '/', host: new URL(a.href).host }));
+            return {
+                roots: document.querySelectorAll('[data-hyperion-checkout-failure]').length,
+                heading: (root?.querySelector('h1')?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+                text: (root?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+                links,
+                home: new URL(document.baseURI).host,
+                title: document.title,
+                card: root ? getComputedStyle(root.firstElementChild).borderTopWidth !== '0px' : false,
+            };
+        });
+        const cartLink = failure.links.find((l) => l.path.endsWith('/checkout/cart'));
+        const homeLink = failure.links.find((l) => l.path === '/' || l.path === new URL(base).pathname.replace(/\/+$/, ''));
+        check('checkout failure page: served to the session of the order, with the heading as the only h1 and the styled card', failureResponse?.status() === 200 && page.url().includes('/checkout/onepage/failure') && failure.roots === 1 && failure.heading === 'Your order could not be completed' && failureFacts.h1 === 1 && failure.card && failure.title.includes(failure.heading), JSON.stringify({ status: failureResponse?.status(), url: page.url().replace(base, ''), heading: failure.heading, h1: failureFacts.h1, title: failure.title }));
+        check('checkout failure page: the order number of the session is printed', failure.text.includes(orderId), failure.text.slice(0, 160));
+        check('checkout failure page: one link back to the cart and one to the store, both on this site', !!cartLink && !!homeLink && cartLink !== homeLink && [cartLink, homeLink].every((l) => l.host === failure.home && l.text !== ''), JSON.stringify(failure.links));
+        check('checkout failure page: no data-mage-init, no x-magento-init, no core markup', failureFacts.deadInit === 0 && failureFacts.luma === 0, JSON.stringify({ deadInit: failureFacts.deadInit, luma: failureFacts.luma }));
+        {
+            // A visitor without an order is sent to the cart, as core does.
+            const stranger = await browser.newContext({ ignoreHTTPSErrors: true });
+            const strangerPage = await stranger.newPage();
+            await strangerPage.goto(base + '/checkout/onepage/failure/', { waitUntil: 'domcontentloaded' });
+            check('checkout failure page: a session without an order lands on the cart', strangerPage.url().replace(/\/+$/, '').endsWith('/checkout/cart') && await strangerPage.locator('[data-hyperion-checkout-failure]').count() === 0, strangerPage.url().replace(base, ''));
+            await stranger.close();
+        }
         docs = JSON.parse(fixtures(`documents ${orderId}`));
         check('fixtures: invoice, tracked shipment and refund created', docs.invoice_id > 0 && docs.shipment_id > 0 && docs.creditmemo_id > 0 && !!docs.tracking_url, JSON.stringify(docs));
 
         await page.goto(base + '/vault/cards/listaction/', { waitUntil: 'networkidle' });
         const vault = await pageFacts(page);
         check('stored payment methods: styled inside the account shell', await page.locator('[data-hyperion-vault-cards]').count() === 1 && vault.luma === 0 && vault.deadInit === 0 && /Stored Payment Methods/.test(vault.text), JSON.stringify({ luma: vault.luma, deadInit: vault.deadInit }));
+
+        // A stored PayPal account of the Braintree gateway, rendered by the theme's token template.
+        const token = runFixture('vault-token-fixture.php', `${CUSTOMER.email} --apply`);
+        if (!token.applied) {
+            console.log(`SKIP  stored payment methods: a stored PayPal account row  -- ${token.reason}`);
+        } else {
+            const listed = await page.goto(base + '/vault/cards/listaction/', { waitUntil: 'networkidle' });
+            const stored = await pageFacts(page);
+            const row = await page.evaluate(() => {
+                const rows = [...document.querySelectorAll('tr[data-hyperion-vault-token]')];
+                const tr = rows.find((r) => r.getAttribute('data-hyperion-vault-token') === 'paypal');
+                const form = tr?.querySelector('form');
+                const icon = tr?.querySelector('img');
+                return {
+                    rows: rows.length,
+                    text: (tr?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+                    inStyledTable: !!tr?.closest('table.hyperion-order-table'),
+                    iconLoaded: icon ? icon.complete && icon.naturalWidth > 0 : null,
+                    iconAlt: icon?.getAttribute('alt') ?? '',
+                    action: form ? new URL(form.action).pathname : '',
+                    method: form?.method ?? '',
+                    confirm: form?.getAttribute('data-hyperion-confirm') ?? '',
+                    formKey: form?.querySelector('input[name="form_key"]')?.value ?? '',
+                    publicHash: form?.querySelector('input[name="public_hash"]')?.value ?? '',
+                    deleteButtons: tr?.querySelectorAll('button[type="submit"][data-hyperion-vault-delete]').length ?? 0,
+                    deadInitInRow: tr?.querySelectorAll('[data-mage-init], script').length ?? -1,
+                    coreMarkup: document.querySelectorAll('.my-credit-cards, #my-orders-table, .action.delete, .modal-popup').length,
+                };
+            });
+            check(
+                'stored payment methods: the PayPal account is one row of the styled accounts table, with the payer and the icon',
+                listed?.status() === 200 && row.rows === 1 && row.inStyledTable && row.text.includes(token.payer_email) && row.iconLoaded !== false && (row.iconLoaded === null || row.iconAlt !== ''),
+                JSON.stringify({ status: listed?.status(), rows: row.rows, text: row.text.slice(0, 80), icon: row.iconLoaded })
+            );
+            check(
+                'stored payment methods: its Delete is a plain POST form with the form key and the token hash behind the site dialog',
+                row.method === 'post' && /\/vault\/cards\/deleteaction\/?$/.test(row.action) && row.confirm.includes(token.payer_email) && row.formKey !== '' && row.publicHash === token.public_hash && row.deleteButtons === 1,
+                JSON.stringify({ action: row.action, method: row.method, confirm: row.confirm, formKey: row.formKey !== '', hashMatches: row.publicHash === token.public_hash })
+            );
+            check(
+                'stored payment methods: zero data-mage-init / x-magento-init on the page with the token, no core markup',
+                stored.deadInit === 0 && stored.luma === 0 && row.deadInitInRow === 0 && row.coreMarkup === 0,
+                JSON.stringify({ deadInit: stored.deadInit, luma: stored.luma, inRow: row.deadInitInRow, core: row.coreMarkup })
+            );
+            await page.click('tr[data-hyperion-vault-token="paypal"] [data-hyperion-vault-delete]');
+            await page.waitForSelector('hyperion-confirm dialog[open]', { timeout: 10000 }).catch(() => {});
+            const question = await page.evaluate(() => (document.querySelector('hyperion-confirm dialog[open]')?.textContent ?? '').replace(/\s+/g, ' ').trim());
+            const stillListed = sql(`select count(*) from vault_payment_token where public_hash = '${token.public_hash}' and is_active = 1 and is_visible = 1`);
+            check('stored payment methods: Delete asks through the site dialog before anything is posted', question.includes(token.payer_email) && stillListed === '1', `${question.slice(0, 120)} | rows ${stillListed}`);
+            await Promise.all([
+                page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/vault/cards/deleteaction'), { timeout: 30000 }).catch(() => null),
+                page.click('hyperion-confirm [data-hyperion-confirm-ok]').catch(() => {}),
+            ]);
+            await page.waitForLoadState('networkidle').catch(() => {});
+            const afterDelete = sql(`select count(*) from vault_payment_token where public_hash = '${token.public_hash}' and is_active = 1 and is_visible = 1`);
+            check('stored payment methods: the confirmed Delete removes the account from the list', afterDelete === '0' && await page.locator('tr[data-hyperion-vault-token]').count() === 0 && page.url().includes('/vault/cards/listaction'), `rows ${afterDelete}, url ${page.url().replace(base, '')}`);
+        }
 
         for (const [name, url, marker] of [
             ['order', `/sales/order/print/order_id/${docs.order_id}/`, 'section[aria-labelledby="hyperion-account-heading"]'],
@@ -514,6 +619,18 @@ try {
 } finally {
     await browser.close();
     console.log(fixtures('remove'));
+    // Every step of the clean-up runs, also when one of them fails.
+    for (const [label, step] of [
+        ['vault token fixture removed', () => runFixture('vault-token-fixture.php', `${CUSTOMER.email} --remove`)],
+        ['customer of the run deleted', () => console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} --remove`)))],
+        ['fixture files removed', () => compose('php-fpm', 'rm -f /tmp/customer-fixture.php /tmp/vault-token-fixture.php')],
+    ]) {
+        try {
+            step();
+        } catch (e) {
+            check(`restore: ${label}`, false, String(e?.message ?? e).split('\n')[0]);
+        }
+    }
     compose('php-fpm', 'rm -f /tmp/sprint4-fixtures.php');
     restoreConfig('sendfriend/email/enabled', previousConfig.sendfriendEnabled);
     restoreConfig('sendfriend/email/allow_guest', previousConfig.sendfriendGuest);

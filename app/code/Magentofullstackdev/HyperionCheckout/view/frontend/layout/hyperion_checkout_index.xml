@@ -12,8 +12,11 @@
       2. Suppress the default page H1 (the Lit app renders its own
          accessible heading).
       3. Mount a single `hyperion.checkout` block whose template emits
-         the mount div, the #checkout-config JSON island, and the
-         script/stylesheet tags referencing the built bundle.
+         the mount div with its skeleton, the #checkout-config JSON
+         island and the entry module script.
+      4. Put the checkout stylesheet and the module preloads in the head
+         through `head.additional`, the block the page root prints inside
+         <head>.
 
     Block / container names verified against:
       vendor/magento/module-checkout/view/frontend/layout/checkout_index_index.xml
@@ -40,6 +43,17 @@
 
         <!-- Suppress the default page H1 (the Lit app renders its own). -->
         <referenceBlock name="page.main.title" remove="true"/>
+
+        <!-- The stylesheet and the chunk preloads belong in <head>, so they
+             start before the body arrives. `head.additional` is the one
+             layout block rendered there (the theme's own asset block,
+             `hyperion.head.scripts`, sits at the start of the body). Its
+             output depends on the build and the store locale only. -->
+        <referenceBlock name="head.additional">
+            <block class="Magentofullstackdev\HyperionCheckout\Block\Checkout"
+                   name="hyperion.checkout.head"
+                   template="Magentofullstackdev_HyperionCheckout::checkout/head.phtml"/>
+        </referenceBlock>
 
         <referenceContainer name="content">
             <!--

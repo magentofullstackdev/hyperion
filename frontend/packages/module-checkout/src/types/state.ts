@@ -73,15 +73,33 @@ export interface CheckoutState {
 
     // Totals
     totals: Totals | null;
-    isRefreshingTotals: boolean;
 
     // UI
     isPlacingOrder: boolean;
     orderPlaced: boolean;
-    orderOutcomeUnknown: boolean;
     globalError: string | null;
     fieldErrors: Readonly<Record<string, string>>;
 
     // Agreements
     acceptedAgreements: readonly number[];
 }
+
+/** Where the shipping rate list stands for the address in the form. */
+export type EstimateState = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
+
+/**
+ * Where the order stands: `placing` from the press until an answer,
+ * `placed` once the order exists, `unknown` while a lost answer has not
+ * been resolved by reading the quote. `placed` and `unknown` keep Place
+ * Order latched.
+ */
+export type OrderOutcomeState = 'none' | 'placing' | 'placed' | 'unknown';
+
+/**
+ * What an order attempt is doing right now: `preparing` while the pending
+ * saves are put on the quote, `payment` while the payment method does its
+ * own step (a tokenization, a challenge, a wallet sheet: the page must stay
+ * usable), `submitting` while the order request is out, `confirming` while
+ * the quote is read to learn what became of a request that lost its answer.
+ */
+export type OrderStep = 'idle' | 'preparing' | 'payment' | 'submitting' | 'confirming';

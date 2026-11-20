@@ -537,6 +537,15 @@ hyperion-gallery:defined > [data-hyperion-gallery-skeleton] {
     display: none;
 }
 
+/* --- Checkout skeleton (no layout shift) --------------------------- */
+/* The checkout page ships a skeleton of the application inside its mount
+   node (HyperionCheckout checkout.phtml). The bundle replaces it with
+   <checkout-app> in one step; should both ever sit in the node together,
+   only the application shows. */
+#checkout-root:has(> checkout-app) > [data-hyperion-checkout-skeleton] {
+    display: none;
+}
+
 /* --- Tabs before the upgrade (CLS) ---------------------------------- */
 /* <hyperion-tabs> (product/view.phtml) ships a skeleton of its tab strip and
    every panel as light children. Until the chunk arrives only the strip and
@@ -593,4 +602,33 @@ hyperion-paypal-message {
 
 .bg-inverted [data-hyperion-recaptcha-legal] {
     color: rgb(var(--color-on-inverted-muted));
+}
+
+/* --- Cart page: automatic quantity update and the phone checkout bar --- */
+/* The list of lines is the hx-indicator of the cart form (and of the
+   remove and wish list buttons inside it): htmx puts `htmx-request` on it
+   while the cart is being updated. Dimmed only, the fields stay usable: a
+   newer quantity replaces the request in flight. */
+[data-hyperion-cart-lines].htmx-request {
+    opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    [data-hyperion-cart-lines] {
+        transition: opacity var(--hyperion-motion-fast) ease-out;
+    }
+}
+
+/* The stepper buttons of an edited line are disabled while its request runs. */
+[data-hyperion-qty-editing] [data-hyperion-qty-step]:disabled {
+    cursor: progress;
+}
+
+/* Grand total and checkout link at the bottom of a phone screen
+   (cart/totals.phtml). In the flow and `position: sticky`: it rests under
+   the summary card at the end of the cart and reserves its own space, so it
+   covers nothing and shifts nothing. The bottom padding clears the home
+   indicator of a phone. */
+[data-hyperion-checkout-bar] {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }

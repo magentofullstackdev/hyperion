@@ -8,7 +8,25 @@ declare(strict_types=1);
  *
  * Two-column layout on lg+: items + coupon on the left, sticky summary
  * card on the right. Items use HTMX outerHTML swap for qty-update /
- * remove so the cart reflows without a full page reload. Coupon form
+ * remove so the cart reflows without a full page reload.
+ *
+ * Quantities update by themselves: a change of any quantity field posts
+ * the cart form after a short pause (one request for a burst of changes, a
+ * newer change replaces a request in flight). While the request runs the
+ * list of lines is dimmed (it is the request's indicator) and the stepper
+ * buttons of the edited lines are disabled by lib/cart-qty.js, which also
+ * drives the stepper buttons and gives the focus back to the edited line
+ * after the swap (no `hx-disabled-elt`: the edited line is only known at
+ * run time, and a selector without a match is an htmx error for the remove
+ * and wish list buttons that inherit it). "Update Cart" is the fallback
+ * without scripting.
+ * The trigger lists the quantity fields themselves (`from:` with a plain
+ * selector binds every match; `find` would bind the first one only):
+ * the gift message fields sit inside this form's element too and their
+ * changes must not post the cart. The remove and wish list buttons inherit
+ * the form's queue and indicator.
+ *
+ * Coupon form
  * is rendered by the `coupon` child block (#hyperion-coupon-form);
  * totals are rendered by the `totals` child block
  * (#hyperion-cart-totals) so every cart mutation can OOB-swap them.
@@ -30,6 +48,15 @@ $giftItems = $giftBlock ? $giftVm->getItemForms() : [];
 $giftUrl = $giftVm->getSaveUrl();
 $giftFormKey = $giftVm->getFormKey();
 $giftFormIds = [];
+$qtyBlock = $block->getLayout()->createBlock(\Magento\Framework\View\Element\Template::class);
+$qtyBlock->setTemplate('Magento_Checkout::cart/item/qty.phtml');
+$secondaryButton = 'inline-flex items-center justify-center min-h-11 px-4 py-2 rounded-lg text-sm font-medium
+                    bg-surface border border-subtle text-secondary
+                    hover:border-primary hover:text-primary transition-colors
+                    focus:outline-none focus:ring-2 focus:ring-primary';
+$rowAction = 'inline-flex items-center justify-center min-h-11 min-w-11 px-2 text-sm text-muted
+              transition-colors underline-offset-2 hover:underline
+              focus:outline-none focus:ring-2 rounded';
 /** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CartData $cartData */
 $cartData = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CartData::class);
 $canMoveToWishlist = $cartData->canMoveToWishlist();
@@ -87,35 +114,57 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                   hx-post="<?= $escaper->escapeUrl($block->getUpdateCartUrl()) ?>"
                   hx-target="#hyperion-cart-items"
                   hx-swap="outerHTML"
+                  hx-trigger="change delay:400ms from:[data-hyperion-qty], submit"
+                  hx-sync="this:replace"
+                  hx-indicator="#hyperion-cart-lines"
                   class="min-w-0 flex flex-col gap-4">
 
                 <input type="hidden" name="form_key"
                        value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>">
 
-                <ul role="list" class="flex flex-col gap-3">
+                <ul id="hyperion-cart-lines" role="list" class="flex flex-col gap-3" data-hyperion-cart-lines>
                     <?php foreach ($block->getItems() as $item): ?>
                         <li class="flex flex-wrap gap-4 p-4 rounded-xl bg-surface border border-subtle
                                    hover:border-primary/30 transition-colors"
                             data-hyperion-cart-item
                             data-item-id="<?= (int) $item['id'] ?>">
 
-                            <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
-                               class="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden
-                                      bg-surface-raised border border-subtle
-                                      focus:outline-none focus:ring-2 focus:ring-primary">
-                                <img src="<?= $escaper->escapeUrl($item['image_url']) ?>"
-                                     alt="<?= $escaper->escapeHtmlAttr($item['name']) ?>"
-                                     loading="lazy"
-                                     class="w-full h-full object-cover">
-                            </a>
+                            <?php /* A line without a page of its own (a product not visible in the
+                                     catalog) shows its thumbnail and name as text, not as links. */ ?>
+                            <?php if ($item['product_url'] !== ''): ?>
+                                <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                                   class="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden
+                                          bg-surface-raised border border-subtle
+                                          focus:outline-none focus:ring-2 focus:ring-primary">
+                                    <img src="<?= $escaper->escapeUrl($item['image_url']) ?>"
+                                         alt="<?= $escaper->escapeHtmlAttr($item['name']) ?>"
+                                         loading="lazy"
+                                         class="w-full h-full object-cover">
+                                </a>
+                            <?php else: ?>
+                                <span class="shrink-0 w-20 h-20 md:w-24 md:h-24 rounded-lg overflow-hidden
+                                             bg-surface-raised border border-subtle"
+                                      data-hyperion-cart-item-unlinked>
+                                    <img src="<?= $escaper->escapeUrl($item['image_url']) ?>"
+                                         alt=""
+                                         loading="lazy"
+                                         class="w-full h-full object-cover">
+                                </span>
+                            <?php endif; ?>
 
                             <div class="flex-1 min-w-0 flex flex-col gap-1">
-                                <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
-                                   class="text-sm font-medium text-secondary hover:text-primary
-                                          transition-colors line-clamp-2
-                                          focus:outline-none focus:ring-2 focus:ring-primary rounded">
-                                    <?= $escaper->escapeHtml($item['name']) ?>
-                                </a>
+                                <?php if ($item['product_url'] !== ''): ?>
+                                    <a href="<?= $escaper->escapeUrl($item['product_url']) ?>"
+                                       class="text-sm font-medium text-secondary hover:text-primary
+                                              transition-colors line-clamp-2
+                                              focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                        <?= $escaper->escapeHtml($item['name']) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="text-sm font-medium text-secondary line-clamp-2">
+                                        <?= $escaper->escapeHtml($item['name']) ?>
+                                    </span>
+                                <?php endif; ?>
 
                                 <p class="text-xs text-muted">
                                     <?= $escaper->escapeHtml(__('SKU: %1', $item['sku'])) ?>
@@ -134,10 +183,10 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
 
                                 <?php if (!empty($item['options'])): ?>
                                     <dl class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted mt-1">
-                                        <?php foreach ($item['options'] as $optLabel => $optValue): ?>
+                                        <?php foreach ($item['options'] as $option): ?>
                                             <div class="flex gap-1">
-                                                <dt><?= $escaper->escapeHtml($optLabel) ?>:</dt>
-                                                <dd><?= $escaper->escapeHtml((string) $optValue) ?></dd>
+                                                <dt><?= $escaper->escapeHtml($option['label']) ?>:</dt>
+                                                <dd><?= $escaper->escapeHtml($option['value']) ?></dd>
                                             </div>
                                         <?php endforeach; ?>
                                     </dl>
@@ -181,26 +230,12 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                                     </div>
                                 </dl>
 
-                                <label class="flex items-center gap-2 text-xs text-muted">
-                                    <span class="sr-only">
-                                        <?= $escaper->escapeHtml(__('Quantity')) ?>
-                                    </span>
-                                    <input type="number"
-                                           name="cart[<?= (int) $item['id'] ?>][qty]"
-                                           value="<?= $escaper->escapeHtmlAttr((string) ($item['qty'] + 0)) ?>"
-                                           min="<?= $escaper->escapeHtmlAttr((string) $item['qty_min']) ?>"
-                                           <?php if ($item['qty_max'] !== null): ?>
-                                               max="<?= $escaper->escapeHtmlAttr((string) $item['qty_max']) ?>"
-                                           <?php endif; ?>
-                                           step="<?= $escaper->escapeHtmlAttr((string) $item['qty_step']) ?>"
-                                           inputmode="<?= $item['is_qty_decimal'] ? 'decimal' : 'numeric' ?>"
-                                           aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity for %1', $item['name'])) ?>"
-                                           class="w-16 px-2 py-1 text-sm rounded-lg
-                                                  bg-surface border border-subtle text-secondary
-                                                  focus:outline-none focus:ring-2 focus:ring-primary
-                                                  focus:border-primary">
-                                </label>
+                                <?= $qtyBlock->setData(['item' => $item, 'variant' => 'cart'])->toHtml() ?>
+                            </div>
 
+                            <?php /* Row actions on a line of their own: each one is a 44 px target. */ ?>
+                            <div class="basis-full flex flex-wrap items-center justify-end gap-x-2 -my-2"
+                                 data-hyperion-cart-item-actions>
                                 <?php if (!empty($item['options'])): ?>
                                     <?php /* Core's configure page: the product page with this line's options and
                                              quantity preselected, posting to updateItemOptions (the line is replaced,
@@ -211,9 +246,7 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                                     ])) ?>"
                                        data-hyperion-cart-edit
                                        aria-label="<?= $escaper->escapeHtmlAttr(__('Edit %1', $item['name'])) ?>"
-                                       class="text-xs text-muted hover:text-primary
-                                              transition-colors underline-offset-2 hover:underline
-                                              focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                       class="<?= $escaper->escapeHtmlAttr($rowAction) ?> hover:text-primary focus:ring-primary">
                                         <?= $escaper->escapeHtml(__('Edit')) ?>
                                     </a>
                                 <?php endif; ?>
@@ -227,9 +260,7 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                                             hx-include="[name=form_key]"
                                             data-hyperion-move-to-wishlist
                                             aria-label="<?= $escaper->escapeHtmlAttr(__('Move %1 to wishlist', $item['name'])) ?>"
-                                            class="text-xs text-muted hover:text-primary
-                                                   transition-colors underline-offset-2 hover:underline
-                                                   focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                            class="<?= $escaper->escapeHtmlAttr($rowAction) ?> hover:text-primary focus:ring-primary">
                                         <?= $escaper->escapeHtml(__('Move to Wishlist')) ?>
                                     </button>
                                 <?php endif; ?>
@@ -241,9 +272,8 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                                         hx-include="[name=form_key]"
                                         hx-confirm="<?= $escaper->escapeHtmlAttr(__('Remove this item from your cart?')) ?>"
                                         aria-label="<?= $escaper->escapeHtmlAttr(__('Remove %1 from cart', $item['name'])) ?>"
-                                        class="text-xs text-muted hover:text-error
-                                               transition-colors underline-offset-2 hover:underline
-                                               focus:outline-none focus:ring-2 focus:ring-error rounded">
+                                        data-hyperion-cart-remove
+                                        class="<?= $escaper->escapeHtmlAttr($rowAction) ?> hover:text-error focus:ring-error">
                                     <?= $escaper->escapeHtml(__('Remove')) ?>
                                 </button>
                             </div>
@@ -268,17 +298,14 @@ $moveToWishlistUrl = $cartData->getMoveToWishlistUrl();
                 </ul>
 
                 <div class="flex flex-wrap gap-3 pt-2">
-                    <button type="submit"
-                            class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
-                                   bg-surface border border-subtle text-secondary
-                                   hover:border-primary hover:text-primary transition-colors
-                                   focus:outline-none focus:ring-2 focus:ring-primary">
-                        <?= $escaper->escapeHtml(__('Update Cart')) ?>
-                    </button>
+                    <?php /* Without scripting nothing posts the form on a change. */ ?>
+                    <noscript>
+                        <button type="submit" class="<?= $escaper->escapeHtmlAttr($secondaryButton) ?>">
+                            <?= $escaper->escapeHtml(__('Update Cart')) ?>
+                        </button>
+                    </noscript>
                     <a href="<?= $escaper->escapeUrl($block->getContinueShoppingUrl()) ?>"
-                       class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium
-                              text-muted hover:text-primary transition-colors
-                              focus:outline-none focus:ring-2 focus:ring-primary">
+                       class="<?= $escaper->escapeHtmlAttr($secondaryButton) ?>">
                         <?= $escaper->escapeHtml(__('Continue Shopping')) ?>
                     </a>
                 </div>

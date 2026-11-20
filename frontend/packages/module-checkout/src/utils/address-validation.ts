@@ -20,7 +20,8 @@
 import type { Address } from '../types/address.js';
 import type { FieldVisibility, PostcodePattern } from '../types/config.js';
 import { peekCheckoutConfig } from '../bootstrap-config.js';
-import { hasRequiredNameFields } from './name-fields.js';
+import { hasRequiredNameFields, missingRequiredNameFields } from './name-fields.js';
+import { regionListForCountry } from './region.js';
 
 export type PostcodePatterns = Readonly<Record<string, readonly PostcodePattern[]>>;
 
@@ -33,6 +34,11 @@ export interface AddressFieldConfig {
     optionalZipCountries: readonly string[];
     /** Country id to its postcode patterns; a country without an entry accepts any postcode. */
     postCodes: PostcodePatterns;
+    /**
+     * `checkoutConfig.directoryData`: country id to its entry (`is_region_required`,
+     * `regions`). A country without an entry requires no region.
+     */
+    directoryData?: Readonly<Record<string, unknown>>;
 }
 
 const DEFAULTS: AddressFieldConfig = {
@@ -71,6 +77,10 @@ function readPostCodes(raw: unknown): PostcodePatterns {
     return out;
 }
 
+function readDirectoryData(raw: unknown): Readonly<Record<string, unknown>> {
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+}
+
 /** Field visibility as configured; core's defaults when the config lacks a key. */
 export function readAddressFieldConfig(): AddressFieldConfig {
     const cfg = (peekCheckoutConfig() ?? {}) as unknown as Record<string, unknown>;
@@ -84,6 +94,7 @@ export function readAddressFieldConfig(): AddressFieldConfig {
         showVat: cfg['vatFrontendVisibility'] === true || cfg['vatFrontendVisibility'] === '1',
         optionalZipCountries: Array.isArray(oz) ? (oz as string[]) : [],
         postCodes: readPostCodes(cfg['postCodes']),
+        directoryData: readDirectoryData(cfg['directoryData']),
     };
 }
 
@@ -153,26 +164,84 @@ export function postcodeWarning(
 }
 
 /**
- * Whether the address can be sent to Magento: the always-required fields,
- * the configured required fields, a postcode where the country requires one
- * (its format is a warning, see `postcodeWarning()`) and the required name
- * fields are present.
+ * The region id of an address as text, '' when it has none; 0 is "no
+ * region". Only `region_id` of the address itself counts: it is the one a
+ * request to Magento carries, the id inside the region object is not sent.
  */
+export function regionIdOf(addr: Partial<Address>): string {
+    const candidate: unknown = addr.region_id;
+    if (typeof candidate !== 'string' && typeof candidate !== 'number') return '';
+    const id = String(candidate).trim();
+    return id !== '' && id !== '0' ? id : '';
+}
+
+/**
+ * The region name of an address, trimmed, '' when it has none. The address
+ * form stores a typed region as a plain string, a saved address carries a
+ * region object.
+ */
+export function regionTextOf(addr: Partial<Address>): string {
+    const region: unknown = addr.region;
+    if (typeof region === 'string') return region.trim();
+    if (region && typeof region === 'object') {
+        const name = (region as { region?: unknown }).region;
+        return typeof name === 'string' ? name.trim() : '';
+    }
+    return '';
+}
+
+/**
+ * Whether the region is missing while the country requires one
+ * (`is_region_required` of its directory entry): a country with a region
+ * list needs a region id, a country without one needs the typed region.
+ * A country that does not require a region never blocks, list or not.
+ */
+export function isRegionMissing(
+    addr: Partial<Address> | null | undefined,
+    cfg: AddressFieldConfig = readAddressFieldConfig()
+): boolean {
+    const countryId = addr?.country_id ?? '';
+    const entry = cfg.directoryData?.[countryId];
+    if (!addr || !entry || typeof entry !== 'object') return false;
+    if ((entry as { is_region_required?: unknown }).is_region_required !== true) return false;
+    return regionListForCountry(cfg.directoryData, countryId).length > 0
+        ? regionIdOf(addr) === ''
+        : regionTextOf(addr) === '';
+}
+
+/**
+ * The fields an address still needs before it can be sent to Magento, by
+ * field name, in form order (`street` and `region` stand for their
+ * controls): the always-required fields, the configured required fields,
+ * a postcode where the country requires one (its format is a warning, see
+ * `postcodeWarning()`), a region where the country requires one and the
+ * required name fields. Empty for an address that is complete.
+ */
+export function missingAddressFields(
+    addr: Partial<Address> | null | undefined,
+    cfg: AddressFieldConfig = readAddressFieldConfig()
+): readonly string[] {
+    const a: Partial<Address> = addr ?? {};
+    const missing: string[] = [];
+    if (!filled(a.firstname)) missing.push('firstname');
+    if (!filled(a.lastname)) missing.push('lastname');
+    if (!hasRequiredNameFields(a)) missing.push(...missingRequiredNameFields(a));
+    if (cfg.showCompany === 'req' && !filled(a.company)) missing.push('company');
+    if (!filled(a.country_id)) missing.push('country_id');
+    if (!hasStreet(a)) missing.push('street');
+    if (isPostcodeMissing(a.postcode, a.country_id, cfg)) missing.push('postcode');
+    if (!filled(a.city)) missing.push('city');
+    if (isRegionMissing(a, cfg)) missing.push('region');
+    if (cfg.showTelephone === 'req' && !filled(a.telephone)) missing.push('telephone');
+    if (cfg.showFax === 'req' && !filled(a.fax)) missing.push('fax');
+    return missing;
+}
+
+/** Whether the address can be sent to Magento: nothing of `missingAddressFields()` is missing. */
 export function isAddressComplete(
     addr: Partial<Address> | null | undefined,
     cfg: AddressFieldConfig = readAddressFieldConfig()
 ): addr is Address {
     if (!addr) return false;
-    return (
-        filled(addr.country_id) &&
-        filled(addr.firstname) &&
-        filled(addr.lastname) &&
-        filled(addr.city) &&
-        hasStreet(addr) &&
-        !isPostcodeMissing(addr.postcode, addr.country_id, cfg) &&
-        (cfg.showTelephone !== 'req' || filled(addr.telephone)) &&
-        (cfg.showCompany !== 'req' || filled(addr.company)) &&
-        (cfg.showFax !== 'req' || filled(addr.fax)) &&
-        hasRequiredNameFields(addr)
-    );
+    return missingAddressFields(addr, cfg).length === 0;
 }

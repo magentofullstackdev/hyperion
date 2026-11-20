@@ -8,6 +8,9 @@
  *   POST /carts/mine/estimate-shipping-methods           (customer)
  *   POST /guest-carts/:cartId/shipping-information       (guest)
  *   POST /carts/mine/shipping-information                (customer)
+ *
+ * Both are marked `idempotent`: the estimate is a read sent as a POST, and
+ * saving the same shipping information twice leaves the quote as one save.
  */
 import { apiFetch } from './client.js';
 import type {
@@ -27,6 +30,7 @@ export function estimateGuestShippingMethods(
         {
             method: 'POST',
             body: req,
+            idempotent: true,
             auth: 'guest',
             ...(signal ? { signal } : {}),
         }
@@ -42,6 +46,7 @@ export function estimateCustomerShippingMethods(
         {
             method: 'POST',
             body: req,
+            idempotent: true,
             auth: 'customer',
             ...(signal ? { signal } : {}),
         }
@@ -57,6 +62,7 @@ export function saveGuestShippingInformation(
         {
             method: 'POST',
             body: req,
+            idempotent: true,
             auth: 'guest',
         }
     );
@@ -70,6 +76,7 @@ export function saveCustomerShippingInformation(
         {
             method: 'POST',
             body: req,
+            idempotent: true,
             auth: 'customer',
         }
     );

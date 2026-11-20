@@ -2,31 +2,38 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <place-order-button> -- primary CTA.
+ * <place-order-button>: primary CTA.
  *
  * Not rendered while the selected method's renderer `ownsPlaceOrder`
  * (it completes the order with its own control). Otherwise gated by the
  * `canPlaceOrder` selector: while it is false the button is soft-disabled
  * (`aria-disabled`, still focusable and clickable, Enter / Space as any
- * button) and a press reveals what is missing instead of doing nothing:
- * every form shows its pending errors (`requestValidation()`), the email
- * error is set, one hint line names the first missing piece and the
- * keyboard focus moves to the first invalid field (or to the hint). The
- * order is never placed while the gate is closed. A press while the
- * shipping form is ahead of the quote (an edit whose rates were not
- * estimated yet, a save in flight) first waits for that work, so the order
- * goes out against the address in the form or not at all. Once the gate is
- * open, a click:
- *   1. Runs the selected method's `beforePlaceOrder` hook (collects
- *      token/nonce/PO number into `paymentMethodData`). Gateway hooks
- *      can take a while (tokenization, a 3D Secure challenge), so the
- *      button shows its loading state and ignores further clicks.
- *   2. Calls `flowActions().placeOrder()`, or the renderer's `placeOrder`
- *      when it has one (redirect gateways).
- *   3. On success, navigates to `/checkout/onepage/success` (stock
+ * button). Its label carries the amount once the totals are settled
+ * ("Place order, 57.00"), and the plain label while they are not. The
+ * button fills the width of its container and carries
+ * `data-hyperion-place-order`. A press does nothing once an order attempt
+ * left the `none` outcome (being placed, placed, or waiting for the check
+ * of a lost answer). Otherwise it runs the order pipeline of the flow
+ * actions:
+ *   1. `prepareOrder()` takes the latch, puts every pending edit on the
+ *      quote (a form that is ahead of it, a billing address, a payment
+ *      method) and evaluates the gate on what the server confirmed. When
+ *      something is missing the press reveals it instead of doing nothing:
+ *      every form shows its pending errors (`requestValidation()`), the
+ *      email error is set, one hint line names the first missing piece and
+ *      the keyboard focus moves to the first invalid field (or to the
+ *      hint). The order is never placed while the gate is closed.
+ *   2. The selected method's `beforePlaceOrder` hook collects the
+ *      token / nonce / PO number into `paymentMethodData`. It runs after
+ *      step 1, so a tokenization or a 3D Secure challenge sees the settled
+ *      totals. Gateway hooks can take a while: the button shows its loading
+ *      state (the latch) and ignores further presses.
+ *   3. `submitOrder()` sends the order, or the renderer's `placeOrder`
+ *      does when it has one (redirect gateways).
+ *   4. On success the browser goes to `/checkout/onepage/success` (stock
  *      Magento success page) or to the URL the renderer resolved with; the
- *      loading state stays until the browser leaves. On failure the
- *      renderer's `afterPlaceOrderFailed` hook runs.
+ *      loading state stays until the browser leaves. On failure the latch
+ *      is released and the renderer's `afterPlaceOrderFailed` hook runs.
  */
 import { LitElement, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
@@ -34,16 +41,17 @@ import { SignalWatcher } from '@lit-labs/signals';
 
 import { getStore } from '../store/index.js';
 import { getCheckoutConfig } from '../bootstrap-config.js';
-import { flowActions } from '../store/flow-actions.js';
+import { flowActions, type PrepareOrderBlockReason } from '../store/flow-actions.js';
 import { renderersVersion } from './payment-renderers/lazy-renderers.js';
 import { getPaymentRenderer, type PaymentRenderer } from './payment-renderers/registry.js';
 import { initFlowSelectors } from '../store/flow-selectors.js';
-import { checkoutUpdatingMessage, placeOrderHint } from '../store/place-order-hint.js';
+import { checkoutUpdatingMessage, placeOrderBlockerMessage, placeOrderHint } from '../store/place-order-hint.js';
 import { requestValidation } from '../store/validation-request.js';
 import { t } from '../utils/i18n.js';
 import { email as emailValidator } from '../validation/rules.js';
 import { navigateTo } from '../utils/navigate.js';
 import { decideRedirectTarget, resolveSameOriginUrl } from '../utils/safe-redirect.js';
+import { readGrandTotal } from './summary-totals.js';
 import './ui/button.js';
 
 export { placeOrderHint };
@@ -51,7 +59,6 @@ export { placeOrderHint };
 export class PlaceOrderButton extends SignalWatcher(LitElement) {
     private readonly _selectors = initFlowSelectors();
 
-    @state() private _preparing = false;
     /** What the last early press found missing; cleared once the gate opens. */
     @state() private _hint: string | null = null;
 
@@ -59,24 +66,39 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
 
     public override willUpdate(): void {
         if (this._hint === null) return;
-        if (this._selectors.canPlaceOrder.get()) {
+        const store = getStore();
+        // An order under way or of unknown outcome, a session that ended,
+        // a quote that is gone: each has its own message next to the
+        // button, and what an earlier press found missing no longer counts.
+        const latched = store.orderOutcome.get() !== 'none' || store.sessionExpired.get() || store.quoteGone.get();
+        if (latched || this._selectors.canPlaceOrder.get()) {
             this._hint = null;
         } else if (this._hint === checkoutUpdatingMessage()) {
             // The update ended without opening the gate: name what is
             // missing now instead of an update that is no longer running.
-            this._hint = placeOrderHint(getStore(), this._selectors);
+            this._hint = placeOrderHint(store, this._selectors);
         }
     }
 
     public override render(): unknown {
         renderersVersion.get();
-        const method = getStore().selectedPaymentMethod.get();
+        const store = getStore();
+        const method = store.selectedPaymentMethod.get();
         if (method && getPaymentRenderer(method)?.ownsPlaceOrder?.()) return nothing;
         const can = this._selectors.canPlaceOrder.get();
-        const placing = this._preparing || getStore().isPlacingOrder.get();
+        const placing = store.isPlacingOrder.get() || store.orderOutcome.get() === 'placing';
+        const total = readGrandTotal(store);
+        let label = t('Hyperion_Checkout::place_order');
+        if (placing) {
+            label = t('Hyperion_Checkout::placing_order');
+        } else if (total !== null && total.settled) {
+            label = t('Hyperion_Checkout::place_order_amount', { total: total.text });
+        }
         return html`
             <hc-button variant="primary"
-                       .label=${t(placing ? 'Hyperion_Checkout::placing_order' : 'Hyperion_Checkout::place_order')}
+                       class="block"
+                       data-hyperion-place-order
+                       .label=${label}
                        .softDisabled=${!can}
                        .loading=${placing}
                        @click=${this._onClick}></hc-button>
@@ -91,44 +113,33 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
 
     private _onClick = async (): Promise<void> => {
         const store = getStore();
-        // A second press while the first is still at work does nothing.
-        if (this._preparing || store.isPlacingOrder.get() || store.orderPlaced.get()) return;
-        // The form may be ahead of the quote: let the pending estimate and
-        // saves finish, then decide on what the server confirmed.
-        if (
-            store.shippingDirty.get()
-            || store.isLoadingShippingMethods.get()
-            || store.isSavingShipping.get()
-            || store.isSavingBilling.get()
-        ) {
-            this._preparing = true;
-            try {
-                await flowActions().settleShipping();
-            } finally {
-                this._preparing = false;
-            }
-        }
-        if (!this._selectors.canPlaceOrder.get()) {
-            await this._revealMissing();
+        if (store.orderOutcome.get() !== 'none') return;
+        const flow = flowActions();
+        // A second press while the first is still at work does nothing
+        // (`prepareOrder()` answers `busy`).
+        const prepared = await flow.prepareOrder();
+        if (prepared.status === 'blocked') {
+            await this._revealMissing(prepared.reason);
             return;
         }
         const method = store.selectedPaymentMethod.get();
-        if (!method) return;
+        if (!method) {
+            flow.cancelOrder();
+            return;
+        }
 
-        // Run the renderer's beforePlaceOrder hook if any.
+        // The renderer's step, on the settled quote.
         const renderer = getPaymentRenderer(method);
         if (renderer?.beforePlaceOrder) {
-            this._preparing = true;
             store.globalError.set(null);
             try {
                 const data = await renderer.beforePlaceOrder();
                 const current = store.paymentMethodData.get();
                 store.paymentMethodData.set({ ...current, [method]: data });
             } catch (err) {
+                flow.cancelOrder();
                 store.globalError.set((err as Error).message || t('Hyperion_Checkout::unexpected_error'));
                 return;
-            } finally {
-                this._preparing = false;
             }
         }
 
@@ -139,7 +150,7 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
 
         // A number, or the marker of an order confirmed by the quote after
         // its answer was lost: both continue on the success page.
-        const orderId = await flowActions().placeOrder();
+        const orderId = await flow.submitOrder();
         if (orderId !== null) {
             navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
             return;
@@ -152,17 +163,20 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
      * piece and move the focus to the first invalid field (or to the hint
      * when the missing piece is not a field: a method, the agreements).
      * Nothing is missing while the order is only being updated: the hint
-     * is announced as a status and the focus stays where it is.
+     * is announced as a status and the focus stays where it is. A press
+     * that found an attempt under way, or whose save failed (the failure
+     * is shown where it was reported), adds no hint.
      */
-    private async _revealMissing(): Promise<void> {
+    private async _revealMissing(reason: PrepareOrderBlockReason): Promise<void> {
+        if (reason === 'busy' || reason === 'write-failed' || reason === 'outcome-unknown') return;
         const store = getStore();
         if (!this._selectors.emailValid.get()) {
             const err = emailValidator(store.email.get());
             if (err) store.fieldErrors.set({ ...store.fieldErrors.get(), email: t(err) });
         }
         requestValidation();
-        this._hint = placeOrderHint(store, this._selectors);
-        if (this._hint === checkoutUpdatingMessage()) return;
+        this._hint = placeOrderBlockerMessage(store, reason);
+        if (reason === 'updating') return;
         // The forms render their errors on their own update cycle.
         await this.updateComplete;
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -172,13 +186,16 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
         target?.focus();
     }
 
-    /** The button stays in its loading state while the browser leaves the page. */
+    /**
+     * The order of a redirect gateway, under the latch `prepareOrder()` took:
+     * it holds while the browser leaves the page and is given back when the
+     * renderer could not start the payment.
+     */
     private async _placeThroughRenderer(
         placeOrder: NonNullable<PaymentRenderer['placeOrder']>,
         renderer: PaymentRenderer
     ): Promise<void> {
         const store = getStore();
-        this._preparing = true;
         let target: string | null = null;
         try {
             const url = await placeOrder();
@@ -193,7 +210,7 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
             navigateTo(target);
             return;
         }
-        this._preparing = false;
+        flowActions().cancelOrder();
         renderer.afterPlaceOrderFailed?.();
     }
 }

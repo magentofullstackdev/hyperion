@@ -35,10 +35,17 @@ class CouponPostPluginTest extends TestCase
     private Raw $raw;
     /** @var array<string, mixed> */
     private array $rawState;
+    /** @var array<string, mixed> Request parameters of the test. */
+    private array $params = [];
+    /** @var array<string, array<string, mixed>> Block data handed to the fragment renderer, by block name. */
+    private array $fragmentData = [];
 
     protected function setUp(): void
     {
         $this->request = $this->createStub(HttpRequest::class);
+        $this->request->method('getParam')->willReturnCallback(
+            fn (string $key, $default = null) => $this->params[$key] ?? $default
+        );
         $this->actionFlag = $this->createStub(ActionFlag::class);
         $this->rawState = ['headers' => [], 'contents' => null];
         $this->raw = $this->createStub(Raw::class);
@@ -56,13 +63,13 @@ class CouponPostPluginTest extends TestCase
         );
     }
 
-    private function plugin(bool $hasError): CouponPostPlugin
+    private function plugin(bool $hasError, string $messageHtml = 'Message text'): CouponPostPlugin
     {
         $rawFactory = $this->createStub(RawFactory::class);
         $rawFactory->method('create')->willReturn($this->raw);
 
         $messages = $this->createStub(MessageCollector::class);
-        $messages->method('collect')->willReturn(['html' => 'Message text', 'has_error' => $hasError]);
+        $messages->method('collect')->willReturn(['html' => $messageHtml, 'has_error' => $hasError]);
 
         $notification = $this->createStub(NotificationRenderer::class);
         $notification->method('render')->willReturnCallback(
@@ -71,7 +78,11 @@ class CouponPostPluginTest extends TestCase
 
         $fragments = $this->createStub(FragmentRenderer::class);
         $fragments->method('render')->willReturnCallback(
-            static fn (string $handle, string $block, array $data = []): string => sprintf('<%s handle="%s" oob="%d">', $block, $handle, (int) ($data['oob'] ?? false))
+            function (string $handle, string $block, array $data = []): string {
+                $this->fragmentData[$block] = $data;
+
+                return sprintf('<%s handle="%s" oob="%d">', $block, $handle, (int) ($data['oob'] ?? false));
+            }
         );
 
         return new CouponPostPlugin(
@@ -127,6 +138,72 @@ class CouponPostPluginTest extends TestCase
         self::assertStringContainsString('<toast tone="error"', (string) $this->rawState['contents']);
     }
 
+    public function testARefusedCodeIsHandedToTheCouponBlockWithItsMessageAsText(): void
+    {
+        $this->htmx(true);
+        $this->params = ['coupon_code' => '  NOT<A>"CODE  '];
+
+        $this->plugin(true, 'The coupon code &quot;NOT&lt;A&gt;&quot;CODE&quot; is <b>not</b> valid.')
+            ->afterExecute($this->createStub(CouponPost::class), $this->createStub(Redirect::class));
+
+        self::assertSame(
+            [
+                'coupon_attempt' => 'NOT<A>"CODE',
+                'coupon_error' => 'The coupon code "NOT<A>"CODE" is not valid.',
+            ],
+            $this->fragmentData['hyperion.cart.coupon']
+        );
+        self::assertSame(['oob' => true], $this->fragmentData['hyperion.cart.totals']);
+        self::assertStringContainsString('<toast tone="error" oob="1">', (string) $this->rawState['contents']);
+    }
+
+    public function testAnAcceptedCodeIsNotAnAttempt(): void
+    {
+        $this->htmx(true);
+        $this->params = ['coupon_code' => 'H20'];
+
+        $this->plugin(false)->afterExecute($this->createStub(CouponPost::class), $this->createStub(Redirect::class));
+
+        self::assertSame([], $this->fragmentData['hyperion.cart.coupon']);
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('requestsWithoutACodeToGiveBack')]
+    public function testAFailedRequestWithoutACodeToGiveBackIsNotAnAttempt(array $params): void
+    {
+        $this->htmx(true);
+        $this->params = $params;
+
+        $this->plugin(true)->afterExecute($this->createStub(CouponPost::class), $this->createStub(Redirect::class));
+
+        self::assertSame([], $this->fragmentData['hyperion.cart.coupon']);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>}>
+     */
+    public static function requestsWithoutACodeToGiveBack(): array
+    {
+        return [
+            'cancel request' => [['remove' => '1', 'coupon_code' => 'H20']],
+            'no code' => [[]],
+            'blank code' => [['coupon_code' => '   ']],
+            'code that is not a string' => [['coupon_code' => ['a']]],
+        ];
+    }
+
+    public function testAnOverlongCodeIsCutToTheLengthCoreAccepts(): void
+    {
+        $this->htmx(true);
+        $this->params = ['coupon_code' => str_repeat('A', 300)];
+
+        $this->plugin(true)->afterExecute($this->createStub(CouponPost::class), $this->createStub(Redirect::class));
+
+        self::assertSame(255, strlen($this->fragmentData['hyperion.cart.coupon']['coupon_attempt']));
+    }
+
     public function testAfterDispatchLeavesAnActionThatRanAlone(): void
     {
         $this->htmx(true);
@@ -171,5 +248,21 @@ class CouponPostPluginTest extends TestCase
         self::assertSame($this->raw, $result);
         self::assertStringContainsString('<hyperion.cart.coupon handle="hyperion_checkout_cart_fragment"', (string) $this->rawState['contents']);
         self::assertStringContainsString('<toast tone="error" oob="1">Message text</toast>', (string) $this->rawState['contents']);
+    }
+
+    public function testACodeStoppedBeforeExecuteIsGivenBackToTheFormToo(): void
+    {
+        $this->htmx(true);
+        $this->params = ['coupon_code' => 'H20'];
+        $this->actionFlag->method('get')->willReturn(true);
+        $subject = $this->createStub(CouponPost::class);
+        $subject->method('getResponse')->willReturn($this->createStub(HttpResponse::class));
+
+        $this->plugin(true, 'reCAPTCHA verification failed.')->afterDispatch($subject, $this->createStub(Redirect::class));
+
+        self::assertSame(
+            ['coupon_attempt' => 'H20', 'coupon_error' => 'reCAPTCHA verification failed.'],
+            $this->fragmentData['hyperion.cart.coupon']
+        );
     }
 }

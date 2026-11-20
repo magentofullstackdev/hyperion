@@ -19,7 +19,9 @@
                 <item name="hyperion_checkout_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\ConfigProvider</item>
                 <item name="hyperion_checkout_paypal_express_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\PaypalExpressConfigProvider</item>
                 <item name="hyperion_checkout_name_fields_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\NameFieldsConfigProvider</item>
+                <item name="hyperion_checkout_captcha_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\CaptchaConfigProvider</item>
                 <item name="hyperion_checkout_guest_quote_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\GuestQuoteConfigProvider</item>
+                <item name="hyperion_checkout_initial_state_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\InitialStateConfigProvider</item>
             </argument>
         </arguments>
     </type>
@@ -33,5 +35,46 @@
                 </item>
             </argument>
         </arguments>
+    </type>
+    <!-- Cart summary rows: one renderer per total code; a total without one prints as a plain row. -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="subtotal" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Subtotal</item>
+                <item name="weee_tax" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Fpt</item>
+                <item name="discount" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Discount</item>
+                <item name="shipping" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Shipping</item>
+                <item name="tax" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Tax</item>
+                <item name="grand_total" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\GrandTotal</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- The cart shipping estimator asks the carriers: rate limited by route (HyperionCore RateLimitPlugin). -->
+    <type name="Magentofullstackdev\HyperionCore\Model\Security\RateLimiter">
+        <arguments>
+            <argument name="groups" xsi:type="array">
+                <item name="cart_estimate" xsi:type="string">hyperion/security/cart_estimate_limit</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magentofullstackdev\HyperionCore\Plugin\Framework\App\Action\RateLimitPlugin">
+        <arguments>
+            <argument name="routes" xsi:type="array">
+                <item name="hyperion_cart_estimate" xsi:type="string">cart_estimate</item>
+            </argument>
+        </arguments>
+    </type>
+    <!--
+        Braintree (optional module, targets by class name only): client tokens
+        reused within the request and, without a customer, across requests;
+        the PayPal icon measured from its view file instead of over HTTP.
+    -->
+    <type name="PayPal\Braintree\Model\Adapter\BraintreeAdapter">
+        <plugin name="hyperion_braintree_client_token_cache"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Braintree\ClientTokenCachePlugin"/>
+    </type>
+    <type name="PayPal\Braintree\Gateway\Config\PayPal\Config">
+        <plugin name="hyperion_braintree_paypal_icon"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Braintree\PayPalIconPlugin"/>
     </type>
 </config>

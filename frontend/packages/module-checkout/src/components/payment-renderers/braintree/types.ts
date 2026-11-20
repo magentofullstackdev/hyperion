@@ -179,8 +179,17 @@ export interface PayPalTokenizePayload {
     };
 }
 
+/**
+ * `loadPayPalSDK()` options: query parameters of the PayPal SDK URL, plus
+ * `dataAttributes`, which become `data-*` attributes of its script tag.
+ */
+export interface PayPalSdkOptions {
+    dataAttributes?: Readonly<Record<string, string>>;
+    [parameter: string]: string | boolean | Readonly<Record<string, string>> | undefined;
+}
+
 export interface PayPalCheckoutInstance {
-    loadPayPalSDK(options: Record<string, string | boolean>): Promise<unknown>;
+    loadPayPalSDK(options: PayPalSdkOptions): Promise<unknown>;
     createPayment(options: PayPalCreatePaymentOptions): Promise<string>;
     tokenizePayment(data: unknown): Promise<PayPalTokenizePayload>;
     teardown(): Promise<void>;
@@ -312,9 +321,15 @@ export interface GooglePayError {
     statusMessage?: string;
 }
 
+export interface PayPalClickActions {
+    resolve(): unknown;
+    reject(): unknown;
+}
+
 export interface PayPalButtonsOptions {
     fundingSource: string;
     style: { label?: string; color?: string; shape?: string };
+    onClick?: (data: unknown, actions: PayPalClickActions) => unknown;
     createOrder: () => Promise<string>;
     onApprove: (data: unknown) => Promise<void>;
     onCancel?: (data: unknown) => void;

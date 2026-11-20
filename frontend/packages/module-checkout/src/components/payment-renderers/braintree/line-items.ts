@@ -5,11 +5,19 @@
  * PayPal line items, a port of PayPal_Braintree
  * `view/frontend/web/js/helper/get-cart-line-items-helper.js`.
  *
- * Sent only when `payment.braintree_paypal.canSendLineItems` is on. Child
- * items and zero-priced items are skipped, a fractional quantity collapses
- * into one unit carrying the row amount, and discount / shipping / tax /
- * store credit / gift card / gift wrapping travel as synthetic lines. PayPal
- * accepts at most 249 lines; above that none are sent.
+ * Sent only when the PayPal method is configured to send them. Every amount
+ * is in the base currency, the one the gateway charges: unit prices come
+ * from `base_price` / `base_price_incl_tax` of the quote items, never from
+ * the display currency prices. Child items and zero-priced items are
+ * skipped, a fractional quantity collapses into one unit carrying the row
+ * amount, and discount / shipping / tax / store credit / gift card / gift
+ * wrapping travel as synthetic lines. With prices that include tax the unit
+ * prices and the shipping line carry the tax and there is no tax line.
+ *
+ * No lines are sent at all when PayPal could not use them: a quote item
+ * without its base price, more than 249 lines, or lines that do not add up
+ * to the base grand total (PayPal refuses a payment whose breakdown differs
+ * from its amount).
  *
  * The Google Pay sheet shows the same breakdown as display items
  * (`buildGooglePayDisplayItems`, port of `get-google-pay-line-items.js`):
@@ -24,36 +32,77 @@ import type { GooglePayDisplayItem, PayPalLineItem } from './types.js';
 
 const MAX_LINE_ITEMS = 249;
 const MAX_TEXT_LENGTH = 127;
+const RECONCILE_TOLERANCE_CENTS = 1;
 
 function toNumber(value: unknown): number {
     const parsed = parseFloat(String(value ?? 0));
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** A base currency amount of a quote item, null when the item does not carry it. */
+function baseAmount(value: unknown): number | null {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+interface BaseItem {
+    item: CartItem;
+    unit: number;
+    qty: number;
+}
+
+/**
+ * The priced top-level items with their base currency unit price, or null
+ * when one of them lacks it: mixing currencies would be worse than no lines.
+ */
+function baseItems(items: readonly CartItem[], priceIncludesTax: boolean): BaseItem[] | null {
+    const priced: BaseItem[] = [];
+    for (const item of items) {
+        if (item.parent_item_id !== null && item.parent_item_id !== undefined) continue;
+        const net = baseAmount(item.base_price);
+        if (net === null) return null;
+        if (net === 0) continue;
+        const unit = priceIncludesTax ? baseAmount(item.base_price_incl_tax) : net;
+        if (unit === null) return null;
+        priced.push({ item, unit, qty: toNumber(item.qty) });
+    }
+    return priced;
+}
+
 function synthetic(name: string, kind: 'debit' | 'credit', amount: number): PayPalLineItem {
     return { name, kind, quantity: '1.00', unitAmount: formatAmount(Math.abs(amount)) };
 }
 
+function sumOf(lines: readonly PayPalLineItem[]): number {
+    let cents = 0;
+    for (const line of lines) {
+        const amount = Math.round(parseFloat(line.quantity) * parseFloat(line.unitAmount) * 100);
+        cents += line.kind === 'credit' ? -amount : amount;
+    }
+    return cents;
+}
+
 export function buildPayPalLineItems(
     items: readonly CartItem[],
-    totals: Totals | null
+    totals: Totals | null,
+    priceIncludesTax = false
 ): PayPalLineItem[] {
     if (!totals) return [];
+    const priced = baseItems(items, priceIncludesTax);
+    if (priced === null) return [];
     const lines: PayPalLineItem[] = [];
 
-    for (const item of items) {
-        const price = toNumber(item.price);
-        if ((item.parent_item_id !== null && item.parent_item_id !== undefined) || price === 0) continue;
-        const qty = toNumber(item.qty);
+    for (const { item, unit, qty } of priced) {
         const fractional = !Number.isInteger(qty);
         lines.push({
             name: item.name.substring(0, MAX_TEXT_LENGTH),
             kind: 'debit',
             quantity: (fractional ? 1 : qty).toFixed(2),
-            unitAmount: (fractional ? qty * price : price).toFixed(2),
+            unitAmount: (fractional ? qty * unit : unit).toFixed(2),
             productCode: item.sku.substring(0, MAX_TEXT_LENGTH),
             description: fractional
-                ? `Item quantity is ${qty.toFixed(2)} and per unit amount is ${price.toFixed(2)}`
+                ? `Item quantity is ${qty.toFixed(2)} and per unit amount is ${unit.toFixed(2)}`
                 : '',
         });
     }
@@ -75,19 +124,21 @@ export function buildPayPalLineItems(
     }
 
     const discount = Math.abs(toNumber(totals['base_discount_amount']));
-    const shipping = toNumber(totals['base_shipping_amount']);
+    const shipping = toNumber(priceIncludesTax ? totals['base_shipping_incl_tax'] : totals['base_shipping_amount']);
     const tax = toNumber(totals['base_tax_amount']);
 
     if (discount > 0) lines.push(synthetic('Discount', 'credit', discount));
     if (shipping > 0) lines.push(synthetic('Shipping', 'debit', shipping));
-    if (tax > 0) lines.push(synthetic('Tax', 'debit', tax));
+    if (!priceIncludesTax && tax > 0) lines.push(synthetic('Tax', 'debit', tax));
     if (storeCredit > 0) lines.push(synthetic('Store Credit', 'credit', storeCredit));
     if (wrappingItems > 0) lines.push(synthetic('Gift Wrapping for Items', 'debit', wrappingItems));
     if (wrappingOrder > 0) lines.push(synthetic('Gift Wrapping for Order', 'debit', wrappingOrder));
     if (wrappingCard > 0) lines.push(synthetic('Printed Card', 'debit', wrappingCard));
     if (giftCards > 0) lines.push(synthetic('Gift Cards', 'credit', giftCards));
 
-    return lines.length > MAX_LINE_ITEMS ? [] : lines;
+    if (lines.length > MAX_LINE_ITEMS) return [];
+    const grandTotal = Math.round(toNumber(totals.base_grand_total) * 100);
+    return Math.abs(sumOf(lines) - grandTotal) <= RECONCILE_TOLERANCE_CENTS ? lines : [];
 }
 
 function displayItem(label: string, amount: number): GooglePayDisplayItem {
@@ -100,12 +151,11 @@ export function buildGooglePayDisplayItems(
     priceIncludesTax: boolean
 ): GooglePayDisplayItem[] {
     if (!totals) return [];
+    const priced = baseItems(items, priceIncludesTax);
+    if (priced === null) return [];
     const lines: GooglePayDisplayItem[] = [];
-    for (const item of items) {
-        if (item.parent_item_id !== null && item.parent_item_id !== undefined) continue;
-        const unit = toNumber(priceIncludesTax ? item.price_incl_tax : item.price) || toNumber(item.price);
-        if (unit === 0) continue;
-        lines.push(displayItem(item.name, unit * toNumber(item.qty)));
+    for (const { item, unit, qty } of priced) {
+        lines.push(displayItem(item.name, unit * qty));
     }
     const discount = Math.abs(toNumber(totals['base_discount_amount']));
     const shipping = toNumber(priceIncludesTax ? totals['base_shipping_incl_tax'] : totals['base_shipping_amount'])

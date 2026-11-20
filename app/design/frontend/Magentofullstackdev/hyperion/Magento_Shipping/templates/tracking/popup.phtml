@@ -73,18 +73,21 @@ $homeUrl = $block->getUrl('');
     </div>
 </div>
 <?php
-$script = <<<'JS'
-(function () {
-    var button = document.getElementById('hyperion-tracking-close');
-    if (!button) { return; }
-    button.addEventListener('click', function () {
-        window.close();
-        setTimeout(function () {
-            if (window.history.length > 1) { window.history.back(); }
-            else { window.location.href = button.getAttribute('data-home-url'); }
-        }, 150);
-    });
-})();
-JS;
+/* One JavaScript line per string, with no indentation and no line comment inside the quotes:
+   the HTML minifier of the template engine collapses whitespace and cuts line comments in the
+   whole file, PHP strings included. */
+$script = implode("\n", [
+    '(function () {',
+    'var button = document.getElementById(\'hyperion-tracking-close\');',
+    'if (!button) { return; }',
+    'button.addEventListener(\'click\', function () {',
+    'window.close();',
+    'setTimeout(function () {',
+    'if (window.history.length > 1) { window.history.back(); }',
+    'else { window.location.href = button.getAttribute(\'data-home-url\'); }',
+    '}, 150);',
+    '});',
+    '})();',
+]);
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

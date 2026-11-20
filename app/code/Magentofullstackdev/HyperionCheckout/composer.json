@@ -3,7 +3,7 @@
     "description": "Hyperion Checkout: Lit + Tailwind one-step checkout, cart page, and header minicart fragment endpoints. Ships the JS/CSS bundle built from the frontend/ workspace of the repository (view/frontend/web/.vite + view/frontend/web/assets/).",
     "type": "magento2-module",
     "license": "MIT",
-    "version": "0.9.0-beta.5",
+    "version": "0.9.0-beta.6",
     "homepage": "https://hyperionfront.dev",
     "authors": [
         {
@@ -26,9 +26,11 @@
         "magento/module-payment": "*",
         "magento/module-tax": "*",
         "magento/module-backend": "*",
+        "magento/module-captcha": "*",
         "magento/module-catalog": "*",
         "magento/module-catalog-inventory": "*",
         "magento/module-config": "*",
+        "magento/module-configurable-product": "*",
         "magento/module-csp": "*",
         "magento/module-customer": "*",
         "magento/module-directory": "*",
@@ -39,7 +41,9 @@
         "magento/module-paypal": "PayPal Express Checkout smart buttons, Pay Later messages and the PayPal review page",
         "magento/module-gift-message": "Gift messages in the cart and on the order pages",
         "magento/module-wishlist": "Move to Wishlist on the cart page (reached by module name only)",
-        "magento/module-weee": "Fixed product tax lines in the cart and the checkout (reached by module name only)"
+        "magento/module-weee": "Fixed product tax lines in the cart and the checkout (reached by module name only)",
+        "paypal/module-braintree": "Braintree card, PayPal and Google Pay in the checkout; client tokens are cached and the PayPal icon is read from its view file",
+        "paypal/module-braintree-core": "The Braintree gateway module the client token cache and the PayPal icon plugins attach to (reached by class name only)"
     },
     "autoload": {
         "files": [

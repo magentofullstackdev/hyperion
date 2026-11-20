@@ -118,31 +118,34 @@ $preconnectOrigins = (array) $block->getData('preconnect_origins');
          reject its promises at the first render of the new document, before any module runs, which
          shows up as a page error nobody can handle later. So: no transition out of a submitted
          form (nothing to abort), and the rejection of an aborted or skipped transition is marked
-         handled; every other rejection stays visible. Inline on purpose: it must run first. */
-$viewTransitionJs = <<<'JS'
-(function () {
-    var submitted = false;
-    addEventListener('submit', function () { submitted = true; }, true);
-    var observe = function (transition) {
-        // A navigation aborted or replaced while the transition is captured rejects these
-        // promises on the page that is going away; nobody awaits them.
-        if (!transition) { return; }
-        ['ready', 'finished', 'updateCallbackDone'].forEach(function (name) {
-            if (transition[name] && transition[name].catch) { transition[name].catch(function () {}); }
-        });
-    };
-    addEventListener('pageswap', function (event) {
-        if (submitted && event.viewTransition) { event.viewTransition.skipTransition(); }
-        observe(event.viewTransition);
-    });
-    addEventListener('pagereveal', function (event) { observe(event.viewTransition); });
-    addEventListener('unhandledrejection', function (event) {
-        var reason = event.reason;
-        var message = String(reason && reason.message !== undefined ? reason.message : reason);
-        if (/^Transition was (aborted|skipped)/.test(message)) { event.preventDefault(); }
-    });
-})();
-JS;
+         handled; every other rejection stays visible (`observe`: a navigation aborted or replaced
+         while the transition is captured rejects these promises on the page that is going away,
+         nobody awaits them). Inline on purpose: it must run first.
+         One JavaScript line per string, with no indentation and no line comment inside the
+         quotes: the HTML minifier of the template engine collapses whitespace and cuts line
+         comments in the whole file, PHP strings included, and does not protect a nowdoc. */
+$viewTransitionJs = implode("\n", [
+    '(function () {',
+    'var submitted = false;',
+    'addEventListener(\'submit\', function () { submitted = true; }, true);',
+    'var observe = function (transition) {',
+    'if (!transition) { return; }',
+    '[\'ready\', \'finished\', \'updateCallbackDone\'].forEach(function (name) {',
+    'if (transition[name] && transition[name].catch) { transition[name].catch(function () {}); }',
+    '});',
+    '};',
+    'addEventListener(\'pageswap\', function (event) {',
+    'if (submitted && event.viewTransition) { event.viewTransition.skipTransition(); }',
+    'observe(event.viewTransition);',
+    '});',
+    'addEventListener(\'pagereveal\', function (event) { observe(event.viewTransition); });',
+    'addEventListener(\'unhandledrejection\', function (event) {',
+    'var reason = event.reason;',
+    'var message = String(reason && reason.message !== undefined ? reason.message : reason);',
+    'if (/^Transition was (aborted|skipped)/.test(message)) { event.preventDefault(); }',
+    '});',
+    '})();',
+]);
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $viewTransitionJs, false) ?>
 <meta name="htmx-config" content="<?= $escaper->escapeHtmlAttr($htmxConfig->getConfigJson()) ?>">
@@ -152,17 +155,18 @@ JS;
 <link rel="stylesheet" href="<?= $escaper->escapeUrl($cssUrl) ?>" media="print" data-hyperion-theme-css>
 <?php endforeach; ?>
 <?php
-$applyThemeCssJs = <<<'JS'
-(function () {
-    var links = document.querySelectorAll('link[data-hyperion-theme-css][media="print"]');
-    for (var i = 0; i < links.length; i++) {
-        (function (link) {
-            var apply = function () { link.media = 'all'; };
-            if (link.sheet) { apply(); } else { link.addEventListener('load', apply, { once: true }); }
-        })(links[i]);
-    }
-})();
-JS;
+/* Same string form as the view transition script above. */
+$applyThemeCssJs = implode("\n", [
+    '(function () {',
+    'var links = document.querySelectorAll(\'link[data-hyperion-theme-css][media="print"]\');',
+    'for (var i = 0; i < links.length; i++) {',
+    '(function (link) {',
+    'var apply = function () { link.media = \'all\'; };',
+    'if (link.sheet) { apply(); } else { link.addEventListener(\'load\', apply, { once: true }); }',
+    '})(links[i]);',
+    '}',
+    '})();',
+]);
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $applyThemeCssJs, false) ?>
 <noscript>

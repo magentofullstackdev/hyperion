@@ -6,10 +6,12 @@
 <!--
     `hyperion_checkout/general/enabled`: renders the Lit checkout on /checkout
     when 1; the stock Knockout checkout does not run on the Hyperion theme.
-    Magentofullstackdev\HyperionCheckout\Model\Plugin\Layout\CheckoutHandlePlugin
-    strips the `hyperion_checkout_index` handle while the flag is 0, so the
-    stock Magento_Checkout layout wins without a code change. Default 0 so an
-    install opts in:
+    Magentofullstackdev\HyperionCheckout\Controller\Index\Index extends core's
+    checkout controller, and the observer
+    Magentofullstackdev\HyperionCheckout\Observer\AddCheckoutHandle adds the
+    `hyperion_checkout_index` layout handle to that page before its layout
+    loads, only while the flag is 1; with 0 the answer is core's page and
+    layout, without a code change. Default 0 so an install opts in:
         bin/magento config:set hyperion_checkout/general/enabled 1
         bin/magento cache:flush
 -->
@@ -19,7 +21,29 @@
         <hyperion_checkout>
             <general>
                 <enabled>0</enabled>
+                <persist_drafts>1</persist_drafts>
             </general>
+            <shipping>
+                <rate_fields>country_id,region,postcode</rate_fields>
+                <preselect>cheapest</preselect>
+            </shipping>
         </hyperion_checkout>
+        <!-- Requests per 10 seconds and client for the cart shipping estimator (0 = no limit). -->
+        <hyperion>
+            <security>
+                <cart_estimate_limit>10</cart_estimate_limit>
+            </security>
+        </hyperion>
+        <!--
+            Cart, mini-cart and checkout lines of a configurable product show
+            the thumbnail of the chosen variant (core default: the parent's).
+            Stores > Configuration > Sales > Checkout > Shopping Cart >
+            Configurable Product Image changes it.
+        -->
+        <checkout>
+            <cart>
+                <configurable_product_image>itself</configurable_product_image>
+            </cart>
+        </checkout>
     </default>
 </config>

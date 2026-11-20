@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The page a payment gateway sends the shopper to when the order failed.
+    The theme template carries the heading, so core's title block goes (one
+    h1 on the page).
+
+    The block prints the order number and the gateway's message from the
+    checkout session, so the page must not reach the full page cache: an
+    empty cacheable="false" child keeps it private (core's block is declared
+    cacheable, and a cacheable page is rendered with the session emptied).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" layout="1column"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <title>Your order could not be completed</title>
+    </head>
+    <body>
+        <referenceBlock name="page.main.title" remove="true"/>
+        <referenceBlock name="checkout.failure">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.checkout.failure.private"
+                   cacheable="false"/>
+        </referenceBlock>
+    </body>
+</page>

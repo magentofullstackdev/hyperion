@@ -9,6 +9,8 @@ import {
     resolveCatalogLocale,
     setActiveCatalogForTests,
     getActiveLocale,
+    getIntlLocale,
+    tn,
 } from '../i18n.js';
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
 import itIT from '../../i18n/it_IT.json' with { type: 'json' };
@@ -48,6 +50,47 @@ describe('i18n', () => {
     it('reports the active locale', () => {
         setActiveCatalogForTests({}, 'it_IT');
         expect(getActiveLocale()).toBe('it_IT');
+    });
+
+    describe('counted phrases', () => {
+        const THINGS = 'Hyperion_Checkout::things';
+
+        it('selects the singular and the plural form of English', () => {
+            setActiveCatalogForTests({ [`${THINGS}_one`]: '{count} thing', [`${THINGS}_other`]: '{count} things' }, 'en_US');
+            expect(tn(THINGS, 1)).toBe('1 thing');
+            expect(tn(THINGS, 0)).toBe('0 things');
+            expect(tn(THINGS, 3)).toBe('3 things');
+        });
+
+        it('uses a form of a locale with more plural categories when the catalog has it', () => {
+            setActiveCatalogForTests({
+                [`${THINGS}_one`]: '{count} rzecz',
+                [`${THINGS}_few`]: '{count} rzeczy',
+                [`${THINGS}_other`]: '{count} rzeczy (inne)',
+            }, 'pl_PL');
+            expect(tn(THINGS, 1)).toBe('1 rzecz');
+            expect(tn(THINGS, 3)).toBe('3 rzeczy');
+            // "many" in Polish: the catalog has no such form.
+            expect(tn(THINGS, 5)).toBe('5 rzeczy (inne)');
+        });
+
+        it('falls back to the other form without a warning when a category has no text', () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            setActiveCatalogForTests({ [`${THINGS}_other`]: '{count} of {what}' }, 'en_US');
+            expect(tn(THINGS, 1, { what: 'them' })).toBe('1 of them');
+            expect(warn).not.toHaveBeenCalled();
+        });
+
+        it('takes a translated form from the runtime dictionary by its English source', () => {
+            setActiveCatalogForTests({}, 'it_IT', { [enUS['Hyperion_Checkout::summary_items_one']]: 'Riepilogo, {count} articolo' });
+            expect(tn('Hyperion_Checkout::summary_items', 1)).toBe('Riepilogo, 1 articolo');
+            expect(tn('Hyperion_Checkout::summary_items', 4)).toBe('Order summary, 4 items');
+        });
+
+        it('gives the Intl formatters the locale as a BCP 47 tag', () => {
+            setActiveCatalogForTests({}, 'it_IT');
+            expect(getIntlLocale()).toBe('it-IT');
+        });
     });
 
     describe('runtime translations from Magento', () => {
@@ -132,7 +175,7 @@ describe('i18n', () => {
             expect(resolveLocale({})).toBe('en_US');
         });
 
-        it('normalises BCP 47 and lower case region codes', () => {
+        it('normalizes BCP 47 and lower case region codes', () => {
             expect(resolveLocale({ locale: 'it-IT' })).toBe('it_IT');
             expect(resolveLocale({ locale: 'de_de' })).toBe('de_DE');
         });

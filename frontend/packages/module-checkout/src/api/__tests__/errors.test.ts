@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     interpolateMessage,
     MagentoApiError,
     NetworkError,
+    NON_JSON_BODY,
     normalizeMagentoError,
     RequestTimeoutError,
 } from '../errors.js';
@@ -24,9 +25,9 @@ describe('normalizeMagentoError', () => {
         expect(normalizeMagentoError(502, {}).message)
             .toBe('The store is temporarily unavailable. Please try again in a moment.');
         expect(normalizeMagentoError(429, undefined).message)
-            .toBe('Too many requests. Please wait a moment and try again.');
+            .toBe('Too many requests. Please wait a moment.');
         expect(normalizeMagentoError(403, undefined).message)
-            .toBe('Your request was blocked. Please reload the page and try again.');
+            .toBe('Your request was blocked. Reload the page or contact us.');
         expect(normalizeMagentoError(400, { message: '' }).message)
             .toBe('Something went wrong. Please try again.');
         expect(normalizeMagentoError(404, null).message)
@@ -44,6 +45,41 @@ describe('normalizeMagentoError', () => {
         const e = new RequestTimeoutError();
         expect(e).toBeInstanceOf(NetworkError);
         expect(e.name).toBe('RequestTimeoutError');
+    });
+
+    it('a transport failure is offline when the browser says so at that moment, a timeout always a timeout', () => {
+        expect(new NetworkError(new TypeError('Failed to fetch')).kind).toBe('network');
+        const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        const offline = new NetworkError(new TypeError('Failed to fetch'));
+        expect(new RequestTimeoutError().kind).toBe('timeout');
+        onLine.mockRestore();
+        expect(offline.kind).toBe('offline');
+    });
+
+    it('keeps the raw phrase next to the rendered message', () => {
+        const e = normalizeMagentoError(400, {
+            message: 'Carrier with such method not found: %1, %2',
+            parameters: ['flatrate', 'express'],
+        });
+        expect(e.message).toBe('Carrier with such method not found: flatrate, express');
+        expect(e.rawMessage).toBe('Carrier with such method not found: %1, %2');
+        expect(e.nonJsonBody).toBe(false);
+        expect(e.retryAfterMs).toBeUndefined();
+    });
+
+    it('marks a body that was not JSON and carries the Retry-After wait', () => {
+        const page = normalizeMagentoError(503, NON_JSON_BODY, 30000);
+        expect(page.nonJsonBody).toBe(true);
+        expect(page.rawMessage).toBe('');
+        expect(page.retryAfterMs).toBe(30000);
+        expect(normalizeMagentoError(503, undefined).nonJsonBody).toBe(false);
+        expect(normalizeMagentoError(429, { message: 'Slow down' }, 2000).retryAfterMs).toBe(2000);
+    });
+
+    it('an error built by hand reports its message as the raw phrase', () => {
+        const e = new MagentoApiError(400, '400', 'Incorrect CAPTCHA');
+        expect(e.rawMessage).toBe('Incorrect CAPTCHA');
+        expect(e.kind).toBeUndefined();
     });
 
     it('preserves Magento message string', () => {

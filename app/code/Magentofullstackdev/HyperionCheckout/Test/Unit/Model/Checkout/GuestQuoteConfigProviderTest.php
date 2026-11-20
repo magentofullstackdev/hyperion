@@ -10,6 +10,7 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use Magentofullstackdev\HyperionCheckout\Model\Checkout\GuestQuoteConfigProvider;
+use Magentofullstackdev\HyperionCheckout\Model\Checkout\QuoteAddressExporter;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -53,12 +54,20 @@ class GuestQuoteConfigProviderTest extends TestCase
         return $address;
     }
 
-    private function quote(?Address $shipping, ?Address $billing, bool $virtual = false, ?string $email = null): Quote
-    {
+    private function quote(
+        ?Address $shipping,
+        ?Address $billing,
+        bool $virtual = false,
+        ?string $email = null,
+        ?int $customerId = null
+    ): Quote {
         $quote = $this->createStub(Quote::class);
         $quote->method('getId')->willReturn(144);
         $quote->method('getIsVirtual')->willReturn($virtual);
-        $quote->method('getData')->willReturnMap([['customer_email', null, $email]]);
+        $quote->method('getData')->willReturnMap([
+            ['customer_email', null, $email],
+            ['customer_id', null, $customerId],
+        ]);
         $quote->method('getShippingAddress')->willReturn($shipping ?? $this->address([]));
         $quote->method('getBillingAddress')->willReturn($billing ?? $this->address([]));
         return $quote;
@@ -70,13 +79,31 @@ class GuestQuoteConfigProviderTest extends TestCase
         $checkoutSession->method('getQuote')->willReturn($quote);
         $customerSession = $this->createStub(CustomerSession::class);
         $customerSession->method('isLoggedIn')->willReturn($loggedIn);
-        return new GuestQuoteConfigProvider($checkoutSession, $customerSession, $this->createStub(LoggerInterface::class));
+        return new GuestQuoteConfigProvider(
+            $checkoutSession,
+            $customerSession,
+            $this->createStub(LoggerInterface::class),
+            new QuoteAddressExporter()
+        );
     }
 
     public function testEmitsNullForALoggedInCustomer(): void
     {
         $config = $this->provider($this->quote($this->address(self::SHIPPING), null), true)->getConfig();
         self::assertNull($config['hyperion']['guestQuote']);
+    }
+
+    public function testEmitsNullForAQuoteOfACustomerWhoIsNotLoggedIn(): void
+    {
+        $quote = $this->quote(
+            $this->address(self::SHIPPING),
+            $this->address(self::SHIPPING),
+            false,
+            'customer@example.com',
+            7
+        );
+
+        self::assertNull($this->provider($quote)->getConfig()['hyperion']['guestQuote']);
     }
 
     public function testAGuestQuoteWithoutAnAddressIsEmpty(): void

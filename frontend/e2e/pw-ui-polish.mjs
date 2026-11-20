@@ -10,7 +10,9 @@
 // categories; request synchronization: a double click on Add to Cart adds
 // one unit (product page and tile), the button shows its busy text without
 // changing size and keeps the focus, and rapid taps on the mini-cart stepper
-// end at the right quantity with one or two requests.
+// end at the right quantity with one or two requests; the cart page on a
+// phone: the sticky bar with the order total and the checkout link (its
+// footprint, its place in the flow, the state it shares with the summary card).
 // node e2e/pw-ui-polish.mjs <baseUrl>   (URL only, nothing is changed on the store)
 import { createRequire } from 'node:module';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
@@ -228,6 +230,115 @@ try {
         check('mini-cart stepper: the row total is the one of seven units', startLine.amount > 0 && endLine.amount * 2 === startLine.amount * 7, JSON.stringify({ atTwo: startLine.amount, atSeven: endLine.amount }));
         check('mini-cart stepper: the five taps cost one or two update requests', updates >= 1 && updates <= 2, `${updates} requests`);
         await stepCtx.close();
+    }
+
+    // ---- cart page on a phone: the sticky checkout bar
+    {
+        // Mobile emulation gives the layout the whole width (overlay scrollbars), like a real phone.
+        const phoneCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+        const phone = await phoneCtx.newPage();
+        phone.on('pageerror', (e) => problems.push(`pageerror ${phone.url().replace(base, '')}: ${e.message.slice(0, 120)}`));
+        phone.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`); });
+        // Three lines: on a phone the summary card then starts below the first screen.
+        for (const productPath of ['/joust-duffle-bag.html', '/fusion-backpack.html', '/affirm-water-bottle.html']) {
+            await phone.goto(base + u(productPath), { waitUntil: 'networkidle' });
+            await phone.click('#product_addtocart_form button[type="submit"]');
+            await phone.waitForFunction(() => { const n = document.querySelector('#hyperion-notification'); return n && !n.hidden && n.innerText.trim().length > 0; }, null, { timeout: 25000 }).catch(() => {});
+        }
+        await phone.goto(base + '/checkout/cart/', { waitUntil: 'networkidle' });
+        const barFacts = () => phone.evaluate(() => {
+            const bar = document.querySelector('[data-hyperion-checkout-bar]');
+            const card = document.querySelector('[data-hyperion-cart-totals]');
+            const rect = bar?.getBoundingClientRect();
+            const cardRect = card?.getBoundingClientRect();
+            const state = (a) => (a ? { href: a.getAttribute('href') ?? '', disabled: a.getAttribute('aria-disabled') ?? '', describedBy: a.getAttribute('aria-describedby') ?? '', text: a.textContent.replace(/\s+/g, ' ').trim() } : null);
+            const barLink = bar?.querySelector('[data-hyperion-checkout-bar-link]');
+            const cardLink = card?.querySelector('[data-hyperion-checkout-link]');
+            const linkRect = barLink?.getBoundingClientRect();
+            const cardLinkRect = cardLink?.getBoundingClientRect();
+            const text = (el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+            const root = document.documentElement;
+            return {
+                bars: document.querySelectorAll('[data-hyperion-checkout-bar]').length,
+                position: bar ? getComputedStyle(bar).position : '',
+                display: bar ? getComputedStyle(bar).display : '',
+                rect: rect ? { top: Math.round(rect.top), bottom: Math.round(rect.bottom), left: Math.round(rect.left), width: Math.round(rect.width), height: Math.round(rect.height) } : null,
+                screen: { width: Math.round(root.getBoundingClientRect().width), height: window.innerHeight },
+                total: text(bar?.querySelector('[data-hyperion-checkout-bar-total]')),
+                cardTotal: text(card?.querySelector('[data-total="grand_total"] dd')),
+                barLink: state(barLink),
+                cardLink: state(cardLink),
+                linkOnScreen: !!linkRect && linkRect.width > 0 && linkRect.top >= 0 && linkRect.bottom <= window.innerHeight && linkRect.left >= 0 && linkRect.right <= root.getBoundingClientRect().width + 0.5,
+                linkHeight: Math.round(linkRect?.height ?? 0),
+                card: cardRect ? { top: Math.round(cardRect.top), bottom: Math.round(cardRect.bottom) } : null,
+                cardLinkBottom: Math.round(cardLinkRect?.bottom ?? 0),
+                siblings: !!bar && !!card && bar.parentElement === card.parentElement && bar.previousElementSibling === card,
+                sideways: root.scrollWidth > Math.ceil(root.getBoundingClientRect().width),
+            };
+        });
+        const atLoad = await barFacts();
+        check(
+            'cart on a phone: one checkout bar sticks to the bottom of the first screen while the summary card is further down',
+            atLoad.bars === 1 && atLoad.position === 'sticky' && atLoad.display !== 'none' && !!atLoad.rect && Math.abs(atLoad.rect.bottom - atLoad.screen.height) <= 1
+                && atLoad.rect.height >= 56 && atLoad.rect.height <= 96 && !!atLoad.card && atLoad.cardLinkBottom > atLoad.screen.height && !atLoad.sideways,
+            JSON.stringify({ rect: atLoad.rect, screen: atLoad.screen, card: atLoad.card, position: atLoad.position, sideways: atLoad.sideways })
+        );
+        check(
+            'cart on a phone: the bar spans the page from edge to edge',
+            !!atLoad.rect && atLoad.rect.left === 0 && Math.abs(atLoad.rect.width - atLoad.screen.width) <= 1,
+            JSON.stringify({ left: atLoad.rect?.left, width: atLoad.rect?.width, page: atLoad.screen.width })
+        );
+        check(
+            'cart on a phone: the bar shows the order total of the summary card and a checkout link of at least 44 px, fully on screen',
+            atLoad.total !== '' && atLoad.total === atLoad.cardTotal && !!atLoad.barLink && atLoad.barLink.text !== '' && atLoad.barLink.text === atLoad.cardLink?.text && atLoad.linkOnScreen && atLoad.linkHeight >= 44,
+            JSON.stringify({ total: atLoad.total, cardTotal: atLoad.cardTotal, link: atLoad.barLink, linkHeight: atLoad.linkHeight, onScreen: atLoad.linkOnScreen })
+        );
+        check(
+            'cart on a phone: the bar link is in the state of the summary card link (target, disabled state, description)',
+            !!atLoad.barLink && !!atLoad.cardLink && atLoad.barLink.href === atLoad.cardLink.href && atLoad.barLink.disabled === atLoad.cardLink.disabled && atLoad.barLink.describedBy === atLoad.cardLink.describedBy
+                && (atLoad.barLink.href !== '' || atLoad.barLink.disabled === 'true'),
+            JSON.stringify({ bar: atLoad.barLink, card: atLoad.cardLink })
+        );
+        // The end of the cart: the bar leaves the bottom of the screen and rests in its own place, after the card.
+        // Two positions: the cart ending low on the screen, then higher (the card would leave under the header).
+        const scrollCartEndTo = async (y) => {
+            await phone.evaluate((target) => {
+                const cart = document.querySelector('[data-hyperion-checkout-bar]').parentElement;
+                window.scrollBy(0, cart.getBoundingClientRect().bottom - target);
+            }, y);
+            await phone.waitForTimeout(400);
+            return barFacts();
+        };
+        const resting = await scrollCartEndTo(744);
+        check(
+            'cart on a phone: the bar is in the flow, the element right after the summary card, and rests under it at the end of the cart',
+            resting.siblings && !!resting.rect && !!resting.card && resting.rect.bottom < resting.screen.height - 50 && resting.rect.top >= resting.card.bottom,
+            JSON.stringify({ siblings: resting.siblings, bar: resting.rect, card: resting.card })
+        );
+        const higher = await scrollCartEndTo(500);
+        check(
+            'cart on a phone: the bar covers no part of the summary card while the end of the cart scrolls up the screen',
+            !!higher.rect && !!higher.card && higher.card.bottom > 0 && higher.rect.top >= higher.card.bottom,
+            JSON.stringify({ bar: higher.rect, card: higher.card, cardLinkBottom: higher.cardLinkBottom })
+        );
+        // A quantity change swaps the card and the bar together.
+        await phone.evaluate(() => window.scrollTo(0, 0));
+        await Promise.all([
+            phone.waitForResponse((r) => r.url().includes('/checkout/cart/updatePost'), { timeout: 30000 }),
+            phone.locator('[data-hyperion-cart-item] [data-hyperion-qty-step="1"]').first().click(),
+        ]);
+        await phone.waitForTimeout(1200);
+        const afterChange = await barFacts();
+        check(
+            'cart on a phone: after a quantity change there is still one bar and it shows the new order total',
+            afterChange.bars === 1 && afterChange.total !== '' && afterChange.total === afterChange.cardTotal && afterChange.total !== atLoad.total && !!afterChange.rect && Math.abs(afterChange.rect.bottom - afterChange.screen.height) <= 1,
+            JSON.stringify({ bars: afterChange.bars, before: atLoad.total, after: afterChange.total, cardTotal: afterChange.cardTotal })
+        );
+        await phone.setViewportSize({ width: 1366, height: 800 });
+        await phone.waitForTimeout(200);
+        const wide = await barFacts();
+        check('cart on a wide screen: the bar is not displayed, the summary card carries the link', wide.display === 'none' && !!wide.cardLink?.href, JSON.stringify({ display: wide.display, card: wide.cardLink }));
+        await phoneCtx.close();
     }
 
     // ---- category landings

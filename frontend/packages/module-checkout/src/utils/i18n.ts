@@ -25,6 +25,10 @@
  *   - Missing key: `console.warn` in dev, render the key itself in
  *     production. NEVER render an empty string.
  *   - `{placeholder}` interpolation (no positional `%1`/`%s`).
+ *   - Counted phrases go through `tn(key, count)`: the plural category of
+ *     the active locale (`Intl.PluralRules`) selects `<key>_<category>`
+ *     (`_one`, `_few`, `_many`, ...) and `<key>_other` is the form every
+ *     locale must have.
  */
 import enUS from '../i18n/en_US.json' with { type: 'json' };
 
@@ -128,6 +132,42 @@ export function t(
         const v = params[name];
         return v === undefined ? match : String(v);
     });
+}
+
+/**
+ * A phrase that depends on a number: `<key>_<category>` for the plural
+ * category of `count` in the active locale, `<key>_other` when the catalog
+ * has no text for that category. `{count}` is available to the text next to
+ * `params`.
+ */
+export function tn(
+    key: string,
+    count: number,
+    params?: Readonly<Record<string, string | number>>
+): string {
+    const values = { count, ...params };
+    const category = pluralCategory(count);
+    if (category !== 'other' && hasTranslation(`${key}_${category}`)) {
+        return t(`${key}_${category}`, values);
+    }
+    return t(`${key}_other`, values);
+}
+
+/** The active locale as a BCP 47 tag (`it_IT` -> `it-IT`), for the `Intl` formatters. */
+export function getIntlLocale(): string {
+    return activeLocale.replace('_', '-');
+}
+
+function pluralCategory(count: number): string {
+    try {
+        return new Intl.PluralRules(getIntlLocale()).select(count);
+    } catch {
+        return count === 1 ? 'one' : 'other';
+    }
+}
+
+function hasTranslation(key: string): boolean {
+    return runtimeLookup(key) !== undefined || activeCatalog[key] !== undefined || fallbackCatalog[key] !== undefined;
 }
 
 /**

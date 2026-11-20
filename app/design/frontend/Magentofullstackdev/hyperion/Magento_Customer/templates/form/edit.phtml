@@ -184,33 +184,34 @@ $required = '<span class="text-error" aria-hidden="true">*</span>';
     </form>
 </article>
 <?php
-$script = <<<'JS'
-(function () {
-    var form = document.querySelector('[data-hyperion-account-edit]');
-    if (!form) { return; }
-    var toggles = form.querySelectorAll('[data-hyperion-toggle]');
-
-    function sync() {
-        var active = [];
-        toggles.forEach(function (toggle) {
-            if (toggle.checked) { active.push(toggle.getAttribute('data-hyperion-toggle')); }
-        });
-        form.querySelectorAll('[data-hyperion-toggle-section]').forEach(function (section) {
-            var open = section.getAttribute('data-hyperion-toggle-section').split(' ').some(function (key) {
-                return active.indexOf(key) !== -1;
-            });
-            section.hidden = !open;
-            section.querySelectorAll('input').forEach(function (input) {
-                input.required = open;
-                if (!open && input.type !== 'email') { input.value = ''; }
-            });
-        });
-    }
-
-    toggles.forEach(function (toggle) { toggle.addEventListener('change', sync); });
-    sync();
-})();
-JS;
+/* One JavaScript line per string, with no indentation and no line comment inside the quotes:
+   the HTML minifier of the template engine collapses whitespace and cuts line comments in the
+   whole file, PHP strings included. */
+$script = implode("\n", [
+    '(function () {',
+    'var form = document.querySelector(\'[data-hyperion-account-edit]\');',
+    'if (!form) { return; }',
+    'var toggles = form.querySelectorAll(\'[data-hyperion-toggle]\');',
+    'function sync() {',
+    'var active = [];',
+    'toggles.forEach(function (toggle) {',
+    'if (toggle.checked) { active.push(toggle.getAttribute(\'data-hyperion-toggle\')); }',
+    '});',
+    'form.querySelectorAll(\'[data-hyperion-toggle-section]\').forEach(function (section) {',
+    'var open = section.getAttribute(\'data-hyperion-toggle-section\').split(\' \').some(function (key) {',
+    'return active.indexOf(key) !== -1;',
+    '});',
+    'section.hidden = !open;',
+    'section.querySelectorAll(\'input\').forEach(function (input) {',
+    'input.required = open;',
+    'if (!open && input.type !== \'email\') { input.value = \'\'; }',
+    '});',
+    '});',
+    '}',
+    'toggles.forEach(function (toggle) { toggle.addEventListener(\'change\', sync); });',
+    'sync();',
+    '})();',
+]);
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>
 <?= $layout->createBlock(Template::class)

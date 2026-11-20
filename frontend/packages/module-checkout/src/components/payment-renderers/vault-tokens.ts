@@ -10,7 +10,8 @@
  *   - the TOKENS of the logged-in customer sit in `checkoutConfig.payment.vault`
  *     (`Magento\Vault\Model\Ui\TokensConfigProvider`), one entry per token
  *     keyed `<vault code>_<n>`, each with `config.code`, `config.publicHash`,
- *     `config.details` and provider extras such as `config.nonceUrl`;
+ *     `config.details` and provider extras such as `config.nonceUrl` and
+ *     `config.updatePaymentUrl`;
  *   - `checkoutConfig.vault` lists every active vault method code.
  *
  * The checkout shows one selectable row per token and none for the bare
@@ -20,12 +21,15 @@
  *
  * A provider plugs in through `registerVaultAdapter()`: a label for the row
  * and, when the default "fetch a nonce from `nonceUrl`" flow is not enough,
- * its own `beforePlaceOrder` and row body.
+ * its own `beforePlaceOrder` and row body. `recaptchaAction` is handed to
+ * the payment renderer of the vault code as it is.
  */
 import { getCheckoutConfig } from '../../bootstrap-config.js';
 import { getStore } from '../../store/index.js';
+import type { RecaptchaAction } from '../../types/captcha.js';
 import type { PaymentMethodConfig } from '../../types/payment.js';
 import { t } from '../../utils/i18n.js';
+import { isRendererPending } from './lazy-renderers.js';
 import { getPaymentRenderer, registerPaymentRenderer } from './registry.js';
 
 export interface VaultToken {
@@ -35,6 +39,8 @@ export interface VaultToken {
     code: string;
     publicHash: string;
     nonceUrl: string | null;
+    /** Controller that re-verifies the stored card, when the provider names one. */
+    updatePaymentUrl: string | null;
     details: Readonly<Record<string, unknown>>;
 }
 
@@ -50,6 +56,8 @@ export interface VaultAdapter {
     renderBody?: (token: VaultToken) => unknown;
     /** Defaults to `defaultVaultBeforePlaceOrder`. */
     beforePlaceOrder?: (token: VaultToken) => Promise<Record<string, unknown>>;
+    /** Which reCAPTCHA form protects an order paid with this token; null for none. */
+    recaptchaAction?: () => RecaptchaAction | null;
 }
 
 const adapters = new Map<string, VaultAdapter>();
@@ -64,6 +72,7 @@ export function registerVaultAdapter(adapter: VaultAdapter): void {
             if (!token) throw new Error(t('Hyperion_Checkout::vault_no_token_selected'));
             return (adapter.beforePlaceOrder ?? defaultVaultBeforePlaceOrder)(token);
         },
+        ...(adapter.recaptchaAction ? { recaptchaAction: adapter.recaptchaAction } : {}),
     });
 }
 
@@ -95,6 +104,9 @@ export function getVaultTokens(code?: string): VaultToken[] {
             code: tokenCode,
             publicHash,
             nonceUrl: typeof config['nonceUrl'] === 'string' ? config['nonceUrl'] : null,
+            updatePaymentUrl: typeof config['updatePaymentUrl'] === 'string' && config['updatePaymentUrl'] !== ''
+                ? config['updatePaymentUrl']
+                : null,
             details: details && typeof details === 'object' ? details as Record<string, unknown> : {},
         });
     }
@@ -104,6 +116,16 @@ export function getVaultTokens(code?: string): VaultToken[] {
 /** Tokens the checkout can actually pay with: their provider registered an adapter. */
 export function getPayableVaultTokens(code: string): VaultToken[] {
     return adapters.has(code) ? getVaultTokens(code) : [];
+}
+
+/**
+ * Tokens that get a row: the payable ones, and the tokens of a provider
+ * whose module is still on its way. Those rows hold their place from the
+ * first render (titled like the method, not selectable yet), so the list
+ * does not grow at its top when the module arrives.
+ */
+function getListedVaultTokens(code: string): VaultToken[] {
+    return adapters.has(code) || isRendererPending(code) ? getVaultTokens(code) : [];
 }
 
 /**
@@ -124,7 +146,7 @@ export interface PaymentRow {
 
 /**
  * Rows of the payment step. Stored tokens come first, like the vault group
- * of the core checkout. A vault method without payable tokens (guests,
+ * of the core checkout. A vault method without tokens to list (guests,
  * customers with no stored card, providers without an adapter) and a method
  * whose renderer reports `isAvailable() === false` get no row.
  */
@@ -133,7 +155,7 @@ export function buildPaymentRows(methods: readonly PaymentMethodConfig[]): Payme
     const methodRows: PaymentRow[] = [];
     for (const method of methods) {
         if (isVaultMethod(method.code)) {
-            for (const token of getPayableVaultTokens(method.code)) tokenRows.push({ method, token });
+            for (const token of getListedVaultTokens(method.code)) tokenRows.push({ method, token });
             continue;
         }
         const isAvailable = getPaymentRenderer(method.code)?.isAvailable;

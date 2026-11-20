@@ -2,11 +2,12 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <checkout-shipping> -- wraps the shipping address editor + the
+ * <checkout-shipping>: wraps the shipping address editor and the
  * method list. Hidden when `isVirtual === true`.
  *
- * When the customer is logged in and has saved addresses, renders
- * an <address-selector> instead of a bare <address-form>.
+ * A logged-in customer always gets the <address-selector> (saved address
+ * cards, or the form seeded with the account's name and flagged for the
+ * address book when there is none); a guest the bare <address-form>.
  */
 import { LitElement, html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
@@ -20,41 +21,49 @@ import { t } from '../utils/i18n.js';
 import { sanitiseHtml } from '../utils/sanitize-html.js';
 import './address-form.js';
 import './address-selector.js';
+import './section-status.js';
 import './shipping-method-list.js';
 import './ui/button.js';
 
 export class CheckoutShipping extends SignalWatcher(LitElement) {
     public override createRenderRoot(): HTMLElement { return this; }
 
+    public override connectedCallback(): void {
+        super.connectedCallback();
+        this.classList.add('hc-host');
+    }
+
     public override render(): unknown {
         const store = getStore();
         if (store.isVirtual.get()) return null;
         const addr = store.shippingAddress.get();
-        const savedAddresses = store.savedAddresses.get();
-        const hasSaved = store.customer.get() !== null && savedAddresses.length > 0;
+        const isCustomer = store.customer.get() !== null;
         return html`
-            <section class="space-y-4">
-                <h3 class="text-base font-semibold text-brand">
+            <div>
+                <h3 class="mb-4 text-base font-semibold text-brand">
                     ${t('Hyperion_Checkout::shipping_address_heading')}
                 </h3>
-                ${hasSaved
+                ${isCustomer
                     ? html`<address-selector mode="shipping"
                                               @saved-address-select=${this._onSavedPick}
                                               @address-change=${this._onAddressChange}
+                                              @focusout=${this._onFormFocusOut}
                             ></address-selector>`
                     : html`<address-form
                                 mode="shipping"
                                 .value=${addr}
                                 @address-change=${this._onAddressChange}
+                                @focusout=${this._onFormFocusOut}
                             ></address-form>`}
-                <div class="pt-2 border-t border-subtle">
+                <hc-section-status section="shipping-address"></hc-section-status>
+                <div class="mt-4 pt-2 border-t border-subtle">
                     <h3 class="text-base font-semibold text-brand mb-2">
                         ${t('Hyperion_Checkout::shipping_method_heading')}
                     </h3>
                     <shipping-method-list></shipping-method-list>
                     ${this._renderShippingPolicy()}
                 </div>
-            </section>
+            </div>
         `;
     }
 
@@ -115,10 +124,34 @@ export class CheckoutShipping extends SignalWatcher(LitElement) {
         }
     };
 
+    /**
+     * An edit of the form: the address goes into the store and the flow
+     * decides what it asks for. Rates are asked again only when a field
+     * they depend on changed (after a pause in the typing; at once for
+     * another country, which is a pick, not typing); every other edit only
+     * marks the form as ahead of the quote, saved when the form loses the
+     * focus, after a pause, or by Place Order.
+     */
     private _onAddressChange(e: CustomEvent<Address>): void {
         const store = getStore();
+        const previousCountry = store.shippingAddress.get()?.country_id ?? '';
         store.shippingAddress.set(e.detail);
-        flowActions().scheduleShippingEstimate();
+        if (previousCountry !== '' && e.detail.country_id !== previousCountry) {
+            void flowActions().estimateShippingNow();
+        } else {
+            flowActions().scheduleShippingEstimate();
+        }
+    }
+
+    /**
+     * The focus left the address form or the saved address step (not for
+     * another of its controls): save a form that is ahead of the quote now.
+     */
+    private _onFormFocusOut(e: FocusEvent): void {
+        const form = e.currentTarget as HTMLElement | null;
+        const next = e.relatedTarget;
+        if (form !== null && next instanceof Node && form.contains(next)) return;
+        flowActions().flushShippingForm();
     }
 
     private _onSavedPick(): void {

@@ -5,64 +5,61 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCheckout\Controller\Index;
 
+use Magento\Checkout\Controller\Index\Index as CoreIndex;
 use Magento\Checkout\Helper\Data as CheckoutHelper;
-use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Customer\Api\AccountManagementInterface;
+use Magento\Customer\Api\CustomerRepositoryInterface;
 use Magento\Customer\Model\Session as CustomerSession;
-use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
-use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\Controller\Result\JsonFactory;
+use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Controller\ResultInterface;
-use Magento\Framework\View\Result\Page;
+use Magento\Framework\Data\Form\FormKey\Validator as FormKeyValidator;
+use Magento\Framework\Registry;
+use Magento\Framework\Translate\InlineInterface;
+use Magento\Framework\View\LayoutFactory;
+use Magento\Framework\View\Result\LayoutFactory as ResultLayoutFactory;
 use Magento\Framework\View\Result\PageFactory;
+use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
+use Magentofullstackdev\HyperionCheckout\Model\Cart\CheckoutBlocker;
 
 /**
- * Entry-point controller for the Lit one-step checkout.
+ * Entry point of the checkout page: core's controller, plus the Lit checkout.
  *
- * Registered `before="Magento_Checkout"` in etc/frontend/routes.xml so
- * this resolves for /checkout/index/index ahead of stock Magento.
- * Action name stays `checkout_index_index` -- the shared layout handle
- * lets the Hyperion layout override cohabit cleanly with any third-
- * party module that also contributes to this handle.
+ * Registered `before="Magento_Checkout"` in etc/frontend/routes.xml, so
+ * /checkout/index/index resolves here; the action name stays
+ * `checkout_index_index`. The class extends core's controller and lets it
+ * run: its guards (one-page checkout enabled, a quote with items, without
+ * errors and above the minimum order amount), its checkout initialization,
+ * and every plugin declared on `Magento\Checkout\Controller\Index\Index`
+ * (plugins of a class apply to its subclasses).
  *
- * Feature-flag rollback (Q3): the admin config
- * `hyperion_checkout/general/enabled` gates whether the Hyperion-specific
- * layout handle is added. When disabled, only stock Magento_Checkout's
- * layout runs and the page renders the Knockout checkout -- zero code
- * change, cache flush only.
+ * What this class adds:
  *
- * Empty-cart guard: `Magento\Checkout\Model\DefaultConfigProvider`
- * reads the current quote eagerly. When the quote session has no cart
- * at all (fresh session, expired cart), its `getConfig()` throws
- * `NoSuchEntityException`. The `Magentofullstackdev\Core` observer
- * `CheckoutEmptyCartRedirect` sets a Location header at predispatch
- * but does not stop dispatch, so the controller continues to render
- * and trips the exception. The stock Magento controller fronts the
- * same observer with its own redirect-early check; we mirror that
- * pattern here. When the quote has no items we return a ResultRedirect
- * to `/checkout/cart` and never touch the composite config provider.
- *
- * Why `extends Action`: `CheckoutEmptyCartRedirect` calls
- * `$controllerAction->getResponse()` -- a method present only on the
- * legacy `Action` base class. Stock Magento pairs `extends Action` +
- * `implements HttpGetActionInterface` for the same compatibility
- * reason; we do the same.
- *
- * Core guards: this controller replaces `Magento\Checkout\Controller\Index\Index`,
- * so it repeats that controller's checks (one-page checkout enabled, quote
- * without errors and above the minimum amount, guest checkout allowed for
- * this quote). A guest who may not check out (store setting, or a cart with
- * downloadable products) is sent to the login page and comes back here; the
- * notice names the downloadable products when they are the reason, since the
- * store setting alone allows guests.
+ * - When `hyperion_checkout/general/enabled` is on for the store view, the
+ *   `hyperion_checkout_index` layout handle replaces the Knockout checkout
+ *   with the Lit one. The handle is added by
+ *   `Magentofullstackdev\HyperionCheckout\Observer\AddCheckoutHandle` right
+ *   before the layout loads, not here: core's action reads the page title,
+ *   which builds the layout before the page is returned. With the flag off
+ *   the result is core's page, untouched.
+ * - A guest who may not check out (store setting, or a cart with
+ *   downloadable products) is sent to the login page and comes back here,
+ *   where core would send them to the cart with an error. The notice names
+ *   the downloadable products when they are the reason, since the store
+ *   setting alone allows guests.
+ * - When core is about to send the shopper back to the cart for a quote
+ *   error or the minimum order amount, the reason is added as a notice, so
+ *   a direct visit explains itself.
  *
  * Caching: the `hyperion.checkout` block in `hyperion_checkout_index.xml`
- * carries `cacheable="false"`, so Varnish / built-in FPC skip storage.
+ * carries `cacheable="false"`, as core's checkout root block does.
  */
-class Index extends Action implements HttpGetActionInterface
+class Index extends CoreIndex
 {
     public const CONFIG_ENABLED = 'hyperion_checkout/general/enabled';
     public const HYPERION_HANDLE = 'hyperion_checkout_index';
@@ -70,57 +67,124 @@ class Index extends Action implements HttpGetActionInterface
     /** Product type id of `Magento_Downloadable`, by name so the module stays optional. */
     private const TYPE_DOWNLOADABLE = 'downloadable';
 
+    /**
+     * @param Context $context
+     * @param CustomerSession $customerSession
+     * @param CustomerRepositoryInterface $customerRepository
+     * @param AccountManagementInterface $accountManagement
+     * @param Registry $coreRegistry
+     * @param InlineInterface $translateInline
+     * @param FormKeyValidator $formKeyValidator
+     * @param ScopeConfigInterface $scopeConfig
+     * @param LayoutFactory $layoutFactory
+     * @param CartRepositoryInterface $quoteRepository
+     * @param PageFactory $resultPageFactory
+     * @param ResultLayoutFactory $resultLayoutFactory
+     * @param RawFactory $resultRawFactory
+     * @param JsonFactory $resultJsonFactory
+     * @param CheckoutHelper $checkoutHelper
+     * @param CheckoutBlocker $checkoutBlocker
+     * @SuppressWarnings(PHPMD.ExcessiveParameterList)
+     */
     public function __construct(
         Context $context,
-        private readonly PageFactory $pageFactory,
-        private readonly ScopeConfigInterface $scopeConfig,
-        private readonly CheckoutSession $checkoutSession,
-        private readonly CustomerSession $customerSession,
-        private readonly CheckoutHelper $checkoutHelper
+        CustomerSession $customerSession,
+        CustomerRepositoryInterface $customerRepository,
+        AccountManagementInterface $accountManagement,
+        Registry $coreRegistry,
+        InlineInterface $translateInline,
+        FormKeyValidator $formKeyValidator,
+        ScopeConfigInterface $scopeConfig,
+        LayoutFactory $layoutFactory,
+        CartRepositoryInterface $quoteRepository,
+        PageFactory $resultPageFactory,
+        ResultLayoutFactory $resultLayoutFactory,
+        RawFactory $resultRawFactory,
+        JsonFactory $resultJsonFactory,
+        private readonly CheckoutHelper $checkoutHelper,
+        private readonly CheckoutBlocker $checkoutBlocker
     ) {
-        parent::__construct($context);
+        parent::__construct(
+            $context,
+            $customerSession,
+            $customerRepository,
+            $accountManagement,
+            $coreRegistry,
+            $translateInline,
+            $formKeyValidator,
+            $scopeConfig,
+            $layoutFactory,
+            $quoteRepository,
+            $resultPageFactory,
+            $resultLayoutFactory,
+            $resultRawFactory,
+            $resultJsonFactory
+        );
     }
 
+    /**
+     * Checkout page.
+     *
+     * @return ResultInterface
+     */
     public function execute(): ResultInterface
     {
-        /** @var Redirect $redirect */
-        $redirect = $this->resultRedirectFactory->create();
+        $loginRedirect = $this->explainRefusal();
+        if ($loginRedirect !== null) {
+            return $loginRedirect;
+        }
 
+        return parent::execute();
+    }
+
+    /**
+     * What core's guards leave unexplained, checked in core's order so that
+     * its own answers (checkout turned off, empty cart) stay the first ones.
+     * A quote core will bounce to the cart gets its reason as a notice and
+     * null is returned, core then redirects. A guest who may not check out
+     * gets the login redirect returned.
+     *
+     * @return Redirect|null the login redirect, null when core's controller should answer
+     */
+    private function explainRefusal(): ?Redirect
+    {
         if (!$this->checkoutHelper->canOnepageCheckout()) {
-            $this->messageManager->addErrorMessage((string) __('One-page checkout is turned off.'));
-            return $redirect->setPath('checkout/cart');
+            return null;
+        }
+        $quote = $this->getOnepage()->getQuote();
+        if (!$quote->hasItems()) {
+            return null;
         }
 
-        $quote = $this->checkoutSession->getQuote();
-        if (!$quote->hasItems() || $quote->getData('has_error') || !$quote->validateMinimumAmount()) {
-            return $redirect->setPath('checkout/cart');
+        $blocker = $this->checkoutBlocker->forQuote($quote);
+        if ($blocker !== null) {
+            foreach ($blocker['messages'] as $message) {
+                $this->messageManager->addNoticeMessage($message);
+            }
+            return null;
         }
 
-        if (!$this->customerSession->isLoggedIn() && !$this->checkoutHelper->isAllowedGuestCheckout($quote)) {
-            $reason = $this->isBlockedByDownloadable($quote)
-                ? __('Your cart contains downloadable products, which require a customer account.')
-                : __('Guest checkout is disabled.');
-            $this->messageManager->addNoticeMessage(
-                $reason . ' ' . __('Please sign in or create an account to continue.')
-            );
-            $this->customerSession->setBeforeAuthUrl($this->_url->getUrl('checkout', ['_secure' => true]));
-            return $redirect->setPath('customer/account/login');
+        if ($this->_customerSession->isLoggedIn() || $this->checkoutHelper->isAllowedGuestCheckout($quote)) {
+            return null;
         }
+        $reason = $this->isBlockedByDownloadable($quote)
+            ? __('Your cart contains downloadable products, which require a customer account.')
+            : __('Guest checkout is disabled.');
+        $this->messageManager->addNoticeMessage(
+            $reason . ' ' . __('Please sign in or create an account to continue.')
+        );
+        $this->_customerSession->setBeforeAuthUrl($this->_url->getUrl('checkout', ['_secure' => true]));
 
-        /** @var Page $result */
-        $result = $this->pageFactory->create();
-
-        if ($this->scopeConfig->isSetFlag(self::CONFIG_ENABLED, ScopeInterface::SCOPE_STORE)) {
-            $result->addHandle(self::HYPERION_HANDLE);
-        }
-
-        return $result;
+        return $this->resultRedirectFactory->create()->setPath('customer/account/login');
     }
 
     /**
      * True when the store allows guest checkout, so the refusal comes from the
      * downloadable items of the cart (`catalog/downloadable/disable_guest_checkout`
      * or links that are not shareable, both decided by core's observer).
+     *
+     * @param Quote $quote
+     * @return bool
      */
     private function isBlockedByDownloadable(Quote $quote): bool
     {

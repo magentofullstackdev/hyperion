@@ -1,0 +1,87 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * Quantity stepper of a cart line, shared by the cart page and the mini-cart.
+ *
+ * Block data:
+ *   `item`    one entry of `CartData::getItems()` (id, name, qty and the
+ *             quantity rules `qty_min`, `qty_max`, `qty_step`, `is_qty_decimal`);
+ *   `variant` `cart` (default) or `minicart`.
+ *
+ * The number input carries the rules of the line: `step` is the quantity
+ * increment (or `any` for a decimal quantity without increments), `min` the
+ * minimum sale quantity, `max` the maximum when there is one. The buttons
+ * move by that step and are rendered disabled at the two ends.
+ *
+ * The two variants differ in size, in the field name and in the markers
+ * their script reads. Cart page: the input is a field of the cart form
+ * (`cart[<id>][qty]`, marked `data-hyperion-qty`), the buttons are handled
+ * by lib/cart-qty.js and a change posts the form. Mini-cart: the markup
+ * lives in the drawer's shadow root, where hyperion-mini-cart.js posts the
+ * line by itself (`data-hyperion-minicart-qty*`, no hx-* attributes).
+ *
+ * The control has fixed dimensions in both variants: nothing moves when
+ * the buttons change state.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$item = (array) $block->getData('item');
+$isMinicart = $block->getData('variant') === 'minicart';
+$qty = $item['qty'] + 0;
+$atMin = $qty <= $item['qty_min'];
+$atMax = $item['qty_max'] !== null && $qty >= $item['qty_max'];
+$groupLabel = __('Quantity for %1', $item['name']);
+?>
+<div class="<?= $isMinicart
+        ? 'inline-flex items-stretch rounded border border-subtle text-sm'
+        : 'inline-flex h-11 shrink-0 items-stretch rounded-lg border border-subtle bg-surface text-sm' ?>"
+     role="group"
+     <?= $isMinicart ? '' : 'data-hyperion-qty-control' ?>
+     aria-label="<?= $escaper->escapeHtmlAttr($groupLabel) ?>">
+    <button type="button"
+            <?= $isMinicart ? 'data-hyperion-minicart-qty-step' : 'data-hyperion-qty-step' ?>="-1"
+            aria-label="<?= $escaper->escapeHtmlAttr(__('Decrease quantity')) ?>"
+            <?= $atMin ? 'disabled' : '' ?>
+            class="<?= $isMinicart
+                ? 'px-2 rounded-l text-muted hover:text-primary hover:bg-surface-raised
+                   disabled:opacity-40 disabled:hover:text-muted disabled:hover:bg-transparent
+                   focus:outline-none focus:ring-2 focus:ring-primary'
+                : 'w-11 rounded-l-lg text-lg text-muted hover:text-primary hover:bg-surface-raised
+                   disabled:opacity-40 disabled:hover:text-muted disabled:hover:bg-transparent
+                   focus:outline-none focus:ring-2 focus:ring-primary' ?>">&minus;</button>
+    <input type="number"
+           <?= $isMinicart ? 'data-hyperion-minicart-qty' : 'data-hyperion-qty' ?>
+           name="<?= $isMinicart ? 'qty' : 'cart[' . (int) $item['id'] . '][qty]' ?>"
+           value="<?= $escaper->escapeHtmlAttr((string) $qty) ?>"
+           min="<?= $escaper->escapeHtmlAttr((string) $item['qty_min']) ?>"
+           <?php if ($item['qty_max'] !== null): ?>
+               max="<?= $escaper->escapeHtmlAttr((string) $item['qty_max']) ?>"
+           <?php endif; ?>
+           step="<?= $escaper->escapeHtmlAttr((string) $item['qty_step']) ?>"
+           inputmode="<?= $item['is_qty_decimal'] ? 'decimal' : 'numeric' ?>"
+           aria-label="<?= $escaper->escapeHtmlAttr($groupLabel) ?>"
+           class="<?= $isMinicart
+               ? 'w-10 py-0.5 text-center text-secondary bg-surface border-x border-subtle
+                  [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none
+                  [&::-webkit-outer-spin-button]:appearance-none
+                  focus:outline-none focus:ring-2 focus:ring-primary'
+               : 'w-14 text-center text-secondary bg-surface border-x border-subtle
+                  [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none
+                  [&::-webkit-outer-spin-button]:appearance-none
+                  focus:outline-none focus:ring-2 focus:ring-primary' ?>">
+    <button type="button"
+            <?= $isMinicart ? 'data-hyperion-minicart-qty-step' : 'data-hyperion-qty-step' ?>="1"
+            aria-label="<?= $escaper->escapeHtmlAttr(__('Increase quantity')) ?>"
+            <?= $atMax ? 'disabled' : '' ?>
+            class="<?= $isMinicart
+                ? 'px-2 rounded-r text-muted hover:text-primary hover:bg-surface-raised
+                   disabled:opacity-40
+                   focus:outline-none focus:ring-2 focus:ring-primary'
+                : 'w-11 rounded-r-lg text-lg text-muted hover:text-primary hover:bg-surface-raised
+                   disabled:opacity-40 disabled:hover:text-muted disabled:hover:bg-transparent
+                   focus:outline-none focus:ring-2 focus:ring-primary' ?>">+</button>
+</div>

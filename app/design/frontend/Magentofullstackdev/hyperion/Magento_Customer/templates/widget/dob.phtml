@@ -44,21 +44,24 @@ $maxDate = $block->getMaxDateRange()
     <?php endif; ?>
 </div>
 <?php
-$script = <<<'JS'
-(function () {
-    if (window.hyperionDobFormat) { return; }
-    window.hyperionDobFormat = true;
-    document.addEventListener('formdata', function (event) {
-        event.target.querySelectorAll('input[type="date"][data-hyperion-dob-format]').forEach(function (input) {
-            var parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value);
-            if (!parts || !input.name || input.disabled) { return; }
-            var value = input.getAttribute('data-hyperion-dob-format').replace(/y+|M+|d+/g, function (token) {
-                return token.charAt(0) === 'y' ? parts[1] : (token.charAt(0) === 'M' ? parts[2] : parts[3]);
-            });
-            event.formData.set(input.name, value);
-        });
-    });
-})();
-JS;
+/* One JavaScript line per string, with no indentation and no line comment inside the quotes:
+   the HTML minifier of the template engine collapses whitespace and cuts line comments in the
+   whole file, PHP strings included. */
+$script = implode("\n", [
+    '(function () {',
+    'if (window.hyperionDobFormat) { return; }',
+    'window.hyperionDobFormat = true;',
+    'document.addEventListener(\'formdata\', function (event) {',
+    'event.target.querySelectorAll(\'input[type="date"][data-hyperion-dob-format]\').forEach(function (input) {',
+    'var parts = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(input.value);',
+    'if (!parts || !input.name || input.disabled) { return; }',
+    'var value = input.getAttribute(\'data-hyperion-dob-format\').replace(/y+|M+|d+/g, function (token) {',
+    'return token.charAt(0) === \'y\' ? parts[1] : (token.charAt(0) === \'M\' ? parts[2] : parts[3]);',
+    '});',
+    'event.formData.set(input.name, value);',
+    '});',
+    '});',
+    '})();',
+]);
 ?>
 <?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

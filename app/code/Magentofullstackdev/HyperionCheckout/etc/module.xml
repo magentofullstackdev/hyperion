@@ -14,8 +14,10 @@
             <module name="Magento_Payment"/>
             <module name="Magento_Tax"/>
             <module name="Magento_Backend"/>
+            <module name="Magento_Captcha"/>
             <module name="Magento_Catalog"/>
             <module name="Magento_CatalogInventory"/>
+            <module name="Magento_ConfigurableProduct"/>
             <module name="Magento_Config"/>
             <module name="Magento_Csp"/>
             <module name="Magento_Customer"/>

@@ -13,6 +13,7 @@ import { property } from 'lit/decorators.js';
 
 import type { PaymentMethodConfig } from '../types/payment.js';
 import { t } from '../utils/i18n.js';
+import { isRendererPending } from './payment-renderers/lazy-renderers.js';
 import { getPaymentRenderer, isSafeForGeneric } from './payment-renderers/registry.js';
 import { getVaultAdapter, type VaultToken } from './payment-renderers/vault-tokens.js';
 import './payment-renderers/payment-offline.js';
@@ -29,7 +30,7 @@ export class PaymentMethodRow extends LitElement {
     /**
      * The renderer element of the selected row. It is kept across re-renders:
      * gateway renderers hold live state (hosted card fields, a PayPal
-     * authorisation in progress) that a fresh element would wipe whenever the
+     * authorization in progress) that a fresh element would wipe whenever the
      * method list is refreshed.
      */
     private _body: HTMLElement | null = null;
@@ -44,10 +45,13 @@ export class PaymentMethodRow extends LitElement {
         const title = this.token
             ? getVaultAdapter(m.code)?.label(this.token) ?? m.title
             : m.title;
-        // Disabled when: not selectable via generic fallback (no renderer AND not in the safe set)
+        // Not selectable: no renderer and the generic fallback cannot handle the method.
         const disabled = !hasRenderer && !safe;
+        // A renderer on its way keeps the row at the height of a usable one:
+        // the "not supported" line is for a method that will stay disabled.
+        const unsupported = disabled && !isRendererPending(m.code);
         return html`
-            <div class="rounded-md border ${this.selected ? 'border-accent bg-accent/5' : 'border-subtle bg-surface'} ${disabled ? 'opacity-60' : ''}">
+            <div class="rounded-md border ${this.selected ? 'border-accent bg-accent/5' : 'border-subtle bg-surface'} ${unsupported ? 'opacity-60' : ''}">
                 <label for=${id}
                        class="flex items-start gap-3 p-3 cursor-pointer ${disabled ? 'cursor-not-allowed' : ''}">
                     <input
@@ -61,7 +65,7 @@ export class PaymentMethodRow extends LitElement {
                     />
                     <span class="text-sm">
                         <span class="font-medium text-brand">${title}</span>
-                        ${disabled
+                        ${unsupported
                             ? html`<span class="block text-xs text-muted" data-payment-unsupported>
                                   ${t('Hyperion_Checkout::payment_method_unsupported_hint')}
                               </span>`
@@ -82,8 +86,10 @@ export class PaymentMethodRow extends LitElement {
             </div>`;
         }
         this._body = null;
-        if (safe) {
-            // Offline method registered but no extra renderer needed -- nothing to show.
+        if (safe || isRendererPending(this.method.code)) {
+            // An offline method that needs nothing more, or a gateway whose
+            // module is on its way (a selection put back after a reload):
+            // nothing to show, and never the "not available" notice.
             return null;
         }
         return html`<div class="px-3 pb-3">

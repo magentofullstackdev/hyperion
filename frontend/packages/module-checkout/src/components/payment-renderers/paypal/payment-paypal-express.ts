@@ -8,17 +8,31 @@
  *
  * In-context (`paypal_express` with "In-Context Checkout Experience" on):
  * the PayPal smart button replaces the Place Order button
- * (`ownsPlaceOrder`). On click the checkout is validated; `createOrder`
- * saves the payment method and billing address on the quote, then asks
+ * (`ownsPlaceOrder`). The click waits until every pending edit is on the
+ * quote and the checkout is complete (the SDK holds its window on a loader
+ * while the promise of `onClick` is open); `createOrder` saves the payment
+ * method and billing address on the quote, then asks
  * `paypal/express/getTokenData` for the transaction token; `onApprove`
  * hands the approval to `paypal/express/onAuthorization` and follows its
  * `redirectUrl` (success page when the review step is skipped,
  * `paypal/express/review` otherwise).
  *
+ * The two `paypal/express/*` calls are storefront controllers, not REST
+ * writes of the checkout, so they cannot be entries of the write queue.
+ * They read or order the quote as it is, so each runs once the queue is
+ * idle, under the latch of an order (`isPlacingOrder`) and with the queue
+ * closed: no save of the checkout can start while PayPal is given the
+ * quote or the order is placed.
+ *
  * Redirect (in-context off, and always for the Payflow edition): the body
  * shows the PayPal mark and a note; Place Order saves the payment
  * information and continues on `paypal/express/start`, which sends the
  * shopper to paypal.com (`placeOrder` hook).
+ *
+ * Both flows offer the billing agreement checkbox when the server names
+ * its `additional_data` key for the method (a logged-in customer of a store
+ * that asks): the choice is kept in the payment data of the method, so it
+ * travels with the payment information saved before PayPal opens.
  *
  * The PayPal SDK is requested when this element is connected, which only
  * happens once the shopper selected the method.
@@ -27,24 +41,29 @@ import { LitElement, html, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { SignalWatcher } from '@lit-labs/signals';
 
+import { discardDrafts } from '../../../store/drafts.js';
 import { getStore } from '../../../store/index.js';
 import { flowActions } from '../../../store/flow-actions.js';
-import type { PaypalExpressConfig } from '../../../types/config.js';
+import { failureMessage } from '../../../store/section-status.js';
+import { getCheckoutConfig } from '../../../bootstrap-config.js';
 import { t } from '../../../utils/i18n.js';
 import { navigateTo } from '../../../utils/navigate.js';
-import { resolveSameOriginUrl } from '../../../utils/safe-redirect.js';
-import { getCheckoutBlocker } from '../checkout-gate.js';
+import { decideRedirectTarget, resolveSameOriginUrl } from '../../../utils/safe-redirect.js';
+import { getCheckoutBlocker, prepareCheckout } from '../checkout-gate.js';
 import { registerPaymentRenderer } from '../registry.js';
 import { PaypalExpressError, authorizePaypalPayment, requestPaypalToken } from './api.js';
 import {
     PAYPAL_EXPRESS_CODE,
     PAYPAL_EXPRESS_CODES,
+    getBillingAgreementCode,
     getPaypalExpressConfig,
     getStartUrl,
     isInContext,
 } from './config.js';
 import { loadPaypalSdk } from './sdk.js';
+import type { PaypalExpressConfig } from '../../../types/config.js';
 import type { PaypalApproveData, PaypalButtonsInstance, PaypalSdk } from './types.js';
+import '../../ui/checkbox.js';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -63,6 +82,19 @@ function reportFailure(message: string): void {
     failureReported = true;
 }
 
+/**
+ * Report why the payment cannot go ahead. A save that failed already shows
+ * its reason next to the controls it belongs to: that message is not
+ * repeated in the banner.
+ */
+function reportBlocker(message: string): void {
+    if (message !== '' && failureMessage() === message) {
+        failureReported = true;
+        return;
+    }
+    reportFailure(message);
+}
+
 function messageOf(err: unknown): string {
     return err instanceof PaypalExpressError ? err.message : '';
 }
@@ -78,8 +110,33 @@ async function ensureBillingSynced(): Promise<boolean> {
     if (!needsOwnSync || store.billingSynced.get()) return true;
     await flowActions().syncBillingAddress();
     if (store.billingSynced.get()) return true;
-    reportFailure(store.globalError.get() ?? t('Hyperion_Checkout::checkout_incomplete_billing_address'));
+    reportBlocker(savedAddressFailure() ?? t('Hyperion_Checkout::checkout_incomplete_billing_address'));
     return false;
+}
+
+/** The reason a save of the billing address (alone, or with the shipping information) failed. */
+function savedAddressFailure(): string | null {
+    return failureMessage('billing', 'shipping-methods');
+}
+
+export function isBillingAgreementRequested(code: string): boolean {
+    const key = getBillingAgreementCode(code);
+    return key !== null && Boolean(getStore().paymentMethodData.get()[code]?.[key]);
+}
+
+/** Keep the billing agreement choice where the payment information request reads its `additional_data`. */
+export function setBillingAgreementRequested(code: string, requested: boolean): void {
+    const key = getBillingAgreementCode(code);
+    if (key === null) return;
+    const store = getStore();
+    const all = store.paymentMethodData.get();
+    const data = { ...(all[code] ?? {}) };
+    if (requested) {
+        data[key] = 1;
+    } else {
+        delete data[key];
+    }
+    store.paymentMethodData.set({ ...all, [code]: data });
 }
 
 /** The message amount is the base grand total: the SDK is loaded for the base currency. */
@@ -88,23 +145,37 @@ export function getPayLaterAmount(): string {
     return Number.isFinite(amount) && amount > 0 ? amount.toFixed(2) : '';
 }
 
+/**
+ * `createOrder` of the smart button. The click already put the pending
+ * edits on the quote (`prepareCheckout()` in `onClick`); the gate is read
+ * once more as it stands, because the SDK calls this in a later task.
+ */
 export async function createPaypalOrder(): Promise<string> {
     const store = getStore();
     const config = getPaypalExpressConfig();
     failureReported = false;
     const blocker = config ? getCheckoutBlocker() : '';
     if (!config || blocker !== null) {
-        reportFailure(blocker ?? '');
+        reportBlocker(blocker ?? '');
         throw new PaypalExpressError(blocker ?? '');
     }
     if (!(await ensureBillingSynced())) {
-        throw new PaypalExpressError(store.globalError.get() ?? '');
+        throw new PaypalExpressError(savedAddressFailure() ?? store.globalError.get() ?? '');
     }
     if (!(await flowActions().savePaymentInformation())) {
         const reason = store.globalError.get() ?? '';
         reportFailure(reason);
         throw new PaypalExpressError(reason);
     }
+    // The token is created for the quote as it is now: the totals read that
+    // follows the save must be in, and nothing may be written meanwhile.
+    // The latch goes with the closed queue: it keeps the flow from offering
+    // a save the queue would refuse, so an edit made now simply waits for
+    // the next flush.
+    const queue = flowActions().queue;
+    await queue.whenIdle();
+    store.isPlacingOrder.set(true);
+    queue.close();
     try {
         return await requestPaypalToken({
             url: config.getTokenUrl,
@@ -114,16 +185,36 @@ export async function createPaypalOrder(): Promise<string> {
     } catch (err) {
         reportFailure(messageOf(err));
         throw err;
+    } finally {
+        queue.reopen();
+        store.isPlacingOrder.set(false);
     }
 }
 
-/** Resolves in every case: a failed approval is reported here, the checkout stays usable. */
+/**
+ * `onApprove` of the smart button. The authorization places the order when
+ * the review step is skipped, so it is sent like an order: after the
+ * pending saves, under the latch and with the queue closed. Both hold
+ * while the browser leaves the page and are given back when PayPal's
+ * controller refuses the approval. An approval that got no usable answer
+ * may have placed the order: the quote is asked, and the flow leaves for
+ * the success page, releases the latch or keeps it with "Check again".
+ * Resolves in every case: a failed approval is reported here.
+ */
 export async function approvePaypalOrder(data: PaypalApproveData): Promise<void> {
     const store = getStore();
     const config = getPaypalExpressConfig();
     failureReported = false;
+    const blocker = await prepareCheckout();
+    if (blocker !== null) {
+        reportBlocker(blocker);
+        fundingSource = '';
+        return;
+    }
+    const queue = flowActions().queue;
     store.globalError.set(null);
     store.isPlacingOrder.set(true);
+    queue.close();
     try {
         if (!config) throw new PaypalExpressError('');
         const redirectUrl = await authorizePaypalPayment({
@@ -134,16 +225,35 @@ export async function approvePaypalOrder(data: PaypalApproveData): Promise<void>
         });
         const target = resolveSameOriginUrl(redirectUrl);
         if (target === null) throw new PaypalExpressError('');
+        // The order exists, or continues on PayPal's review page with the
+        // quote as it is: what was typed here is no longer needed.
+        discardDrafts();
         navigateTo(target);
     } catch (err) {
+        if (!(err instanceof PaypalExpressError) || err.unanswered) {
+            failureReported = true;
+            // A server error status may sit in front of a request still at work.
+            const unavailable = err instanceof PaypalExpressError;
+            const outcome = await flowActions().resolveLostOrder(unavailable ? 'unavailable' : 'network');
+            if (outcome === 'placed-unconfirmed') {
+                navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
+            }
+            return;
+        }
         store.isPlacingOrder.set(false);
+        queue.reopen();
         reportFailure(messageOf(err));
     } finally {
         fundingSource = '';
     }
 }
 
-/** Place Order of the redirect flow: core `set-payment-method` + redirect to the start URL. */
+/**
+ * Place Order of the redirect flow: core `set-payment-method` + redirect to
+ * the start URL. The Place Order button calls it under the latch of its own
+ * `prepareOrder()`, which already put the pending edits on the quote, so
+ * the gate is only read here.
+ */
 export async function startPaypalRedirect(code: string): Promise<string | null> {
     const startUrl = getStartUrl(code);
     if (startUrl === null) {
@@ -152,7 +262,7 @@ export async function startPaypalRedirect(code: string): Promise<string | null> 
     }
     const blocker = getCheckoutBlocker();
     if (blocker !== null) {
-        reportFailure(blocker);
+        reportBlocker(blocker);
         return null;
     }
     if (!(await ensureBillingSynced())) return null;
@@ -163,7 +273,7 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
     @property({ type: String }) public code = PAYPAL_EXPRESS_CODE;
 
     @state() private _status: Status = 'idle';
-    @state() private _cancelled = false;
+    @state() private _canceled = false;
 
     private _sdk: PaypalSdk | null = null;
     private _button: PaypalButtonsInstance | null = null;
@@ -195,7 +305,15 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
                     : html`<p class="text-sm text-muted" data-paypal-express-redirect>
                           ${t('Hyperion_Checkout::paypal_express_redirect_note')}
                       </p>`}
-                ${this._cancelled
+                ${getBillingAgreementCode(this.code) !== null
+                    ? html`<hc-checkbox
+                              name="paypal_express_billing_agreement"
+                              label=${t('Hyperion_Checkout::paypal_express_billing_agreement')}
+                              .checked=${isBillingAgreementRequested(this.code)}
+                              @value-change=${this._onBillingAgreementChange}
+                          ></hc-checkbox>`
+                    : nothing}
+                ${this._canceled
                     ? html`<p class="text-sm text-muted" role="status">
                           ${t('Hyperion_Checkout::paypal_express_cancelled')}
                       </p>`
@@ -321,21 +439,21 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
         container.replaceChildren();
         const button = sdk.Buttons({
             style: config.styles,
-            onClick: (data, actions) => {
+            onClick: async (data, actions) => {
                 fundingSource = data.fundingSource ?? '';
-                this._cancelled = false;
-                const blocker = getCheckoutBlocker();
+                this._canceled = false;
+                const blocker = await prepareCheckout();
                 if (blocker === null) {
                     getStore().globalError.set(null);
                     return actions.resolve();
                 }
-                reportFailure(blocker);
+                reportBlocker(blocker);
                 return actions.reject();
             },
             createOrder: createPaypalOrder,
             onApprove: approvePaypalOrder,
             onCancel: () => {
-                this._cancelled = true;
+                this._canceled = true;
             },
             onError: (err) => {
                 console.error('[hyperion-checkout] PayPal Express button error', err);
@@ -375,6 +493,10 @@ export class PaymentPaypalExpress extends SignalWatcher(LitElement) {
     private _onRetry = (): void => {
         void this._init();
     };
+
+    private _onBillingAgreementChange = (e: CustomEvent<{ checked: boolean }>): void => {
+        setBillingAgreementRequested(this.code, e.detail.checked);
+    };
 }
 
 if (!customElements.get('payment-paypal-express')) {
@@ -388,6 +510,7 @@ export function registerPaypalExpressRenderers(): void {
             component: 'payment-paypal-express',
             isAvailable: () => getStartUrl(code) !== null,
             ownsPlaceOrder: () => isInContext(code),
+            recaptchaAction: () => null,
             placeOrder: () => startPaypalRedirect(code),
         });
     }

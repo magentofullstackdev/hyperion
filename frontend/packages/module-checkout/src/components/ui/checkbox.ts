@@ -4,15 +4,33 @@
 import { LitElement, html } from 'lit';
 import { property } from 'lit/decorators.js';
 
+import { fieldId, nextFieldIdPrefix } from './field-id.js';
+
 export class Checkbox extends LitElement {
     @property({ type: String }) public label = '';
     @property({ type: String }) public name = '';
     @property({ type: Boolean }) public checked = false;
+    /** The first part of the control id; a per-element one when the form gives none. */
+    @property({ type: String, attribute: 'id-prefix' }) public idPrefix = '';
+
+    private _ownIdPrefix: string | null = null;
 
     public override createRenderRoot(): HTMLElement { return this; }
 
+    public override connectedCallback(): void {
+        super.connectedCallback();
+        this.classList.add('hc-field');
+    }
+
+    /** The id of the control, stable for the life of the element. */
+    public get controlId(): string {
+        if (this.idPrefix !== '') return fieldId(this.idPrefix, this.name);
+        this._ownIdPrefix ??= nextFieldIdPrefix();
+        return fieldId(this._ownIdPrefix, this.name);
+    }
+
     public override render(): unknown {
-        const id = `hc-cb-${this.name || Math.random().toString(36).slice(2)}`;
+        const id = this.controlId;
         return html`
             <label for=${id} class="inline-flex items-center gap-2 cursor-pointer select-none">
                 <input

@@ -14,6 +14,13 @@
  * `checkoutConfig.hyperion.nameFields` (select when an option list is
  * configured, text input otherwise).
  *
+ * Field order: names, company, country, street, then postcode, city and
+ * region in one row. The country comes before the fields it decides (the
+ * region control, the postcode rule), which is also the order a browser
+ * fills them in. Control ids carry the form's mode (`hc-shipping-city`,
+ * `hc-billing-city`) and the `autocomplete` tokens its section, so the
+ * shipping and the billing form can be on the page together.
+ *
  * Emits:
  *   - 'address-change' with the current `Address` (snapshot) whenever
  *     a field edits.
@@ -40,9 +47,14 @@ import { readNameFieldsConfig, type NameFieldKey } from '../utils/name-fields.js
 import {
     isAddressComplete,
     isPostcodeRequired,
+    isRegionMissing,
     postcodeWarning,
     readAddressFieldConfig,
+    regionTextOf,
+    type AddressFieldConfig,
 } from '../utils/address-validation.js';
+import { regionListForCountry, type DirectoryRegion } from '../utils/region.js';
+import type { SelectOption } from './ui/select-input.js';
 import './ui/text-input.js';
 import './ui/select-input.js';
 import './ui/checkbox.js';
@@ -80,33 +92,32 @@ function readCountries(): readonly DirectoryCountry[] {
     return out;
 }
 
-interface DirectoryRegion {
-    id: string;
-    code: string;
-    name: string;
+/** The divider between the top destinations and the full list of the country select. */
+const COUNTRY_SEPARATOR = '\u2500'.repeat(10);
+
+/**
+ * The options of the country select: the merchant's top destinations
+ * (`hyperion.topDestinations`, in the configured order) first, a divider,
+ * then every country by name. Without top destinations the plain list.
+ */
+function countryOptions(countries: readonly DirectoryCountry[]): readonly SelectOption[] {
+    const all = countries.map((c) => ({ value: c.id, label: c.name }));
+    const top: SelectOption[] = [];
+    for (const id of getCheckoutConfig().hyperion?.topDestinations ?? []) {
+        const country = countries.find((c) => c.id === id);
+        if (country && !top.some((o) => o.value === id)) top.push({ value: country.id, label: country.name });
+    }
+    if (top.length === 0) return all;
+    return [...top, { value: '', label: COUNTRY_SEPARATOR, separator: true }, ...all];
 }
 
 function readRegions(countryId: string): readonly DirectoryRegion[] {
-    const cfg = getCheckoutConfig() as unknown as Record<string, unknown>;
-    const dir = cfg['directoryData'];
-    if (!dir || typeof dir !== 'object') return [];
-    const entry = (dir as Record<string, unknown>)[countryId];
-    if (!entry || typeof entry !== 'object') return [];
-    const obj = entry as Record<string, unknown>;
-    const source =
-        obj['regions'] && typeof obj['regions'] === 'object'
-            ? (obj['regions'] as Record<string, unknown>)
-            : obj;
-    const out: DirectoryRegion[] = [];
-    for (const [id, value] of Object.entries(source)) {
-        if (!value || typeof value !== 'object') continue;
-        const v = value as Record<string, unknown>;
-        const name = typeof v['name'] === 'string' ? v['name'] : null;
-        const code = typeof v['code'] === 'string' ? v['code'] : '';
-        if (!name) continue;
-        out.push({ id, code, name });
-    }
-    return out;
+    if (countryId === '') return [];
+    return regionListForCountry(readAddressConfig().directoryData, countryId);
+}
+
+function sameText(a: string, b: string): boolean {
+    return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 }
 
 export class AddressForm extends SignalWatcher(LitElement) {
@@ -154,6 +165,7 @@ export class AddressForm extends SignalWatcher(LitElement) {
      */
     public override connectedCallback(): void {
         super.connectedCallback();
+        this.classList.add('hc-host');
         this._validationBaseline = validationRequests.get();
         if (this.value && Object.keys(this._local).length === 0) {
             this._local = { ...this.value };
@@ -181,16 +193,40 @@ export class AddressForm extends SignalWatcher(LitElement) {
         return true;
     }
 
+    /** `hc-shipping` / `hc-billing`: the two forms can be on the page together. */
+    private get _idPrefix(): string {
+        return `hc-${this.mode}`;
+    }
+
+    /** An `autocomplete` token in the form's section (`shipping given-name`). */
+    private _token(field: string): string {
+        return `${this.mode} ${field}`;
+    }
+
+    /**
+     * The name of the last text field of the form: every other one hints
+     * "next" on the virtual keyboard's enter key.
+     */
+    private _lastTextField(cfg: AddressFieldConfig, regionIsText: boolean): string {
+        if (cfg.showVat) return 'vat_id';
+        if (cfg.showFax !== 'no') return 'fax';
+        if (cfg.showTelephone !== 'no') return 'telephone';
+        return regionIsText ? 'region' : 'city';
+    }
+
     public override render(): unknown {
         const cfg = readAddressConfig();
         const countries = readCountries();
         const selectedCountry = (this._local.country_id as string) ?? '';
-        const regions = selectedCountry ? readRegions(selectedCountry) : [];
+        const regions = readRegions(selectedCountry);
         const country = countries.find((c) => c.id === selectedCountry);
         const postcodeRequired = isPostcodeRequired(selectedCountry, cfg);
         const regionIsList = regions.length > 0;
-        const regionRequired = country?.is_region_required === true || regionIsList;
+        const regionRequired = country?.is_region_required === true;
         const regionVisible = country?.is_region_visible !== false;
+        const idPrefix = this._idPrefix;
+        const last = this._lastTextField(cfg, regionVisible && !regionIsList);
+        const enterHint = (name: string): string => (name === last ? '' : 'next');
 
         const street = (this._local.street ?? []) as string[];
         const streetLines: string[] = [];
@@ -199,13 +235,16 @@ export class AddressForm extends SignalWatcher(LitElement) {
         const nameFields = readNameFieldsConfig();
 
         return html`
-            <div class="space-y-3">
+            <div class="hc-fields">
                 ${this._renderNameField('prefix', nameFields.prefix, 'honorific-prefix')}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="hc-field-row hc-field-row-2">
                     <hc-text-input
                         label=${t('Hyperion_Checkout::firstname_label')}
                         name="firstname"
-                        autocomplete="given-name"
+                        id-prefix=${idPrefix}
+                        autocomplete=${this._token('given-name')}
+                        capitalize="words"
+                        enter-hint="next"
                         .value=${(this._local.firstname as string) ?? ''}
                         .required=${true}
                         .error=${this._errorFor('firstname', true)}
@@ -215,7 +254,10 @@ export class AddressForm extends SignalWatcher(LitElement) {
                     <hc-text-input
                         label=${t('Hyperion_Checkout::lastname_label')}
                         name="lastname"
-                        autocomplete="family-name"
+                        id-prefix=${idPrefix}
+                        autocomplete=${this._token('family-name')}
+                        capitalize="words"
+                        enter-hint="next"
                         .value=${(this._local.lastname as string) ?? ''}
                         .required=${true}
                         .error=${this._errorFor('lastname', true)}
@@ -231,7 +273,9 @@ export class AddressForm extends SignalWatcher(LitElement) {
                           <hc-text-input
                               label=${t('Hyperion_Checkout::company_label')}
                               name="company"
-                              autocomplete="organization"
+                              id-prefix=${idPrefix}
+                              autocomplete=${this._token('organization')}
+                              enter-hint="next"
                               .value=${(this._local.company as string) ?? ''}
                               .required=${cfg.showCompany === 'req'}
                               .error=${this._errorFor('company', cfg.showCompany === 'req')}
@@ -241,6 +285,19 @@ export class AddressForm extends SignalWatcher(LitElement) {
                       `
                     : nothing}
 
+                <hc-select-input
+                    label=${t('Hyperion_Checkout::country_label')}
+                    name="country_id"
+                    id-prefix=${idPrefix}
+                    autocomplete=${this._token('country')}
+                    .options=${countryOptions(countries)}
+                    .value=${selectedCountry}
+                    .required=${true}
+                    .error=${this._errorFor('country_id', true)}
+                    @value-change=${this._onCountryChange}
+                    @value-blur=${this._onBlur}
+                ></hc-select-input>
+
                 ${streetLines.map(
                     (line, idx) => html`
                         <hc-text-input
@@ -248,7 +305,9 @@ export class AddressForm extends SignalWatcher(LitElement) {
                                 ? t('Hyperion_Checkout::street_label_primary')
                                 : t('Hyperion_Checkout::street_label_additional', { n: String(idx + 1) })}
                             name=${`street_${idx}`}
-                            autocomplete=${idx === 0 ? 'address-line1' : `address-line${idx + 1}`}
+                            id-prefix=${idPrefix}
+                            autocomplete=${this._token(`address-line${idx + 1}`)}
+                            enter-hint="next"
                             .value=${line}
                             .required=${idx === 0}
                             .error=${idx === 0 ? this._errorFor('street') : ''}
@@ -259,51 +318,14 @@ export class AddressForm extends SignalWatcher(LitElement) {
                     `
                 )}
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <hc-text-input
-                        label=${t('Hyperion_Checkout::city_label')}
-                        name="city"
-                        autocomplete="address-level2"
-                        .value=${(this._local.city as string) ?? ''}
-                        .required=${true}
-                        .error=${this._errorFor('city', true)}
-                        @value-change=${this._onFieldChange}
-                        @value-blur=${this._onBlur}
-                    ></hc-text-input>
-                    ${regionVisible
-                        ? regionIsList
-                            ? html`
-                                  <hc-select-input
-                                      label=${t('Hyperion_Checkout::region_label')}
-                                      name="region_id"
-                                      placeholder=${t('Hyperion_Checkout::region_placeholder')}
-                                      .options=${regions.map((r) => ({ value: r.id, label: r.name }))}
-                                      .value=${(this._local.region_id as string) ?? ''}
-                                      .required=${regionRequired}
-                                      .error=${this._errorFor('region_id', regionRequired)}
-                                      @value-change=${this._onRegionSelectChange}
-                                  ></hc-select-input>
-                              `
-                            : html`
-                                  <hc-text-input
-                                      label=${t('Hyperion_Checkout::region_label')}
-                                      name="region"
-                                      autocomplete="address-level1"
-                                      .value=${(this._local.region as unknown as string) ?? ''}
-                                      .required=${regionRequired}
-                                      .error=${this._errorFor('region', regionRequired)}
-                                      @value-change=${this._onFieldChange}
-                                      @value-blur=${this._onBlur}
-                                  ></hc-text-input>
-                              `
-                        : nothing}
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="hc-field-row hc-field-row-3">
                     <hc-text-input
                         label=${t('Hyperion_Checkout::postcode_label')}
                         name="postcode"
-                        autocomplete="postal-code"
+                        id-prefix=${idPrefix}
+                        autocomplete=${this._token('postal-code')}
+                        enter-hint="next"
+                        .noSpellcheck=${true}
                         .value=${(this._local.postcode as string) ?? ''}
                         .required=${postcodeRequired}
                         .error=${this._errorFor('postcode', postcodeRequired)}
@@ -311,15 +333,20 @@ export class AddressForm extends SignalWatcher(LitElement) {
                         @value-change=${this._onFieldChange}
                         @value-blur=${this._onBlur}
                     ></hc-text-input>
-                    <hc-select-input
-                        label=${t('Hyperion_Checkout::country_label')}
-                        name="country_id"
-                        .options=${countries.map((c) => ({ value: c.id, label: c.name }))}
-                        .value=${selectedCountry}
+                    <hc-text-input
+                        label=${t('Hyperion_Checkout::city_label')}
+                        name="city"
+                        id-prefix=${idPrefix}
+                        autocomplete=${this._token('address-level2')}
+                        capitalize="words"
+                        enter-hint=${enterHint('city')}
+                        .value=${(this._local.city as string) ?? ''}
                         .required=${true}
-                        .error=${this._errorFor('country_id', true)}
-                        @value-change=${this._onCountryChange}
-                    ></hc-select-input>
+                        .error=${this._errorFor('city', true)}
+                        @value-change=${this._onFieldChange}
+                        @value-blur=${this._onBlur}
+                    ></hc-text-input>
+                    ${this._renderRegion(regions, regionRequired, regionVisible, cfg, enterHint('region'))}
                 </div>
 
                 ${cfg.showTelephone !== 'no'
@@ -328,7 +355,10 @@ export class AddressForm extends SignalWatcher(LitElement) {
                               label=${t('Hyperion_Checkout::telephone_label')}
                               name="telephone"
                               type="tel"
-                              autocomplete="tel"
+                              id-prefix=${idPrefix}
+                              autocomplete=${this._token('tel')}
+                              inputmode="tel"
+                              enter-hint=${enterHint('telephone')}
                               .value=${(this._local.telephone as string) ?? ''}
                               .required=${cfg.showTelephone === 'req'}
                               .error=${this._errorFor('telephone', cfg.showTelephone === 'req')}
@@ -343,9 +373,15 @@ export class AddressForm extends SignalWatcher(LitElement) {
                           <hc-text-input
                               label=${t('Hyperion_Checkout::fax_label')}
                               name="fax"
+                              type="tel"
+                              id-prefix=${idPrefix}
+                              inputmode="tel"
+                              enter-hint=${enterHint('fax')}
                               .value=${(this._local.fax as string) ?? ''}
                               .required=${cfg.showFax === 'req'}
+                              .error=${this._errorFor('fax', cfg.showFax === 'req')}
                               @value-change=${this._onFieldChange}
+                              @value-blur=${this._onBlur}
                           ></hc-text-input>
                       `
                     : nothing}
@@ -355,6 +391,8 @@ export class AddressForm extends SignalWatcher(LitElement) {
                           <hc-text-input
                               label=${t('Hyperion_Checkout::vat_label')}
                               name="vat_id"
+                              id-prefix=${idPrefix}
+                              .noSpellcheck=${true}
                               .value=${(this._local.vat_id as string) ?? ''}
                               @value-change=${this._onFieldChange}
                           ></hc-text-input>
@@ -365,6 +403,7 @@ export class AddressForm extends SignalWatcher(LitElement) {
                     ? html`
                           <hc-checkbox
                               name="save_in_address_book"
+                              id-prefix=${idPrefix}
                               label=${t('Hyperion_Checkout::save_in_address_book')}
                               .checked=${this._local.save_in_address_book === true}
                               @value-change=${this._onSaveToggle}
@@ -373,6 +412,66 @@ export class AddressForm extends SignalWatcher(LitElement) {
                     : nothing}
             </div>
         `;
+    }
+
+    /**
+     * The region of the selected country: a select when the directory
+     * lists its regions, a text field otherwise, and an empty block of the
+     * same height when the country shows no region. The three occupy one
+     * place of the row, so another country never moves the fields below.
+     */
+    private _renderRegion(
+        regions: readonly DirectoryRegion[],
+        required: boolean,
+        visible: boolean,
+        cfg: AddressFieldConfig,
+        enterHint: string
+    ): unknown {
+        if (!visible) {
+            return html`<div class="hc-field-placeholder" aria-hidden="true" data-hyperion-region-placeholder></div>`;
+        }
+        const error = this._regionError(cfg);
+        if (regions.length > 0) {
+            return html`
+                <hc-select-input
+                    label=${t('Hyperion_Checkout::region_label')}
+                    name="region_id"
+                    id-prefix=${this._idPrefix}
+                    autocomplete=${this._token('address-level1')}
+                    placeholder=${t('Hyperion_Checkout::region_placeholder')}
+                    .options=${regions.map((r) => ({ value: String(r.id), label: r.name }))}
+                    .value=${this._local.region_id == null ? '' : String(this._local.region_id)}
+                    .required=${required}
+                    .error=${error}
+                    @value-change=${this._onRegionSelectChange}
+                    @value-blur=${this._onBlur}
+                ></hc-select-input>
+            `;
+        }
+        return html`
+            <hc-text-input
+                label=${t('Hyperion_Checkout::region_label')}
+                name="region"
+                id-prefix=${this._idPrefix}
+                autocomplete=${this._token('address-level1')}
+                enter-hint=${enterHint}
+                .value=${this._regionText()}
+                .required=${required}
+                .error=${error}
+                @value-change=${this._onFieldChange}
+                @value-blur=${this._onBlur}
+            ></hc-text-input>
+        `;
+    }
+
+    /**
+     * The region as the text field shows it: what was typed, as typed (a
+     * trailing space included, the shopper is still typing), or the name of
+     * a region object the address arrived with.
+     */
+    private _regionText(): string {
+        const region: unknown = this._local.region;
+        return typeof region === 'string' ? region : regionTextOf(this._local);
     }
 
     /**
@@ -394,12 +493,15 @@ export class AddressForm extends SignalWatcher(LitElement) {
                     <hc-select-input
                         label=${label}
                         name=${key}
+                        id-prefix=${this._idPrefix}
+                        autocomplete=${this._token(autocomplete)}
                         placeholder=${t('Hyperion_Checkout::name_option_placeholder')}
                         .options=${list.map((o) => ({ value: o, label: o }))}
                         .value=${value}
                         .required=${required}
                         .error=${this._errorFor(key, required)}
                         @value-change=${this._onNameSelectChange}
+                        @value-blur=${this._onBlur}
                     ></hc-select-input>
                 </div>
             `;
@@ -409,7 +511,10 @@ export class AddressForm extends SignalWatcher(LitElement) {
                 <hc-text-input
                     label=${label}
                     name=${key}
-                    autocomplete=${autocomplete}
+                    id-prefix=${this._idPrefix}
+                    autocomplete=${this._token(autocomplete)}
+                    capitalize=${key === 'middlename' ? 'words' : ''}
+                    enter-hint="next"
                     .value=${value}
                     .required=${required}
                     .error=${this._errorFor(key, required)}
@@ -482,19 +587,62 @@ export class AddressForm extends SignalWatcher(LitElement) {
         this._emit();
     }
 
+    /**
+     * The region error under the reveal rule of the other fields, from the
+     * one predicate: only a country that requires a region can miss one.
+     */
+    private _regionError(cfg: AddressFieldConfig): string {
+        const serverErr = this.serverErrors['region_id'] || this.serverErrors['region'];
+        if (serverErr) return serverErr;
+        const touched = this._revealAll || this._touched['region_id'] === true || this._touched['region'] === true;
+        if (!touched) return '';
+        return isRegionMissing(this._local, cfg) ? t('Hyperion_Checkout::validation_required') : '';
+    }
+
+    /**
+     * Another country: its region list decides what becomes of the region.
+     * A region the shopper TYPED (the previous country had no list; a
+     * browser may also have filled it before the country) is matched by
+     * name or code against the new list, and kept as text when the new
+     * country has no list; a region picked from the previous country's list
+     * means nothing elsewhere and is dropped, and a country that shows no
+     * region keeps none. A change event that carries the country already
+     * selected changes nothing.
+     */
     private _onCountryChange(e: CustomEvent<{ value: string }>): void {
+        const countryId = e.detail.value;
+        const previousId = (this._local.country_id as string) ?? '';
+        if (countryId === previousId) return;
+        const regionShown = readCountries().find((c) => c.id === countryId)?.is_region_visible !== false;
+        const typed = regionShown && readRegions(previousId).length === 0 ? regionTextOf(this._local) : '';
+        const regions = readRegions(countryId);
+        let regionId: string | null = null;
+        let region: Address['region'] | string = null;
+        if (typed !== '') {
+            if (regions.length === 0) {
+                region = typed;
+            } else {
+                const match = regions.find((r) => sameText(r.name, typed) || (r.code !== '' && sameText(r.code, typed)));
+                if (match) {
+                    regionId = String(match.id);
+                    region = { region: match.name, region_code: match.code, region_id: Number(match.id) };
+                }
+            }
+        }
+        this._touched = { ...this._touched, country_id: true };
         this._local = {
             ...this._local,
-            country_id: e.detail.value,
-            region_id: null,
-            region: null,
+            country_id: countryId,
+            region_id: regionId,
+            region: region as NonNullable<Address['region']> | null,
         };
         this._emit();
     }
 
     private _onRegionSelectChange(e: CustomEvent<{ value: string }>): void {
         const regions = readRegions((this._local.country_id as string) ?? '');
-        const match = regions.find((r) => r.id === e.detail.value);
+        const match = regions.find((r) => String(r.id) === e.detail.value);
+        this._touched = { ...this._touched, region_id: true };
         this._local = {
             ...this._local,
             region_id: e.detail.value,
@@ -503,8 +651,11 @@ export class AddressForm extends SignalWatcher(LitElement) {
         this._emit();
     }
 
+    /** A street line stands for the street: its error is the one of the first line. */
     private _onBlur(e: CustomEvent<{ name: string }>): void {
-        this._touched = { ...this._touched, [e.detail.name]: true };
+        const name = e.detail.name.startsWith('street_') ? 'street' : e.detail.name;
+        if (this._touched[name] === true) return;
+        this._touched = { ...this._touched, [name]: true };
     }
 
     private _onSaveToggle(e: CustomEvent<{ checked: boolean }>): void {

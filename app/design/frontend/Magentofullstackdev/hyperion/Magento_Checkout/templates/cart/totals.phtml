@@ -12,10 +12,34 @@ declare(strict_types=1);
  * secondary / bg-primary / text-success) -- no absolute Tailwind palette
  * classes.
  *
+ * While the quote cannot go to the checkout (below the minimum order
+ * amount, an error on the quote) the reasons are listed in a status box
+ * and the checkout link is a disabled one that points at the box; the
+ * express buttons are left out. The card is swapped with every cart
+ * mutation, so the state follows a quantity or coupon change.
+ *
+ * Below `lg` a second element follows the card: a bar with the grand total
+ * and the checkout link in the same state, `position: sticky` at the bottom
+ * of the screen (on a phone the card sits under every line of the cart). It
+ * is a sibling of the card, not a child, because a sticky box cannot leave
+ * its parent: as an item of the cart grid it stays in view for the whole
+ * height of the cart and rests under the card at the end. It has its own id
+ * and is swapped out of band with the card. Under `sm` it runs from edge to
+ * edge of the screen: the cart sits behind two 1rem gutters there (the page
+ * columns and the cart section), which the negative margin takes back. From
+ * `sm` the containers are centered with a margin that depends on the screen,
+ * so the bar keeps the width of the cards and their rounded border.
+ *
+ * The card is sticky from `lg` only, where it has a column of its own: in
+ * the single column the row of the bar under it would give it room to slide
+ * over the bar.
+ *
  * @var \Magentofullstackdev\HyperionCheckout\Block\Cart\Totals $block
  * @var \Magento\Framework\Escaper $escaper
  */
 $targetId = $block->getTargetId();
+$blocker = $block->getCheckoutBlocker();
+$blockerId = $targetId . '-blocker';
 $rowClasses = [
     'regular' => 'flex items-center justify-between',
     'detail' => 'flex items-center justify-between text-xs',
@@ -24,11 +48,21 @@ $rowClasses = [
 ];
 $labelClasses = ['grand' => 'text-base font-bold text-secondary', 'discount' => ''];
 $valueClasses = ['grand' => 'text-xl font-bold text-secondary', 'discount' => 'font-medium'];
+$rows = $block->getRows();
+$grandRow = null;
+foreach ($rows as $row) {
+    if ($row['code'] === 'grand_total') {
+        $grandRow = $row;
+    }
+}
+$barLinkClasses = 'shrink-0 inline-flex items-center justify-center min-h-11 px-5 rounded-lg
+                   font-bold uppercase tracking-wider text-center text-sm bg-primary text-on-primary
+                   focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
 ?>
 <aside id="<?= $escaper->escapeHtmlAttr($targetId) ?>"
        data-hyperion-cart-totals
        <?php if ($block->getData('oob')): ?>hx-swap-oob="outerHTML"<?php endif; ?>
-       class="bg-surface rounded-xl border border-subtle shadow-sm p-6 sticky top-24"
+       class="bg-surface rounded-xl border border-subtle shadow-sm p-6 lg:sticky lg:top-24"
        aria-labelledby="hyperion-summary-title">
 
     <h2 id="hyperion-summary-title"
@@ -37,10 +71,12 @@ $valueClasses = ['grand' => 'text-xl font-bold text-secondary', 'discount' => 'f
     </h2>
 
     <?php /* Estimate Shipping and Tax (theme Magento_Checkout::cart/estimate.phtml) */ ?>
-    <?= $block->getChildHtml('estimate') ?>
+    <?php if (!$block->isVirtual()): ?>
+        <?= $block->getChildHtml('estimate') ?>
+    <?php endif; ?>
 
     <dl class="space-y-3 text-sm">
-        <?php foreach ($block->getRows() as $row): ?>
+        <?php foreach ($rows as $row): ?>
             <div class="<?= $escaper->escapeHtmlAttr($rowClasses[$row['kind']] ?? $rowClasses['regular']) ?>"
                  data-total="<?= $escaper->escapeHtmlAttr($row['code']) ?>">
                 <dt class="<?= $escaper->escapeHtmlAttr($labelClasses[$row['kind']] ?? 'text-muted') ?>">
@@ -56,13 +92,68 @@ $valueClasses = ['grand' => 'text-xl font-bold text-secondary', 'discount' => 'f
         <?php endforeach; ?>
     </dl>
 
-    <a href="<?= $escaper->escapeUrl($block->getCheckoutUrl()) ?>"
-       class="block mt-6 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
-              bg-primary text-on-primary shadow-sm hover:bg-primary-hover hover:shadow-md
-              transition-all focus:outline-none focus:ring-2 focus:ring-primary">
-        <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
-    </a>
+    <?php if ($blocker !== null): ?>
+        <div id="<?= $escaper->escapeHtmlAttr($blockerId) ?>"
+             role="status"
+             data-hyperion-checkout-blocker="<?= $escaper->escapeHtmlAttr($blocker['reason']) ?>"
+             class="mt-6 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm font-medium text-warning-strong">
+            <ul role="list" class="space-y-1">
+                <?php foreach ($blocker['messages'] as $blockerMessage): ?>
+                    <li><?= $escaper->escapeHtml($blockerMessage) ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <a role="link"
+           aria-disabled="true"
+           tabindex="0"
+           aria-describedby="<?= $escaper->escapeHtmlAttr($blockerId) ?>"
+           data-hyperion-checkout-link
+           class="block mt-3 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
+                  bg-primary text-on-primary opacity-50 cursor-not-allowed
+                  focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+        </a>
+    <?php else: ?>
+        <a href="<?= $escaper->escapeUrl($block->getCheckoutUrl()) ?>"
+           data-hyperion-checkout-link
+           class="block mt-6 py-3 px-6 rounded-lg font-bold uppercase tracking-wider text-center text-sm
+                  bg-primary text-on-primary shadow-sm hover:bg-primary-hover hover:shadow-md
+                  transition-all focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+        </a>
 
-    <?php /* PayPal smart buttons (theme Magento_Paypal/layout/checkout_cart_index.xml) */ ?>
-    <?= $block->getChildHtml('paypal_buttons') ?>
+        <?php /* PayPal smart buttons (theme Magento_Paypal/layout/checkout_cart_index.xml) */ ?>
+        <?= $block->getChildHtml('paypal_buttons') ?>
+    <?php endif; ?>
 </aside>
+<div id="<?= $escaper->escapeHtmlAttr($targetId) ?>-bar"
+     data-hyperion-checkout-bar
+     <?php if ($block->getData('oob')): ?>hx-swap-oob="outerHTML"<?php endif; ?>
+     class="lg:hidden sticky bottom-0 z-10 -mx-8 flex items-center justify-between gap-4 px-4 pt-3
+            bg-surface border-t border-subtle shadow-[0_-4px_12px_rgb(0_0_0_/_0.08)]
+            sm:mx-0 sm:px-6 sm:rounded-t-xl sm:border-x">
+    <p class="min-w-0 flex flex-col leading-tight">
+        <?php if ($grandRow !== null): ?>
+            <span class="text-xs text-muted"><?= $escaper->escapeHtml($grandRow['label']) ?></span>
+            <span class="text-lg font-bold text-secondary" data-hyperion-checkout-bar-total>
+                <?= $escaper->escapeHtml($grandRow['value']) ?>
+            </span>
+        <?php endif; ?>
+    </p>
+    <?php if ($blocker !== null): ?>
+        <a role="link"
+           aria-disabled="true"
+           tabindex="0"
+           aria-describedby="<?= $escaper->escapeHtmlAttr($blockerId) ?>"
+           data-hyperion-checkout-bar-link
+           class="<?= $escaper->escapeHtmlAttr($barLinkClasses) ?> opacity-50 cursor-not-allowed">
+            <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+        </a>
+    <?php else: ?>
+        <a href="<?= $escaper->escapeUrl($block->getCheckoutUrl()) ?>"
+           data-hyperion-checkout-bar-link
+           class="<?= $escaper->escapeHtmlAttr($barLinkClasses) ?> shadow-sm hover:bg-primary-hover transition-colors">
+            <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
+        </a>
+    <?php endif; ?>
+</div>

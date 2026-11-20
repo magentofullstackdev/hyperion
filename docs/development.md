@@ -124,7 +124,9 @@ probe of `/women/tops-women`, `e2e/lib/url-suffix.mjs`), so a store whose
 `pw-ui-polish.mjs`, `pw-critical.mjs` and `pw-a11y.mjs` need only the URL and
 change no setting on the store (the suite places orders, subscribes one
 `suite.news.<timestamp>@example.com` address to the newsletter per run and
-adds products to carts). Every
+adds products to carts; `pw-cls.mjs` registers one customer per run for its
+checkout part unless `--customer=` names one, and both `pw-cls.mjs` and
+`pw-a11y.mjs` leave guest carts behind). Every
 other script takes `<baseUrl> <slotDir>` (the Magento install directory,
 with its `.env` and docker compose files) and changes store configuration or
 creates fixtures for the run, restoring everything at the end. Those scripts
@@ -147,19 +149,19 @@ helper in a new script; never restore to a fixed default.
 
 | Script | Arguments | What it checks | Changes on the store (restored) | reCAPTCHA relaxation |
 |---|---|---|---|---|
-| `pw-suite.mjs` | `<baseUrl> [--shots dir] [--skip-order]` | the guest and customer journeys: every page type, add to cart for every product type, compare, wishlist, cart, a guest order (address edited before the order) and a customer order, the success page offer and the delegated registration, the newsletter form, account and order pages | places orders, one newsletter subscriber | yes |
+| `pw-suite.mjs` | `<baseUrl> [--shots dir] [--skip-order]` | the guest and customer journeys: every page type, add to cart for every product type, compare, wishlist, cart, a guest order (address edited before the order) and a customer order, the success page offer and the delegated registration, the newsletter form, account and order pages; in the checkout: a guest address entry typed key by key takes at most three web API calls, an HTML 503 on the shipping save shows the translated message in its section with a control that sends the save again, a double click places one order | places orders, one newsletter subscriber | yes |
 | `pw-check.mjs` | `<url> [screenshot.png]` | one page: status, htmx, defined elements, errors | none | no |
 | `pw-perf.mjs` | `<baseUrl> [path ...]` | TTFB, LCP, CLS, requests, third parties | none | no |
-| `pw-cls.mjs` | `<baseUrl> [--pages n]` | CLS 0 on the key page types under a slow network and CPU, desktop and phone; skeleton parity; motion knob; view transitions | none | no |
-| `pw-ui-polish.mjs` | `<baseUrl>` | header footprint, drawer scroll lock, toasts, category landings; request synchronization: a double click on Add to Cart adds one unit (product page and tile), the button shows its busy text without changing size and keeps the focus, rapid taps on the mini-cart stepper end at the right quantity with one or two requests | none (guest carts) | no |
+| `pw-cls.mjs` | `<baseUrl> [--only=<parts>] [--viewport=desktop\|phone] [--dump=<file>] [--customer=<email>:<password>]` | CLS 0 on the key page types under a slow network and CPU, desktop and phone; skeleton parity; motion knob; view transitions; the checkout as a flow (see below) | none; registers one customer unless `--customer=` is given | no |
+| `pw-ui-polish.mjs` | `<baseUrl>` | header footprint, drawer scroll lock, toasts, category landings; request synchronization: a double click on Add to Cart adds one unit (product page and tile), the button shows its busy text without changing size and keeps the focus, rapid taps on the mini-cart stepper end at the right quantity with one or two requests; the cart on a phone: the sticky bar with the order total and the checkout link, its footprint, its place in the flow and the state it shares with the summary card | none (guest carts) | no |
 | `pw-critical.mjs` | `<baseUrl>` | the critical sheet of each page type paints the fold like the full stylesheet (pixel comparison), the non blocking stylesheet applies, the mini-cart adopts it, the untyped pages keep the synchronous link | none | no |
-| `pw-a11y.mjs` | `<baseUrl>` | axe-core on seven page types: fails on `critical` / `serious` violations, lists the rest | none | no |
+| `pw-a11y.mjs` | `<baseUrl> [--only=pages\|checkout] [--dump=<file>]` | axe-core on seven page types and on the checkout (two scans, see below): fails on `critical` / `serious` violations, lists the rest | none (a guest cart) | no |
 | `pw-agreements.mjs` | `<baseUrl> <slotDir>` | checkout agreements, guest and customer order | one agreement, `checkout/options/enable_agreements` | yes |
-| `pw-checkout-login.mjs` | `<baseUrl> <slotDir>` | inline checkout login, quote merge | `checkout/options/enable_guest_checkout_login` | yes |
+| `pw-checkout-login.mjs` | `<baseUrl> <slotDir>` | inline checkout login: one availability request for an email typed key by key, the notice with the "Sign in" control, the password form on a click, quote merge, the typed address back after the sign-in | `checkout/options/enable_guest_checkout_login` | yes |
 | `pw-catalogmode.mjs` | `<baseUrl> <slotDir>` | catalog mode and the listing Add to Cart setting | `hyperion_catalog_mode/*`, `hyperion/catalog/add_to_cart_from_listing` (put back as found) | handles it itself |
-| `pw-cart-features.mjs` | `<baseUrl> <slotDir> [--with-fpt]` | estimator, Move to Wishlist, VAT field (one on the register form), gift message, shipping policy, FPT lines, the coupon form and its reCAPTCHA; cart money: estimator rates in a non-base display currency equal the Shipping totals row and the newly selected rate is the one marked, a carrier error rate is text and a forged post of it is refused, unit price and row total follow the cart tax display, a decimal quantity survives an update of another line | VAT visibility, shipping policy, coupon reCAPTCHA, free shipping settings for the error rate; `fixtures/tax-display-fixture.php`, `fixtures/decimal-qty-fixture.php`; FPT demo from `fixtures/weee-demo.php` | yes |
+| `pw-cart-features.mjs` | `<baseUrl> <slotDir> [--with-fpt] [--with-custom-total] [--keep-recaptcha] [--only=<part,...>]` | estimator, Move to Wishlist, VAT field (one on the register form), gift message, shipping policy, FPT lines, the coupon form and its reCAPTCHA; cart money: estimator rates in a non-base display currency equal the Shipping totals row and the newly selected rate is the one marked, a carrier error rate is text and a forged post of it is refused, unit price and row total follow the cart tax display, a decimal quantity survives an update of another line; quantities post by themselves (one request for a burst, the focus stays on the line); the minimum order amount (checkout links disabled with the reason, opened by a quantity change, a direct visit to the checkout comes back with a notice); a refused coupon keeps the form open; a virtual cart has no estimator; a grouped child links to its parent; item options as label / value pairs; a customer's default address rates load when the estimate panel opens; the estimator answers 429 above its budget (last check: the budget stays spent for the window). `--with-fpt`: the FPT demo must be in place (`fixtures/weee-demo.php`, then a price reindex); the script turns `tax/weee/*` on for the run and also checks the price box of the product page and of a listing in the four FPT display modes. `--with-custom-total`: installs a module with an unknown quote total (`fixtures/custom-total-fixture.php`, enabled and COMPILED, removed and compiled again at the end: the storefront answers errors meanwhile) and checks that the cart and the checkout summary list the same row. `--keep-recaptcha`: leaves the `coupon_code` reCAPTCHA setting as found. `--only=`: runs the named parts (`guest`, `quantity`, `minimum order`, `lines`, `multi-currency`, `error rate`, `tax display`, `decimal quantity`, `customer`, `custom total`, `fpt display`, `rate limit`) | VAT visibility, shipping policy, coupon reCAPTCHA, carrier and tax display settings, the minimum order amount (the shortest possible window), `tax/weee/*` with `--with-fpt`; `fixtures/tax-display-fixture.php`, `fixtures/decimal-qty-fixture.php`, a customer of the run (`fixtures/customer-fixture.php`, deleted at the end) | yes |
 | `pw-orders-widgets-ga4.mjs` | `<baseUrl> <slotDir>` | GA4 dataLayer, history widgets, sidebars; bank transfer instructions under the selected method and on the customer and guest order views; a guest purchase order (Place Order closed without the number, the number stored on the order); the check payee | bank transfer, purchase order, `payment/checkmo/payable_to`, `google/gtag/*`, CMS page (`fixtures/sprint3-fixtures.php`) | yes |
-| `pw-fallback-pages.mjs` | `<baseUrl> <slotDir>` | drawers' keyboard model, print pages, tracking popup, Orders and Returns widget, popular search terms, Email a Friend, the guest invoice / shipment / refund tabs, the footer service links, the demo store notice (styled bar, no layout shift), the newsletter form with Google's reCAPTCHA script blocked (one post, a message on the landing page; skipped without a key pair), no sideways scroll at phone widths | invoice, shipment, credit memo of a fresh order, CMS page (`fixtures/sprint4-fixtures.php`), `sendfriend/email/*`, `design/head/demonotice`, `recaptcha_frontend/type_for/newsletter` when the form is not protected | yes |
+| `pw-fallback-pages.mjs` | `<baseUrl> <slotDir>` | drawers' keyboard model, print pages, tracking popup, Orders and Returns widget, popular search terms, Email a Friend, the guest invoice / shipment / refund tabs, the footer service links, the demo store notice (styled bar, no layout shift), the newsletter form with Google's reCAPTCHA script blocked (one post, a message on the landing page; skipped without a key pair), no sideways scroll at phone widths; the checkout failure page (served to the session of the order, order number, one link to the cart and one to the store); a stored Braintree PayPal account on Stored Payment Methods and its Delete (skipped without the Braintree module) | invoice, shipment, credit memo of a fresh order, CMS page (`fixtures/sprint4-fixtures.php`), a customer of the run (`fixtures/customer-fixture.php`), a stored token row (`fixtures/vault-token-fixture.php`), `sendfriend/email/*`, `design/head/demonotice`, `recaptcha_frontend/type_for/newsletter` when the form is not protected | yes |
 | `pw-catalog-completeness.mjs` | `<baseUrl> <slotDir>` | Open Graph (one set of tags whoever emits them: the theme, or a platform SEO module with its JSON-LD Product), stock notices, video, MAP, bundle total, review breakdown, grid / list, limiter, swatch filter chips; bundle prices under an including-tax catalog display; the variant price in the number format of a decimal-comma store view | MAP on `MH01`, a video on `24-MB01`, stock config (`fixtures/sprint1-fixtures.php`), `fixtures/tax-display-fixture.php` | yes |
 | `pw-search-shield.mjs` | `<baseUrl> <slotDir>` | autocomplete layout and caches, relevance tuning, zero results, suggest freshness, Varnish query sorting, marketing parameters (one cache object, never counted by the limiter), filter guard, the search engine outage (the listing fragments and the suggest answer a degraded response no cache keeps; skipped without an `opensearch` service), rate limiter with junk toolbar values counted (last: the budget stays spent) | `hyperion_search/*`, `hyperion/catalog/*`, `hyperion/security/*`; a fixture product (`fixtures/search-freshness-fixture.php`); stops and restarts the `opensearch` service | no |
 | `pw-sidebars.mjs` | `<baseUrl> <slotDir> [shotsDir]` | wishlist and compare rails on every page layout | a category's `page_layout`, wishlist config | yes |
@@ -169,6 +171,9 @@ helper in a new script; never restore to a fixed default.
 | `pw-listing-state.mjs` | `<baseUrl> <slotDir> [shotsDir]` | a listing keeps its layered filters through sort, direction, grid / list, page size, the pager, Back and Forward, Load more and the automatic loading, on a category and on the search results; two quick filter clicks end in one consistent state; a page number far past the end answers 200. Guest only | `hyperion/catalog/infinite_scroll` and `hyperion/catalog/infinite_scroll_auto_pages` | no |
 | `pw-cart-edit.mjs` | `<baseUrl> <slotDir>` | cart line Edit: `checkout/cart/configure` with the line's options and qty preselected, Update Cart replaces the line (configurable and bundle) | none (guest cart) | no |
 | `pw-variant-stock.mjs` | `<baseUrl> <slotDir>` | per variant "Only N left" of a configurable within the stock threshold | a child's qty and `cataloginventory/options/stock_threshold_qty` (`fixtures/variant-stock-fixture.php`) | no |
+| `pw-checkout-resilience.mjs` | `<baseUrl> <slotDir> [--shots <dir>] [--who guest\|customer] [--only <name,...>]` | what the checkout does when a request fails or loses its answer, each as a guest and as a customer the script registers: `offline` (the connection drops around a shipping method change), `unavailable` (an HTML 503 on the shipping save), `rate-limit` (a 429 with `Retry-After` on the estimate), `timeout` (the estimate gets no answer; the page clock is moved past the client's limit), `session` (401 on the customer cart routes, then a real sign-in; customer only), `unconfirmed` (the order request and the cart read both fail), `one-order` (double click, Enter, a street edited right before the press), `not-placed`, `placed` (the answer to the order is lost), `other-tab` (the order is placed in a second tab). In every scenario no raw transport error, HTTP status, "No such entity" phrase or HTML source may show. Every failure is injected in the browser (request routing, the offline switch, the page clock) | none on the server; places eight orders and registers one customer; reads order addresses with the read-only `fixtures/order-address-fixture.php`. The store must offer two shipping methods and Check / Money order | yes (login and registration) |
+| `pw-checkout-flow.mjs` | `<baseUrl> <slotDir> [--only F3,F5] [--shots dir] [--with-recaptcha] [--with-braintree]` | the journeys through the checkout besides the plain order: F1 virtual and downloadable quotes; F2 coupons (invalid code, a 100 percent code selects `free`, removal, a free order; `--with-recaptcha` switches the `coupon_code` reCAPTCHA on and expects the token header); F3 reload in the middle of the flow, guest and customer (typed data back, Place Order usable with no REST request before it, one background rate refresh after it, a saved address that is not the default kept; prints the time from first contentful paint to a usable Place Order); F4 billing address different from shipping, Back from the success page lands on the cart; F5 a customer without saved addresses, "Add New Address" with and without "Save in address book"; F6 a cart price rule on the payment method; F7 country switch (required state, postcode warning, free text region, optional postcode); F8 shipping method change, no rate for an address, a coupon that makes shipping free; F10 a 390 px viewport (the total at load and beside Place Order, the summary bar opens); F11 a display currency other than the base currency; F12 an item that sells out between load and order, the minimum order amount at load and after a coupon; F13 no Content Security Policy violation while each gateway row is selected; F14 with `--with-braintree`, a card order through the Braintree hosted fields with a sandbox test card, guest and customer | Bank Transfer for F6, the minimum order amount for F12, the coupon reCAPTCHA with `--with-recaptcha` (put back as found, also when the run is interrupted); `fixtures/checkout-flow-fixture.php`, `fixtures/payment-rule-fixture.php`, `fixtures/stock-zero-fixture.php`; customers with a unique email per run and the orders they place stay | yes |
+| `pw-captcha.mjs` | `<baseUrl> <slotDir> [--with-braintree] [--only <phase,...>] [--v3-threshold <score>] [--shots dir]`, or `<baseUrl> <slotDir> --restore` | the image CAPTCHA (sign-in after failed attempts and always, coupon, Place Order) and reCAPTCHA v2 invisible, v2 checkbox and v3 for Place Order, the coupon and the inline login, guest and customer; Google's script blocked and retried; `--with-braintree` adds card orders with the Braintree reCAPTCHA form. Google's service must be reachable (a leg that depends on it prints SKIP otherwise) | sets Google's public test keys and every CAPTCHA setting for the run and restores what it found, also after an interrupted run with `--restore` | sets its own keys |
 
 The fixture scripts in `frontend/e2e/fixtures/` are plain PHP that
 bootstraps Magento from `/var/www/html`; each file header documents its
@@ -179,6 +184,19 @@ created in the tax tables) and `--remove` puts every `tax/*` row back as it
 was, deleting the rows that did not exist; `decimal-qty-fixture.php <sku>`
 makes the quantity of one simple product decimal and puts the previous flag
 back.
+
+The fixtures of the checkout and cart scripts:
+
+| Fixture | Arguments (after the Magento root) | What it does |
+|---|---|---|
+| `checkout-flow-fixture.php` | `--apply` / `--remove`; `customer <email> <password> <0 or 2>` | three cart price rules with one coupon each (`HYPFLOW100` 100 percent with shipping, `HYPFLOW60` 60 percent, `HYPFLOWSHIP` free shipping); a customer with no saved address or with two (a default one in Michigan and a second one in Alaska). Customers are not removed: their orders keep pointing at them |
+| `payment-rule-fixture.php` | `--apply` / `--remove` | a cart price rule of 5 percent whose condition is the payment method Bank Transfer; it only acts while that method is offered, which the calling script switches on and puts back |
+| `stock-zero-fixture.php` | `--apply [sku]` / `--remove [sku]` | takes one simple product out of stock through the stock registry and puts it back (default `24-UG07`, which no other script buys); the values found are kept in `var/tmp` until `--remove` |
+| `custom-total-fixture.php` | `--apply` / `--remove` | writes the module `HyperionTest_CustomTotal` into `app/code` of the install (a quote total `hyperion_test_fee`, 2.50 in the base currency), enables it and runs `setup:upgrade` and `setup:di:compile`; `--remove` undoes it and compiles again. The storefront answers errors while the compilation runs: never on a store that serves visitors |
+| `customer-fixture.php` | `<email> <password> --apply` / `<email> --remove` | a confirmed customer with one default address (United States, Michigan), no welcome email; `--remove` deletes the customer |
+| `vault-token-fixture.php` | `<customer email> --apply` / `--remove` | one stored PayPal account of the Braintree gateway in `vault_payment_token` for that customer (nothing is sent to a gateway: the row only renders); reports when the Braintree module is not enabled |
+| `order-address-fixture.php` | `<increment id>` | read only: prints the shipping address of an order as one JSON line |
+| `weee-demo.php` | none / `--remove` | the Fixed Product Tax attribute `hyperion_fpt` with 5.00 on `24-MB01`. It writes no configuration: the script that uses it turns `tax/weee/*` on for its run and puts every row back (on a store checked by hand, set Sales > Tax > Fixed Product Taxes in the admin). Reindex prices and flush afterwards |
 
 The customer login of the headless browser scores too low for reCAPTCHA v3,
 so every check marked "yes" above needs the login form relaxed for the run
@@ -191,7 +209,11 @@ bin/magento cache:flush
 ```
 
 and afterwards restore the two values (`recaptcha_v3` and `0.5` on a stock
-install, or whatever `bin/magento config:show` printed before). Never leave a
+install, or whatever `bin/magento config:show` printed before).
+`pw-checkout-resilience.mjs` and `pw-cls.mjs` also register a customer
+through the storefront form, so on a store that protects it
+(`recaptcha_frontend/type_for/customer_create`) the lowered score threshold
+is what lets the headless browser through. Never leave a
 store relaxed. `PW_HOST_RESOLVER="MAP store.example 10.0.0.4"` resolves a
 host that is not in `/etc/hosts`. `pnpm lint:e2e` lints the scripts.
 
@@ -204,6 +226,27 @@ of the swatches and of the gallery thumbnails measure exactly what the
 components render, and that the motion knob and the view transitions are in
 place. Run it after touching a listing template, a component that renders
 after its chunk arrives, or the page layouts.
+
+The checkout joins as a flow, not as a page: every step of a guest order
+(load, an invalid then a valid email, the country, the address, the shipping
+method, a reload) must leave the layout where it was; the server rendered
+skeleton of the checkout must put the contact card, the shipping card and
+the summary exactly where the application renders them (the entry script
+blocked against the mounted page); and a customer run repeats both with a
+hydrated quote. Options are written `--name=value`:
+
+- `--only=<parts>`: comma separated, from `pages`, `skeletons`, `motion`,
+  `checkout-flow`, `checkout-parity`, `checkout-customer` (default: all,
+  about nine minutes);
+- `--viewport=desktop|phone`: limits the checkout parts to one viewport;
+- `--dump=<file>`: writes every checkout measurement (layout shift entries
+  with their sources, every rectangle of the skeleton and of the
+  application) to a JSON file, which is what you tune the skeleton from;
+- `--customer=<email>:<password>`: an existing customer WITHOUT saved
+  addresses for the customer run; by default the script registers a new one.
+
+Run the checkout parts after touching `checkout.phtml`,
+`ViewModel\CheckoutSkeleton`, a checkout component or its stylesheet.
 
 ### Critical CSS per page type
 
@@ -258,6 +301,39 @@ violation (rule, impact, the first target selectors and the page are printed;
 `moderate` and `minor` findings are listed as warnings) or page error. Run it
 after touching the header, the footer, a form template or a component that
 wraps light DOM content.
+
+The checkout follows with a product in the cart and is scanned twice: as it
+loads, and with the billing address form open next to the shipping one
+after a press on Place Order with nothing filled in (every error message
+showing). There a duplicate id or a second main landmark fails the run
+whatever impact the rule carries. `--only=pages|checkout` runs one half,
+`--dump=<file>` writes every violation with its nodes (selector, HTML,
+failure summary) to a JSON file.
+
+### Checkout time to first byte in production mode
+
+The checkout page is never cached, so its server time is what every shopper
+waits for. To profile it:
+
+1. Switch the install to production mode (`bin/magento deploy:mode:set
+   production`, static content deployed) with the caches enabled, and put a
+   product in a cart so `/checkout/` renders the application.
+2. Load the page five times with that session and note the time to first
+   byte of each load (`curl -s -o /dev/null -w '%{time_starttransfer}\n' -b
+   'PHPSESSID=<the session of the cart>' <baseUrl>/checkout/`, or the
+   Network panel of the browser that holds the cart). Without a cart the
+   URL only answers the redirect to the cart page. Drop the first load: it
+   warms the caches.
+3. Time the config providers: `checkoutConfig` is built by every
+   `ConfigProviderInterface` registered on
+   `Magento\Checkout\Model\CompositeConfigProvider` (core's, Hyperion's and
+   those of payment modules). Wrap each provider's `getConfig()` with a
+   timer in a throwaway module or a profiler (Xdebug profile, Blackfire, or
+   Magento's `MAGE_PROFILER`) and sort by time; a provider that asks a
+   gateway or a carrier during the render is the usual cost.
+4. Compare with the same five loads in developer mode only to rule out a
+   measurement error: developer mode numbers say nothing about production.
+5. Switch the mode back and redeploy.
 
 ## Committed build assets
 
@@ -436,7 +512,7 @@ page cache key (customer group, store, currency).
    release candidate, run the smoke battery on the Tier 2 platforms (Magento
    2.4.8, Mage-OS 3.6). Write the release, the date and the counts of each
    run into the matrix of [Compatibility](./compatibility.md).
-3. Tag `v<version>` (for this release `v0.9.0-beta.5`) and push.
+3. Tag `v<version>` (for this release `v0.9.0-beta.6`) and push.
 4. Publish npm first or together with the tag: the child theme scaffold
    depends on the three packages at `^<version>`.
    `pnpm -r publish --access public` from `frontend/` (pnpm rewrites

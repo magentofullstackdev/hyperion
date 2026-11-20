@@ -74,6 +74,9 @@ export interface CartItem {
     qty: number;
     price: Decimal;
     price_incl_tax: Decimal;
+    /** Unit price in the base currency, the one a gateway charges. */
+    base_price?: Decimal;
+    base_price_incl_tax?: Decimal;
     row_total: Decimal;
     row_total_incl_tax: Decimal;
     tax_amount: Decimal;

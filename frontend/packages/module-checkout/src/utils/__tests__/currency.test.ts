@@ -59,4 +59,10 @@ describe('formatMoney', () => {
         const twoDp = { ...USD, precision: 4, requiredPrecision: 2 };
         expect(formatMoney(1.5, twoDp)).toBe('$1.50');
     });
+
+    it('prints no decimals for a currency that requires integers', () => {
+        const JPY: PriceFormat = { ...USD, pattern: '¥%s', precision: 0, requiredPrecision: 0, integerRequired: true };
+        expect(formatMoney(1234.4, JPY)).toBe('¥1,234');
+        expect(formatMoney('1500.0000', { ...JPY, requiredPrecision: 2 })).toBe('¥1,500');
+    });
 });

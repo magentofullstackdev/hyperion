@@ -8,7 +8,6 @@ export {
     apiFetch,
     configureApiClient,
     resetApiClientForTests,
-    buildClientConfig,
     MagentoApiError,
     NetworkError,
     RequestTimeoutError,

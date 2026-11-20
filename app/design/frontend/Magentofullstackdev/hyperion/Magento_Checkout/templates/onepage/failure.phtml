@@ -1,0 +1,59 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Hyperion order failure page (checkout/onepage/failure).
+ *
+ * @var \Magento\Checkout\Block\Onepage\Failure $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$contact = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\ContactLink::class);
+$orderId = (string) $block->getRealOrderId();
+$errorMessage = trim((string) $block->getErrorMessage());
+?>
+<div class="max-w-lg mx-auto py-12 text-center" data-hyperion-checkout-failure>
+    <div class="bg-surface rounded-2xl border border-subtle shadow-sm p-8 space-y-6">
+        <div class="w-16 h-16 mx-auto rounded-full bg-error/10 flex items-center justify-center">
+            <svg class="w-8 h-8 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </div>
+
+        <div class="space-y-2">
+            <h1 class="text-2xl font-bold text-secondary tracking-tight">
+                <?= $escaper->escapeHtml(__('Your order could not be completed')) ?>
+            </h1>
+            <?php if ($orderId !== ''): ?>
+                <p class="text-muted">
+                    <?= $escaper->escapeHtml(__('Your order number is:')) ?>
+                    <span class="font-mono font-bold text-secondary ml-1">#<?= $escaper->escapeHtml($orderId) ?></span>
+                </p>
+            <?php endif; ?>
+            <?php if ($errorMessage !== ''): ?>
+                <p class="text-sm text-error" role="alert"><?= $escaper->escapeHtml($errorMessage) ?></p>
+            <?php endif; ?>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-subtle">
+            <?php /* The block's "continue shopping" URL is the cart, the same target as the primary link: the store home is the second way out. */ ?>
+            <a href="<?= $escaper->escapeUrl($block->getBaseUrl()) ?>"
+               class="flex-1 text-center py-3 px-6 text-sm font-medium text-secondary bg-surface border border-subtle rounded-lg hover:bg-surface-raised transition-colors">
+                <?= $escaper->escapeHtml(__('Continue shopping')) ?>
+            </a>
+            <a href="<?= $escaper->escapeUrl($block->getUrl('checkout/cart')) ?>"
+               class="flex-1 py-3 px-6 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-md hover:shadow-lg text-sm text-center uppercase tracking-wider">
+                <?= $escaper->escapeHtml(__('Back to Cart')) ?>
+            </a>
+        </div>
+
+        <?php if ($contact->isAvailable()): ?>
+            <p class="text-sm text-muted">
+                <a href="<?= $escaper->escapeUrl($contact->getUrl()) ?>"
+                   class="font-semibold text-primary hover:text-primary-hover underline">
+                    <?= $escaper->escapeHtml(__('Contact us')) ?>
+                </a>
+            </p>
+        <?php endif; ?>
+    </div>
+</div>

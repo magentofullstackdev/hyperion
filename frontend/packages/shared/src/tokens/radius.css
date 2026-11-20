@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+
+/*
+ * @magentofullstackdev/hyperion-shared -- corner radius tokens.
+ *
+ * Two radii shared by the storefront and the checkout: one for controls
+ * (inputs, selects, buttons, option rows) and one for cards. The Tailwind
+ * preset maps them to `rounded-control` and `rounded-card`. Override in a
+ * child theme's `_theme.css` to change both builds at once.
+ */
+:root {
+    --radius-control: 0.5rem;
+    --radius-card: 0.75rem;
+}

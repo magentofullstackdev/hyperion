@@ -6,6 +6,159 @@ All notable changes to Hyperion are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0-beta.6] - 2026-11-20
+
+A checkout and cart release: the Lit checkout sends every change of the cart through one queue that Place Order waits for, every kind of failure has a translated message and a way out, typed input survives a reload or a sign-in, reCAPTCHA and the image CAPTCHA work on every form of the checkout, and the cart shows what the quote really contains. Read the upgrade notes at the end of this section before you update.
+
+### Added
+
+**Checkout flow**
+- One serialized queue for every request that changes the cart (shipping information, billing address, payment method, coupon, gift message): one request at a time, in order, a waiting request replaced by a newer one of the same kind. Place Order empties the queue, lets the payment method do its step on the settled totals and sends the order with the queue closed.
+- The checkout starts from what the cart already holds. When the cart has a shipping address and a method, the page is rendered with its rates, payment methods and applied method (`checkoutConfig.hyperion.initial`): a returning shopper, or a reload in the middle of the checkout, needs no request before Place Order is usable. The full rate list is read once in the background after the first paint.
+- Store setting "Address fields that change shipping rates" (`hyperion_checkout/shipping/rate_fields`): the carriers are asked again only when one of these fields changes; an edit of a name or a telephone number saves the address without a rate request.
+- Store setting "Preselected shipping method" (`hyperion_checkout/shipping/preselect`): the cheapest method, the first one listed, or none.
+- The payment method is saved on the cart when the shopper selects it, so a cart price rule on the payment method shows in the totals before the order.
+- A shipping method click shows the expected totals at once and the confirmed ones when the store answers.
+- Applying or removing a coupon in the checkout reads the shipping rates again (a coupon can make shipping free) and the applied coupon follows what the store's totals say.
+- A notice under the total names the amount charged in the base currency when the display currency differs.
+
+**Errors and recovery**
+- Every failed request is classified in one place and has one translated message and one recovery: offline, store unreachable, timeout, expired session, cart changed or expired, too many requests, store unavailable, request blocked, stock, CAPTCHA, a value the store refused. The table is in [Checkout](./docs/checkout.md#errors-and-recovery).
+- Messages appear in the section they belong to (shipping, payment, coupon, gift message, order) with "Try again" where it helps, and never take the keyboard focus out of a field for something the checkout did on its own.
+- Every request has a time limit (15 seconds for a read, 20 for a save, 60 for the order). A read, and a save that can be sent again without harm, are repeated automatically after a connection failure or a timeout before the failure is shown; the order request never is.
+- Offline: the checkout says so and, when the connection is back, sends the saves that failed without a click.
+- Too many requests (HTTP 429): the wait the store asked for is shown; a request the checkout made on its own is sent again once after it.
+- Expired customer session: a dialog with "Sign in again"; the typed address is back after the sign-in.
+- A cart that no longer exists (ordered in another tab, removed): the checkout stops, finds out whether an order exists and either moves on or offers "Return to cart".
+- Lost answer to the order (the cart read that tells "placed" from "not placed" exists since 0.9.0-beta.5): the overlay says "Confirming your order..." while the cart is read; after a timeout, a proxy error or core's "cart is locked" the cart is read again for a while before the order counts as not placed; an outcome that cannot be read keeps Place Order locked and offers "Check again", with further reads on a timer and when the connection comes back. A wallet whose own endpoint loses its answer (PayPal Express) goes through the same check.
+- Typed input is kept in the browser tab (`sessionStorage`) and restored after a reload, a sign-in or an expired session: email of a guest, addresses, selected methods, an unsent coupon code and gift message. Never a password, payment data or a CAPTCHA answer; cleared after the order and after 60 minutes. Store setting "Keep Typed Checkout Data in the Browser" (`hyperion_checkout/general/persist_drafts`, on by default). Privacy notes: [Checkout](./docs/checkout.md#drafts-typed-data-kept-in-the-browser).
+
+**Layout and accessibility**
+- The checkout page is rendered on the server as a skeleton with the geometry of the application, the head preloads the entry module and its application chunk, and every field reserves the line of its message: mounting the application and showing an error do not move the page.
+- Phone layout: the order summary is a bar at the top with the number of items and the grand total, which opens to the items, the coupon form and the totals; the total is repeated beside Place Order.
+- The Place Order label carries the amount once the totals are settled.
+- A press on Place Order with something missing shows the errors of every form, names the first missing piece in one hint line and moves the focus to the first invalid field.
+- Address form: the fields in the order of a postal address with the browser autofill attributes, a state required for the countries of `general/region/state_required` and shown for the others only with `general/region/display_all`, the countries of `general/country/destinations` first in the list.
+- Customers: a customer without saved addresses gets the form with "Save in address book"; a saved address that is incomplete can be edited in place; "Cancel" returns to the previously selected address.
+- Shipping methods: a text for an address without any rate ("No shipping method is available for this address..."), prices including, excluding or both as `tax/display/shipping` says, "Free" for a zero rate, placeholders of the final height while rates load.
+- Payment methods: a message when the store offers none for the order.
+- Agreements open in a dialog ("Read the terms"), and an unticked one is marked when Place Order is pressed.
+- The summary links back to the cart ("Edit cart").
+- Gift messages typed in the checkout are saved before the order and survive a reload.
+- `/checkout/` is part of the layout shift check (`pw-cls.mjs`, as a flow) and of the accessibility check (`pw-a11y.mjs`, two scans).
+
+**CAPTCHA and reCAPTCHA**
+- reCAPTCHA v3, v2 invisible and v2 checkbox for the four forms the checkout can meet: `place_order`, `coupon_code`, `customer_login` and the `braintree` form of the Braintree module. Before, the checkout ran the v3 flow for `place_order` only.
+- Magento's image CAPTCHA in the checkout for the forms Login (inline sign-in), Applying coupon code and Checkout/Placing Order, shown while Magento requires an answer, with a new image after every attempt.
+- The image CAPTCHA on the coupon form of the cart page.
+- `<hyperion-captcha>`: the theme's element for Magento's image CAPTCHA (reload button without RequireJS, image dimensions, case sensitivity note), used by `Magento_Captcha::default.phtml`.
+- A styled checkout failure page (`checkout/onepage/failure`): the heading, the order number, the gateway's message when there is one, links to the cart, the store and the contact page.
+
+**Cart and totals**
+- The cart summary lists the totals the quote really collected, in the order of `sales/totals_sort/*`: a total of a third party module prints as a row with its title and value, in the cart and in the checkout summary. Own rows are registered per total code (`Model\Cart\TotalRowPool`).
+- A payment method its gateway module marks as not presentable (`payment.<code>.isVisible` false in the checkout configuration, such as Payment Services before the merchant onboarding) is not listed. The same holds for a Braintree method that is active without a client token (credentials missing or refused): the row no longer shows for a moment and then goes.
+- A refused CAPTCHA word at Place Order shows at the CAPTCHA field also on platforms that answer it with HTTP 429 (Mage-OS 4.0).
+- At a zero grand total the checkout offers only the `free` method; a background refresh of the shipping rates never reorders the rows on screen; a payment row keeps its height while its gateway module loads.
+- The checkout summary follows `sales/totals_sort/*` like the cart (`checkoutConfig.hyperion.totalsSort`), and a CAPTCHA refusal of a coupon shows at the CAPTCHA field, not at the code field.
+- Minimum order amount and quote errors in the cart: the summary card states the reason, the checkout links of the cart and of the mini-cart are disabled, the express buttons are left out, and a quantity or coupon change that crosses the amount updates the state without a reload. A direct visit to `/checkout` comes back with the reason; inside the checkout a coupon that takes the total below the amount closes Place Order with the reason.
+- Quantities update by themselves: a change posts the cart after a short pause (one request for a burst, a newer change replaces the one in flight), with minus / plus buttons and the focus kept on the edited line. "Update Cart" stays as the fallback without JavaScript.
+- On a phone a bar with the grand total and the checkout link stays at the bottom of the screen while the cart is in view.
+- A refused coupon code keeps the form open with the code in the field and the message under it.
+- "Estimate Shipping and Tax" is rate limited per client (`hyperion/security/cart_estimate_limit`, 10 requests per 10 seconds by default).
+- Fixed Product Tax on the product page and in the listings: the FPT lines and the final price of the four display modes (`tax/weee/display`, `tax/weee/display_list`) are styled under the amount.
+
+**Braintree and PayPal**
+- Stored Payment Methods lists the PayPal, Venmo and ACH Direct Debit accounts stored through Braintree, with their delete action, without RequireJS markup.
+- PayPal Express: the billing agreement checkbox for a logged-in customer when the store asks for it, in the in-context and in the redirect flow.
+- Braintree PayPal: the PayPal script is loaded with the page type, the locale and the Content Security Policy nonce the Braintree module provides.
+
+**Platform**
+- A gateway authorization is voided when the order fails after it. When core's order submission fails once the payment is authorized and the order could not be saved, nothing released the authorization: it stayed open at the gateway until it expired, and the shopper's next attempt created a second one. An observer of `sales_model_service_quote_submit_failure` (`HyperionCheckout\Observer\VoidPaymentOnSubmitFailureObserver`) now asks the payment method to void it, for any gateway method that supports a void (Braintree card, stored card, PayPal and Google Pay among them; Adobe Payment Services methods are left to that module, which does it itself), and logs the outcome. It never voids when the order was saved or when the payment was already captured (a warning is logged instead), and it never replaces the original error ([Checkout](./docs/checkout.md#order-safety)).
+- "Proceed to Checkout" in the cart summary, the phone bar and the mini-cart shows a busy state (`aria-busy`, a spinner over the label, same size) from the click until the checkout page arrives; Back restores the link.
+- Magento's HTML minification (`dev/template/minify_html`) is supported.
+- End-to-end scripts `pw-checkout-resilience.mjs`, `pw-checkout-flow.mjs` and `pw-captcha.mjs`, new options of `pw-cls.mjs`, `pw-a11y.mjs` and `pw-cart-features.mjs`, and seven new fixtures ([Development](./docs/development.md#end-to-end-suite)).
+- `@magentofullstackdev/hyperion-shared` exports `./captcha` (the base class of the image CAPTCHA element) and the radius tokens `--radius-control` / `--radius-card`, which the theme and the checkout share.
+
+### Changed
+- `HyperionCheckout\Controller\Index\Index` extends core's checkout controller and lets it run: core's guards, its checkout initialization and the plugins of other modules on `Magento\Checkout\Controller\Index\Index` apply. The layout handle of the Lit checkout is added by an observer of `layout_load_before`.
+- Shipping method preselection: the cheapest rate by default (was the first available one); a single offered rate is always selected.
+- Inline sign-in: an email that belongs to an account shows a notice with a "Sign in" control under the field, and the password form opens on a click (it used to open by itself when the answer arrived, moving the page). The form has a "Forgot your password?" link. The availability check runs once per value and never when "Enable Guest Checkout Login" is off.
+- Checkout failures are shown in their section instead of the banner at the top; the banner is left for an order the store refused.
+- An order whose outcome is unknown keeps Place Order locked and offers "Check again" (the next press used to read the cart).
+- `checkoutConfig.hyperion.recaptcha` (one entry per protected form) replaces `checkoutConfig.recaptcha_for_place_order`; `checkoutConfig.hyperion.captcha` describes the image CAPTCHA forms.
+- Cart: the discount row names the discount with the description core builds from the price rules (their labels, or the coupon code). Core's cart messages block (`checkout.cart.validationmessages`) is removed; the summary card states the same reasons.
+- Cart estimator: a logged-in customer's default address rates are collected when the panel is opened, not on every cart page load.
+- `CartData::getItems()`: `options` is a list of label / value pairs (two options with the same label are both kept), `product_url` follows core's cart rule and can be empty, and the thumbnail follows `checkout/cart/configurable_product_image` and `grouped_product_image`.
+- Braintree: the web SDK is 3.123.1, the version the Braintree module 4.8 pins; PayPal line items and the Google Pay display items are built in the base currency, the one the gateway charges, and are left out when they would not add up to the total.
+- Wallets (PayPal Express, Braintree PayPal, Google Pay) put every pending edit on the cart before they start; the PayPal buttons wait for it inside the click.
+- Checkout visuals follow the theme: one card radius and one control radius from shared tokens, the theme's heading scale, the select chevron.
+- The checkout renders no second `main` landmark; the overlay makes the page inert while an order is processed.
+- Inline scripts of the templates are built from single-line strings instead of heredoc / nowdoc blocks.
+- `module-hyperion-checkout` requires `magento/module-captcha`.
+- The cart, the mini-cart and the order summary of the checkout show the image of the selected variant of a configurable product (the checkout summary now takes the image core computes for the line; it used the parent's thumbnail): `module-hyperion-checkout` sets the default of core's "Configurable Product Image" (`checkout/cart/configurable_product_image`) to "Product Thumbnail Itself" (core's default is the parent's image). A variant without an image of its own still shows the parent's. The module requires `magento/module-configurable-product` for it.
+- `fixtures/weee-demo.php` no longer writes configuration; `pw-cart-features.mjs --with-fpt` sets `tax/weee/*` for its run and restores it.
+
+### Fixed
+
+**Checkout flow**
+- With a billing address different from the shipping one, a shipping method change or an address correction made before the billing form was complete left the cart without the confirmed method, and Place Order stayed closed. On a physical cart the billing address travels with the shipping information, in one request; ticking "same as shipping" again sends the copy.
+- A reload replaced a logged-in customer's chosen address (a saved address that is not the default) with the default one and saved it. The addresses of the cart win.
+- A reload lost a partially typed address, an email typed before the address was complete, the selected payment method, an open coupon code and unsaved gift messages.
+- A state that the country requires was not part of the "address is complete" rule: the form looked complete and the store refused the save.
+- With "same as shipping" unticked the two address forms shared field ids, so labels and error messages pointed at the first form.
+- A coupon the store dropped kept its "applied" card.
+- At a zero total (a 100 percent coupon) every payment method stayed selectable although the store only accepts the free one. Only `free` is listed then, when the store offers it.
+
+**Errors and recovery**
+- A request without an answer waited forever: only the order request had a time limit.
+- A raw transport text of the browser ("Failed to fetch") or a data model phrase of core ("No such entity with cartId") could reach the shopper.
+- A failed background save showed in the banner at the top, far from the field, and was repeated only by another edit.
+- An expired session or a cart ordered in another tab ended in an error message with no way forward.
+
+**CAPTCHA and reCAPTCHA**
+- With reCAPTCHA enabled for the coupon or the customer login, or with a v2 type (invisible or checkbox) for Place Order, the checkout sent no token for that request.
+- With the Braintree module's own reCAPTCHA form (`braintree`) enabled, a Braintree card order carried no token and the store refused it.
+- When another form of the page (the footer newsletter) had loaded Google's script first, for another key or type, the v3 token of Place Order could not be minted and Google's raw error text was shown. The token then comes from a widget rendered with the right key.
+- With the image CAPTCHA required for the login, the coupon or the order, the checkout had no field for the code.
+
+**Cart and totals**
+- The cart summary printed a fixed set of rows from quote fields: a total added by another module was missing and the rows could differ from the order of the store's totals.
+- Below the minimum order amount the cart offered the checkout, which sent the shopper back without saying why.
+- A cart line of a grouped product's child, or of a product that is not visible in the store, linked to a product page that answers 404. The child links to its parent, the other has no link.
+- Two options of a cart line with the same label showed as one; a file option prints the value core formats for it.
+- A value that is not valid UTF-8 in the checkout configuration (an address field) made the checkout page fail; it is substituted, and a remaining failure is logged with the configuration key that caused it.
+- A refused coupon code closed the form and emptied the field.
+- A change of a quantity in the cart did nothing until "Update Cart" was pressed, and on a phone the checkout link sat far below the first screen.
+- "Estimate Shipping and Tax" was offered on a virtual cart, where it has nothing to estimate.
+
+**Braintree and PayPal**
+- Braintree PayPal: an approval stayed valid after the shipping address changed. It is bound to the amount and the address PayPal was shown, and a change asks for a new authorization.
+- Braintree stored cards: the CVV re-verification request uses the URL the module provides when it emits one. A card stored through Google Pay is ordered without a CVV step, as the module's own script does.
+- A change of the payment method list no longer tears down and rebuilds the Braintree hosted fields of the selected card.
+- Checkout page with Braintree active: every active Braintree method asked the gateway for its own client token while the page was rendered, one remote call after the other (about one second for card, PayPal and Google Pay on a sandbox). The token is now requested once per page and kept in the application cache for 30 minutes per store and merchant account (`HyperionCheckout\Plugin\Braintree\ClientTokenCachePlugin`, frontend area); a token asked for a customer is never stored. On the reference install the checkout page answers in about 0.2 s instead of 1.1 to 1.5 s.
+- Checkout page with Braintree PayPal active: the Braintree module read its PayPal icon through an HTTP request to the store's own public URL to learn its size, which waits for seconds or fails with a PHP `TypeError` where the server cannot reach that URL (containers, firewalls, self-signed certificates). The icon is read from the module's files (`HyperionCheckout\Plugin\Braintree\PayPalIconPlugin`, frontend area).
+- Storefront PayPal placements: a PayPal script that loaded without defining `paypal` (a blocked or truncated response) was cached as loaded; the next interaction requests it again.
+
+### Upgrade notes
+1. **Commands.** `composer update "magentofullstackdev/*"`, `bin/magento setup:upgrade`, `bin/magento setup:di:compile` (new classes, an observer, constructor signatures changed; without the compile the storefront answers an error), `bin/magento setup:static-content:deploy -f`, `bin/magento cache:flush`. No new database table, no VCL change.
+2. **New dependency.** `module-hyperion-checkout` requires `magento/module-captcha` and sequences on `Magento_Captcha`. It also requires `magento/module-configurable-product` and sequences on `Magento_ConfigurableProduct` (see the note on the configurable product image below). A project that removed or disabled one of these core modules must restore it.
+3. **New store settings** (Stores > Configuration > Hyperion Theme > Checkout), with their defaults: "Keep Typed Checkout Data in the Browser" (`hyperion_checkout/general/persist_drafts`, Yes), "Address fields that change shipping rates" (`hyperion_checkout/shipping/rate_fields`, country, state and postcode), "Preselected shipping method" (`hyperion_checkout/shipping/preselect`, the cheapest method). In Hyperion Theme > Anti-Abuse Shield: "Cart Estimate Requests per 10 Seconds" (`hyperion/security/cart_estimate_limit`, 10).
+4. **Shipping preselection changed.** The cheapest rate is preselected instead of the first one listed. Set `hyperion_checkout/shipping/preselect` to `first` to keep the previous behavior, or to `none` to make the shopper choose.
+5. **Drafts and privacy.** With the default setting the checkout keeps typed data (addresses, a guest's email) in the `sessionStorage` of the browser tab. Review your privacy notice, or set `hyperion_checkout/general/persist_drafts` to 0.
+6. **Checkout controller.** `HyperionCheckout\Controller\Index\Index` now extends core's controller, so plugins on `Magento\Checkout\Controller\Index\Index` run on Hyperion stores, and core's checkout initialization runs on every visit of `/checkout`. The Hyperion layout handle (`hyperion_checkout_index`) comes from an observer of `layout_load_before`, after the page's own handles; a customization that added or tested the handle in the action must follow.
+7. **`checkoutConfig`.** `checkoutConfig.recaptcha_for_place_order` is no longer read: custom code must read `checkoutConfig.hyperion.recaptcha.place_order` (`type` is `v3`, `v2-invisible` or `v2-checkbox`; the key is absent when no form is protected).
+8. **Custom payment renderers.** A renderer must not write to the cart on its own: the order pipeline is `prepareOrder()`, the renderer's `beforePlaceOrder`, `submitOrder()`, and a renderer that owns Place Order calls `prepareCheckout()` from its click. New optional members: `recaptchaAction` and `savesOnSelection` ([Checkout](./docs/checkout.md#writing-a-payment-renderer)). Checkout failures are section statuses now; code that read every error from the global banner must read `failureMessage()` as well.
+9. **Child themes that override cart templates.** `CartData::getItems()` returns `options` as a list of `['label' => ..., 'value' => ...]` pairs (it was a map by label): update the loop of an overridden `cart/items.phtml` or `minicart/fragment.phtml`. `product_url` may be an empty string: print the name without a link then. The quantity fields live in the new `cart/item/qty.phtml`, the cart form posts on a change of a `data-hyperion-qty` field, and the summary card prints the rows of `Block\Cart\Totals` (an overridden `cart/totals.phtml` that builds its own rows misses third party totals and the minimum order state).
+10. **Cart layout.** The core block `checkout.cart.validationmessages` is removed on the cart page (the summary card shows the reasons). The image CAPTCHA block of the coupon form is declared in `checkout_cart_index.xml` and in the HTMX fragment handle `hyperion_checkout_cart_fragment`; a child theme that overrides one must keep the two in sync.
+11. **Discount row.** The cart discount row shows the description of the price rules (their labels) where it showed the coupon code only. Give your cart price rules a label if you do not want the coupon code shown as the fallback.
+12. **Inline sign-in.** The password form opens on a click on "Sign in" under the email field. Automated tests that waited for the password field after typing an email must click `[data-hyperion-login-open]` first.
+13. **HTML minification** (`dev/template/minify_html`) is now supported and may be switched on; redeploy the static content and flush the cache after switching it. A child theme template with a heredoc or nowdoc block still breaks under it.
+14. **Caches.** Flush the full page cache and the block cache after the upgrade: the cart markup, the checkout page and the head output of the checkout changed.
+15. **Translations.** The checkout gained 45 strings and five were reworded; the thirteen shipped locales carry them. A merchant CSV or language pack that translated the reworded English texts needs the new source strings (compare `HyperionCheckout/i18n/en_US.csv`).
+16. **Configurable product image in the cart.** The default of Stores > Configuration > Sales > Checkout > Shopping Cart > "Configurable Product Image" (`checkout/cart/configurable_product_image`) is now "Product Thumbnail Itself": the cart, the mini-cart and the checkout summary show the selected variant's image. A store that saved a value keeps it; a store that relied on the core default and wants the parent's image back sets it to "Parent Product Thumbnail".
+17. **Braintree.** With the `PayPal_Braintree` module installed, two plugins run in the frontend area: the client token of the checkout page is cached for 30 minutes (per store, environment, merchant and public key, so a credentials change asks for a new token; `bin/magento cache:clean config` drops every stored one), and the PayPal icon is read from the module's files. Nothing to configure.
+18. **Failed orders and open authorizations.** When the order submission fails after the gateway authorized the payment and the order was not saved, the authorization is voided (see Added). The outcome is in `var/log/system.log`; an error line, or a warning that says the transaction was left at the gateway, names a transaction to look at in the gateway's console (a warning about an order that was saved leaves the order to the payment module).
+
 ## [0.9.0-beta.5] - 2026-11-12
 
 A correctness release: listings, the checkout's order safety, cart prices under tax display settings, the mega menu admin and the sample data module. Read the upgrade notes at the end of this section before you update.
@@ -385,7 +538,8 @@ First public beta. See the README for supported Magento versions and
   with an allowlist, htmx runs without eval or script tags.
 - Frontend toolchain: Vite 6.4.5, Vitest 3.2.7, happy-dom 21, jsdom 30 and `pnpm.overrides` for `source-map-js`, `postcss-selector-parser`, `tinypool` and `minimatch` 9 take the workspace from 5 critical and 7 high advisories to none (`pnpm audit --prod` is clean; the three moderate ones left are in the Vitest runner, not in any shipped asset). The `hyperion create` scaffold pins the same Vite and writes the same overrides (`overrides` for npm, `pnpm.overrides` for pnpm), so a new child theme audits clean too; the root `frontend/package.json` scripts run through `pnpm -r` and `pnpm --filter`.
 
-[Unreleased]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.5...HEAD
+[Unreleased]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.6...HEAD
+[0.9.0-beta.6]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.5...v0.9.0-beta.6
 [0.9.0-beta.5]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.4...v0.9.0-beta.5
 [0.9.0-beta.4]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.3...v0.9.0-beta.4
 [0.9.0-beta.3]: https://github.com/magentofullstackdev/hyperion/compare/v0.9.0-beta.2...v0.9.0-beta.3

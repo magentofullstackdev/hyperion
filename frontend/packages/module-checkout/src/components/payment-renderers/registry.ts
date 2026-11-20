@@ -30,6 +30,11 @@
  *     placed elsewhere (redirect gateways). Resolves with the same-origin
  *     URL the shopper continues on, or null when it failed and already
  *     reported why in `globalError`. `beforePlaceOrder` still runs first.
+ *   - `recaptchaAction`: optional, which reCAPTCHA form protects the
+ *     order request of this method; null for none. Without it the place
+ *     order form applies.
+ *   - `savesOnSelection`: optional, false when the method must not be
+ *     saved on the quote at the moment the shopper selects it.
  *
  * Shipped renderers: the offline methods (`payment-offline`), Braintree
  * cards (`braintree`), Braintree PayPal (`braintree_paypal`), Braintree
@@ -41,6 +46,7 @@
  * a code is neither registered nor in the safe-for-generic allowlist,
  * the UI shows a "not yet supported" banner and disables selection.
  */
+import type { RecaptchaAction } from '../../types/captcha.js';
 import type { PaymentMethodConfig } from '../../types/payment.js';
 
 export interface PaymentRenderer {
@@ -53,6 +59,8 @@ export interface PaymentRenderer {
     afterPlaceOrderFailed?: () => void;
     ownsPlaceOrder?: () => boolean;
     placeOrder?: () => Promise<string | null>;
+    recaptchaAction?: () => RecaptchaAction | null;
+    savesOnSelection?: boolean;
 }
 
 const registry = new Map<string, PaymentRenderer>();
@@ -81,6 +89,9 @@ const SAFE_FOR_GENERIC: ReadonlySet<string> = new Set([
     'cashondelivery',
     'free',
 ]);
+
+/** The allowlist as a list, for the code that mirrors it outside the bundle. */
+export const SAFE_FOR_GENERIC_CODES: readonly string[] = [...SAFE_FOR_GENERIC];
 
 export function isSafeForGeneric(code: string): boolean {
     return SAFE_FOR_GENERIC.has(code);

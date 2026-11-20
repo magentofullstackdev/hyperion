@@ -1,0 +1,31 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Head of the checkout page: the checkout stylesheet and a preload for every
+ * module chunk the first render needs.
+ *
+ * In the head the stylesheet is fetched while the body is still arriving and
+ * applies before the application mounts; the preloads start the chunks the
+ * entry would otherwise only discover after it ran (the application chunk is
+ * a dynamic import, the locale catalog another). The entry module itself is
+ * the script at the end of checkout.phtml.
+ *
+ * The parts only some stores show (gift options, terms to accept, the
+ * image CAPTCHA field) are chunks of their own: they are preloaded when the store's settings turn
+ * them on, the condition the entry imports them on.
+ *
+ * Nothing here depends on the session.
+ *
+ * @var \Magentofullstackdev\HyperionCheckout\Block\Checkout $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$crossOrigin = $block->isStaticCrossOrigin();
+$sections = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CheckoutSkeleton::class)
+    ->getOptionalSections();
+?>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getStylesUrl()) ?>" data-hyperion-checkout-css>
+<?php foreach ($block->getPreloadUrls($sections) as $preloadUrl): ?>
+<link rel="modulepreload" href="<?= $escaper->escapeUrl($preloadUrl) ?>"<?= $crossOrigin ? ' crossorigin' : '' ?>>
+<?php endforeach; ?>

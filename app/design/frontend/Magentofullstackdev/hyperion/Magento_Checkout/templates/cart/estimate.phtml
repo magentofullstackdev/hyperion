@@ -13,6 +13,15 @@ declare(strict_types=1);
  * radio submits at once; the Estimate button submits the destination.
  * A rate the carrier answered with an error is a line of text (carrier and
  * message) without a radio or a price.
+ *
+ * The page never asks the carriers. A logged-in customer whose quote has no
+ * destination yet gets the rates of the default shipping address when the
+ * panel is opened: the rates slot then carries an `hx-get` to the same
+ * controller (`prefill=1`), fired once by the panel's `toggle` event, and
+ * takes the content of the answer's slot. The slot element itself stays:
+ * the form listens for the radios' `change` on it, and htmx resolves that
+ * listener once, so radios that arrive later still submit. The answer
+ * (block data `prefilled`) never carries the request again.
  * Without JavaScript the same form posts and the controller redirects back.
  *
  * @var \Magento\Framework\View\Element\Template $block
@@ -42,6 +51,8 @@ $optionalRegionAllowed = $addressForm->isOptionalRegionAllowed();
 $regionRequired = in_array($countryId, $requiredCountries, true);
 $regionFieldHidden = $regionsForCountry !== [] && !$regionRequired && !$optionalRegionAllowed;
 $open = $cartData->hasEstimate();
+$prefilled = (bool) $block->getData('prefilled');
+$lazyRates = !$prefilled && $rates === [] && $cartData->canPrefillShippingRates();
 $inputClass = 'w-full px-3 py-2 border border-subtle rounded-lg bg-surface text-sm text-secondary '
     . 'focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary';
 $labelClass = 'block text-xs font-medium text-muted mb-1';
@@ -64,7 +75,7 @@ $labelClass = 'block text-xs font-medium text-muted mb-1';
           hx-post="<?= $escaper->escapeUrl($block->getUrl('hyperion/cart/estimate')) ?>"
           hx-target="#hyperion-cart-items"
           hx-swap="outerHTML"
-          hx-trigger="submit, change from:[name=estimate_method]"
+          hx-trigger="submit, change from:find [data-hyperion-cart-estimate-rates-slot]"
           class="px-3 pb-3 space-y-3"
           data-hyperion-cart-estimate-form>
         <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
@@ -139,6 +150,15 @@ $labelClass = 'block text-xs font-medium text-muted mb-1';
             <?= $escaper->escapeHtml(__('Estimate')) ?>
         </button>
 
+        <div data-hyperion-cart-estimate-rates-slot
+             <?php if ($lazyRates): ?>
+                 data-hyperion-cart-estimate-lazy
+                 hx-get="<?= $escaper->escapeUrl($block->getUrl('hyperion/cart/estimate', ['_query' => ['prefill' => 1]])) ?>"
+                 hx-trigger="toggle from:closest details once"
+                 hx-target="this"
+                 hx-select="[data-hyperion-cart-estimate-rates-slot] > *"
+                 hx-swap="innerHTML"
+             <?php endif; ?>>
         <?php if ($rates !== []): ?>
             <fieldset class="space-y-2 pt-2 border-t border-subtle" data-hyperion-cart-estimate-rates>
                 <legend class="text-xs font-medium text-muted pt-2">
@@ -179,10 +199,11 @@ $labelClass = 'block text-xs font-medium text-muted mb-1';
                     </p>
                 <?php endif; ?>
             </fieldset>
-        <?php elseif ($countryId !== '' && $estimate['postcode'] !== ''): ?>
+        <?php elseif (!$lazyRates && $countryId !== '' && $estimate['postcode'] !== ''): ?>
             <p class="text-xs text-muted" data-hyperion-cart-estimate-empty>
                 <?= $escaper->escapeHtml(__('Sorry, no quotes are available for this order at this time.')) ?>
             </p>
         <?php endif; ?>
+        </div>
     </form>
 </details>

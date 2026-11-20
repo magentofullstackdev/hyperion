@@ -119,11 +119,13 @@ export class HyperionMiniCart extends LitElement {
     static properties = {
         count: { type: Number, reflect: true },
         triggerLabel: { type: String, attribute: 'trigger-label' },
+        triggerCountLabel: { type: String, attribute: 'trigger-count-label' },
         emptyMessage: { type: String, attribute: 'empty-message' },
         closeLabel: { type: String, attribute: 'close-label' },
         fragmentUrl: { type: String, attribute: 'fragment-url' },
         triggerUrl: { type: String, attribute: 'trigger-url' },
         removeConfirm: { type: String, attribute: 'remove-confirm' },
+        _countText: { state: true },
         _open: { state: true },
         _loading: { state: true },
         _bodyHtml: { state: true },
@@ -265,6 +267,9 @@ export class HyperionMiniCart extends LitElement {
         super();
         this.count        = 0;
         this.triggerLabel = '';
+        this.triggerCountLabel = '';
+        // The badge text as printed (a decimal quantity prints "2.5").
+        this._countText   = '';
         this.emptyMessage = '';
         this.closeLabel   = '';
         this.fragmentUrl  = '';
@@ -362,10 +367,28 @@ export class HyperionMiniCart extends LitElement {
     _syncCountFromBadge() {
         const badge = this.querySelector('#hyperion-mini-cart-count');
         if (!badge) return;
-        const next = parseInt((badge.textContent || '').trim(), 10) || 0;
+        const text = (badge.textContent || '').trim();
+        this._countText = text;
+        const next = parseInt(text, 10) || 0;
         if (next === this.count) return;
         this.count = next;
         this._markStale();
+    }
+
+    // The name of the trigger button. The slotted badge shows the count as
+    // visible text inside the button, and a name that leaves visible text out
+    // fails speech input users (axe `label-content-name-mismatch`): while the
+    // badge prints something the name is `trigger-count-label` with the badge
+    // text, exactly as printed, in place of `%1` (appended when the phrase has
+    // no placeholder). An empty cart prints nothing and keeps the plain
+    // `trigger-label`, which is also the start of the name when the template
+    // gives no count phrase.
+    _triggerName() {
+        const shown = this._countText;
+        if (!shown) return this.triggerLabel;
+        const phrase = this.triggerCountLabel;
+        if (!phrase) return `${this.triggerLabel} ${shown}`.trim();
+        return phrase.includes('%1') ? phrase.replace('%1', shown) : `${phrase} ${shown}`;
     }
 
     // A controlled update (quantity change, remove) refetches once itself
@@ -762,7 +785,7 @@ export class HyperionMiniCart extends LitElement {
         return html`
             <button
                 part="trigger"
-                aria-label="${this.triggerLabel}"
+                aria-label="${this._triggerName()}"
                 aria-haspopup="dialog"
                 aria-expanded="${this._open}"
                 aria-controls="hyperion-mini-cart-panel"

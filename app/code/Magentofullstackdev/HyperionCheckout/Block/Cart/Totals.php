@@ -5,8 +5,8 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCheckout\Block\Cart;
 
-use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
 use Magento\Framework\View\Element\Template;
+use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -45,6 +45,27 @@ class Totals extends Template
     public function getRows(): array
     {
         return $this->cartData->getTotalsRows();
+    }
+
+    /**
+     * Why the cart cannot go to the checkout yet (minimum order amount, an
+     * error on the quote), null when it can.
+     *
+     * @return array{reason: string, messages: string[]}|null
+     */
+    public function getCheckoutBlocker(): ?array
+    {
+        return $this->cartData->getCheckoutBlocker();
+    }
+
+    /**
+     * Whether the quote holds nothing to ship: the shipping estimator is not offered then.
+     *
+     * @return bool
+     */
+    public function isVirtual(): bool
+    {
+        return $this->cartData->isVirtual();
     }
 
     public function getCheckoutUrl(): string

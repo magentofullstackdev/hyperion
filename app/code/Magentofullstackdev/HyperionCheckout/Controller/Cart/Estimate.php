@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Controller\Cart;
 
 use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Controller\Result\RawFactory;
@@ -17,6 +18,7 @@ use Magento\Framework\Message\ManagerInterface as MessageManagerInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
+use Magentofullstackdev\HyperionCheckout\Model\Cart\EstimateDestination;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
 use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
@@ -39,12 +41,26 @@ use Psr\Log\LoggerInterface;
  * HTMX requests get the cart fragment (`hyperion_checkout_cart_fragment`)
  * plus the toast out of band, like every other cart mutation; a plain POST
  * redirects back to the cart.
+ *
+ * GET hyperion/cart/estimate?prefill=1 (HTMX only) answers the estimate
+ * panel alone, for a logged-in customer whose quote has no destination yet:
+ * the rates of the default shipping address are collected in memory on the
+ * quote address (core's ShippingMethodManagement does the same for the REST
+ * estimate) and nothing is saved, so the quote keeps no destination until
+ * the shopper picks a rate. The panel asks for it when it is opened; the
+ * cart page itself never collects rates.
+ *
+ * Both verbs count against the `cart_estimate` rate limit group
+ * (etc/frontend/di.xml).
  */
-class Estimate implements HttpPostActionInterface
+class Estimate implements HttpPostActionInterface, HttpGetActionInterface
 {
+    public const PARAM_PREFILL = 'prefill';
+
     private const HTMX_HEADER = 'HX-Request';
     private const CART_HANDLE = 'hyperion_checkout_cart_fragment';
     private const CART_BLOCK = 'hyperion.cart.items';
+    private const ESTIMATE_BLOCK = 'hyperion.cart.estimate';
 
     public function __construct(
         private readonly HttpRequest $request,
@@ -58,12 +74,17 @@ class Estimate implements HttpPostActionInterface
         private readonly MessageCollector $messageCollector,
         private readonly NotificationRenderer $notificationRenderer,
         private readonly FragmentRenderer $fragmentRenderer,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly EstimateDestination $estimateDestination
     ) {
     }
 
     public function execute(): ResultInterface
     {
+        if (!$this->request->isPost()) {
+            return $this->prefill();
+        }
+
         if (!$this->formKeyValidator->validate($this->request)) {
             $this->messageManager->addErrorMessage((string) __('Invalid Form Key. Please refresh the page.'));
             return $this->respond();
@@ -120,6 +141,35 @@ class Estimate implements HttpPostActionInterface
         }
 
         return $this->respond();
+    }
+
+    /**
+     * The estimate panel with the rates of the customer's default shipping
+     * address. Read only: the collection stays in memory. A request that is
+     * not the panel's own (no HTMX header, no `prefill`) goes to the cart.
+     */
+    private function prefill(): ResultInterface
+    {
+        if (!$this->request->getHeader(self::HTMX_HEADER) || !$this->request->getParam(self::PARAM_PREFILL)) {
+            return $this->redirectFactory->create()->setPath('checkout/cart');
+        }
+
+        try {
+            $quote = $this->checkoutSession->getQuote();
+            if ($quote->getId() && !$quote->isVirtual()) {
+                $this->estimateDestination->prefill($quote->getShippingAddress());
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('Hyperion cart estimate: prefill failed', ['exception' => $e]);
+        }
+
+        $response = $this->rawFactory->create();
+        $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
+        $response->setContents(
+            $this->fragmentRenderer->render(self::CART_HANDLE, self::ESTIMATE_BLOCK, ['prefilled' => true])
+        );
+
+        return $this->cacheHeaders->applyPrivate($response);
     }
 
     /**

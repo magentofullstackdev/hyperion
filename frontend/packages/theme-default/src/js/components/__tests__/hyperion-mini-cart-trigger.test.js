@@ -100,3 +100,108 @@ describe('<hyperion-mini-cart> slotted trigger link', () => {
         bare.remove();
     });
 });
+
+// The count badge is visible text inside the shadow trigger button, so the
+// button's name has to carry it: the name follows the badge, whichever way
+// the badge changes (text filled in, element replaced, cart emptied).
+describe('<hyperion-mini-cart> trigger name', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    const BADGE = '#hyperion-mini-cart-count';
+    const settle = async (el) => {
+        // The badge observer runs as a microtask, then Lit renders.
+        await new Promise((r) => setTimeout(r, 0));
+        await el.updateComplete;
+    };
+    const nameOf = (el) => el.shadowRoot.querySelector('[part="trigger"]').getAttribute('aria-label');
+    const createCounted = (phrase = 'Shopping cart, items: %1') => {
+        const el = create();
+        if (phrase !== null) el.setAttribute('trigger-count-label', phrase);
+        return el;
+    };
+
+    test('an empty cart keeps the plain label', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        expect(nameOf(el)).toBe('Shopping cart');
+        el.remove();
+    });
+
+    test('a badge filled before the upgrade is in the name from the first render', async () => {
+        spyFetch();
+        const el = createCounted();
+        el.querySelector(BADGE).textContent = '2';
+        await mount(el);
+        await settle(el);
+        expect(nameOf(el)).toBe('Shopping cart, items: 2');
+        expect(nameOf(el)).toContain(el.querySelector(BADGE).textContent);
+        el.remove();
+    });
+
+    test('the name follows a count that arrives after the upgrade', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        el.querySelector(BADGE).textContent = '3';
+        await settle(el);
+        expect(nameOf(el)).toBe('Shopping cart, items: 3');
+        el.remove();
+    });
+
+    test('the name follows a badge replaced as a whole element, and an emptied cart', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        el.querySelector(BADGE).outerHTML = '<span id="hyperion-mini-cart-count">12</span>';
+        await settle(el);
+        expect(nameOf(el)).toBe('Shopping cart, items: 12');
+        el.querySelector(BADGE).outerHTML = '<span id="hyperion-mini-cart-count" class="hidden"></span>';
+        await settle(el);
+        expect(nameOf(el)).toBe('Shopping cart');
+        el.remove();
+    });
+
+    test('a decimal quantity is named as the badge prints it', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        el.querySelector(BADGE).textContent = '2';
+        await settle(el);
+        el.querySelector(BADGE).textContent = '2.5';
+        await settle(el);
+        expect(nameOf(el)).toBe('Shopping cart, items: 2.5');
+        el.remove();
+    });
+
+    test('the dialog keeps the plain label whatever the count', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        el.querySelector(BADGE).textContent = '4';
+        await settle(el);
+        expect(el.shadowRoot.querySelector('[part="panel"]').getAttribute('aria-label')).toBe('Shopping cart');
+        el.remove();
+    });
+
+    test('a phrase without a placeholder, or no phrase at all, still names the count', async () => {
+        spyFetch();
+        const plain = await mount(createCounted('Items in the shopping cart:'));
+        plain.querySelector(BADGE).textContent = '5';
+        await settle(plain);
+        expect(nameOf(plain)).toBe('Items in the shopping cart: 5');
+        plain.remove();
+
+        const none = await mount(createCounted(null));
+        none.querySelector(BADGE).textContent = '6';
+        await settle(none);
+        expect(nameOf(none)).toBe('Shopping cart 6');
+        none.remove();
+    });
+
+    test('the parked link label comes back unchanged when the element leaves the document', async () => {
+        spyFetch();
+        const el = await mount(createCounted());
+        el.querySelector(BADGE).textContent = '7';
+        await settle(el);
+        const link = el.querySelector('#cart-link');
+        el.remove();
+        expect(link.getAttribute('aria-label')).toBe('Shopping cart');
+        expect(link.getAttribute('href')).toBe('/checkout/cart/');
+    });
+});

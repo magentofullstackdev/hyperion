@@ -12,6 +12,7 @@
  * `includeTaxInGrandTotal`-like flags do not apply here.
  */
 import type { CartItem } from '../types/quote.js';
+import { t } from './i18n.js';
 
 export interface WeeeLine {
     title: string;
@@ -37,7 +38,9 @@ export function parseWeeeLines(item: CartItem, inclTax = false): readonly WeeeLi
         const rowAmount = Number(inclTax ? e['row_amount_incl_tax'] ?? e['row_amount'] : e['row_amount']);
         if (!Number.isFinite(rowAmount) || rowAmount <= 0) continue;
         lines.push({
-            title: typeof e['title'] === 'string' && e['title'] !== '' ? e['title'] : 'FPT',
+            title: typeof e['title'] === 'string' && e['title'] !== ''
+                ? e['title']
+                : t('Hyperion_Checkout::fpt_fallback_title'),
             amount: Number.isFinite(amount) ? amount : 0,
             rowAmount,
         });

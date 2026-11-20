@@ -383,7 +383,7 @@ add a second one.
 
 All three are published as source (`src/`, `tailwind.config.ts`, README,
 LICENSE); a TypeScript-aware bundler such as Vite is required. Versions move
-together with the Composer packages (`0.9.0-beta.5`).
+together with the Composer packages (`0.9.0-beta.6`).
 
 | Package | Contents | Exports |
 |---|---|---|

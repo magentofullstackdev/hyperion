@@ -187,6 +187,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
             <?php if ($canPurchase): ?>
             <hyperion-mini-cart
                 trigger-label="<?= $escaper->escapeHtmlAttr(__('Shopping cart')) ?>"
+                trigger-count-label="<?= $escaper->escapeHtmlAttr(__('Shopping cart, items: %1')) ?>"
                 close-label="<?= $escaper->escapeHtmlAttr(__('Close shopping cart')) ?>"
                 empty-message="<?= $escaper->escapeHtmlAttr(__('Your cart is empty.')) ?>"
                 trigger-url="<?= /* @noEscape -- escaped above */ $cartUrl ?>"

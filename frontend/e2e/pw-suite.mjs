@@ -66,6 +66,24 @@ async function toast(page) {
     });
 }
 
+// Every failure message the checkout shows: the banner of a refused order
+// and the status of each section, with the section it belongs to.
+const checkoutErrors = (page) => page.evaluate(() => [
+    ...[...document.querySelectorAll('error-banner')].map((el) => el.innerText),
+    ...[...document.querySelectorAll('hc-section-status')].filter((el) => el.querySelector('[data-section-status]'))
+        .map((el) => `[${el.getAttribute('section')}] ${el.innerText}`),
+].map((text) => text.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' | '));
+
+// A web API request as the call counter prints it: the method and the path,
+// with the store code, the cart id and any query string masked.
+const maskRestCall = (request) => {
+    const path = new URL(request.url()).pathname
+        .replace(/^.*\/rest\/(?:[^/]+\/)?(V\d+\/)/, '/rest/<store>/$1')
+        .replace(/\/guest-carts\/[^/]+/, '/guest-carts/<id>')
+        .replace(/\/carts\/\d+/, '/carts/<id>');
+    return `${request.method()} ${path}`;
+};
+
 // Pages whose <head> carries a RequireJS init script (the theme has no RequireJS to run it).
 const headInitPages = [];
 const headInitCount = (page) => page.evaluate(() => document.head.querySelectorAll('script[type="text/x-magento-init"]').length);
@@ -198,29 +216,50 @@ async function selectSwatches(page) {
         const checkoutHead = { init: await headInitCount(page), sri: await page.evaluate(() => typeof window.sriHashes) };
         check('guest checkout: no RequireJS init script in the head, window.sriHashes undefined', checkoutHead.init === 0 && checkoutHead.sri === 'undefined', JSON.stringify(checkoutHead));
         const fill = async (sel, value) => { const el = page.locator(sel).first(); if (await el.count()) await el.fill(value); };
+        // Key by key, as a shopper does: a value set in one step would hide
+        // the requests a half typed address can start.
+        const type = async (sel, value) => {
+            const el = page.locator(sel).first();
+            if (!(await el.count())) return;
+            await el.click();
+            await el.pressSequentially(value, { delay: 25 });
+        };
         const guestEmail = `suite.${Date.now()}@example.com`;
-        await fill('input[type="email"][name="email"], checkout-email input[type="email"]', guestEmail);
-        await fill('input[name="firstname"]', 'Suite');
-        await fill('input[name="lastname"]', 'Tester');
-        await fill('input[name="street_0"]', '1 Test Street');
-        await fill('input[name="city"]', 'Calder');
-        const country = page.locator('select[name="country_id"]').first();
-        if (await country.count()) await country.selectOption('US');
-        await page.waitForTimeout(600);
-        const region = page.locator('select[name="region_id"]').first();
-        if (await region.count()) await region.selectOption({ label: 'Michigan' }).catch(() => {});
-        await fill('input[name="postcode"]', '49628');
-        await fill('input[name="telephone"]', '5552293326');
+        // The web API requests of a guest address entry, counted from the first
+        // keystroke (email, then the address in the order of the form, the phone
+        // last) until the payment methods show and the network is quiet again.
+        const restCalls = [];
+        const countRestCall = (request) => { if (/\/rest\//.test(new URL(request.url()).pathname)) restCalls.push(maskRestCall(request)); };
+        const paymentRowsBefore = await page.locator('payment-method-row').count();
+        page.on('request', countRestCall);
+        await type('input[type="email"][name="email"], checkout-email input[type="email"]', guestEmail);
+        await type('input[name="firstname"]', 'Suite');
+        await type('input[name="lastname"]', 'Tester');
+        await page.locator('select[name="country_id"]').first().selectOption('US', { timeout: 5000 }).catch(() => {});
+        await type('input[name="street_0"]', '1 Test Street');
+        await type('input[name="postcode"]', '49628');
+        await type('input[name="city"]', 'Calder');
+        await page.locator('select[name="region_id"]').first().selectOption({ label: 'Michigan' }, { timeout: 5000 }).catch(() => {});
+        await type('input[name="telephone"]', '5552293326');
         await page.locator('input[name="telephone"]').first().blur().catch(() => {});
         await page.waitForSelector('shipping-method-row', { timeout: 40000 }).catch(() => {});
         check('guest checkout: shipping methods loaded', await page.locator('shipping-method-row').count() > 0);
         await page.waitForSelector('payment-method-row', { timeout: 40000 }).catch(() => {});
-        check('guest checkout: payment methods loaded', await page.locator('payment-method-row').count() > 0);
+        const paymentRows = await page.locator('payment-method-row').count();
+        check('guest checkout: payment methods loaded', paymentRows > 0);
+        // A late duplicate request belongs to the address entry too.
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(2000);
+        page.off('request', countRestCall);
+        check('guest checkout: an address entry takes at most three web API calls',
+            paymentRowsBefore === 0 && paymentRows > 0 && restCalls.length >= 1 && restCalls.length <= 3,
+            `${restCalls.length} calls: ${restCalls.join(', ')}`);
         await shot(page, 'checkout-guest');
 
-        // A proxy or the origin answers the next shipping save with an HTML 503:
-        // the shopper reads a translated sentence, never the body, and the next
-        // address change saves again.
+        // A proxy or the origin answers the next shipping save with an HTML 503.
+        // A save refused by the server is not repeated by itself: its section
+        // shows a translated sentence, never the body, with a control that
+        // sends the save again; the next address change saves as well.
         const shippingSave = (r) => r.request().method() === 'POST' && r.url().includes('/shipping-information');
         const unavailable = 'The store is temporarily unavailable. Please try again in a moment.';
         j.injected5xx.push('/shipping-information');
@@ -233,10 +272,26 @@ async function selectSwatches(page) {
         await fill('input[name="city"]', 'Calder City');
         await page.locator('input[name="city"]').first().blur().catch(() => {});
         await refused;
-        await page.locator('error-banner').filter({ hasText: unavailable }).first().waitFor({ timeout: 15000 }).catch(() => {});
-        const unavailableBanner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
+        const unavailableStatus = page.locator('hc-section-status:has([data-section-status][data-kind="unavailable"])');
+        await unavailableStatus.first().waitFor({ timeout: 15000 }).catch(() => {});
+        const shown = await page.evaluate(() => {
+            const host = [...document.querySelectorAll('hc-section-status')].find((el) => el.querySelector('[data-section-status][data-kind="unavailable"]'));
+            return {
+                section: host?.getAttribute('section') || '',
+                message: host?.querySelector('p')?.innerText.trim() || '',
+                action: host?.querySelector('button[data-section-status-action]')?.textContent.trim() || '',
+                app: document.querySelector('checkout-app')?.innerText || '',
+            };
+        });
         check('guest checkout: an HTML 503 on the shipping save shows the translated unavailable message',
-            unavailableBanner.includes(unavailable) && !/Backend fetch failed|<h1>/.test(unavailableBanner), unavailableBanner.replace(/\s+/g, ' '));
+            shown.message === unavailable && shown.action !== '' && !/Backend fetch failed|503 Service Unavailable|<h1>/.test(shown.app),
+            JSON.stringify({ section: shown.section, message: shown.message, action: shown.action }));
+        const retried = page.waitForResponse((r) => shippingSave(r) && r.status() === 200, { timeout: 30000 }).catch(() => null);
+        await unavailableStatus.locator('[data-section-status-action]').first().click().catch(() => {});
+        const retriedOk = !!(await retried);
+        await unavailableStatus.first().waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+        check('guest checkout: the control next to the message sends the shipping save again and the message goes',
+            retriedOk && await unavailableStatus.count() === 0, `saved ${retriedOk}; ${await checkoutErrors(page)}`);
         const saved = page.waitForResponse((r) => shippingSave(r) && r.status() === 200, { timeout: 30000 }).catch(() => null);
         await fill('input[name="city"]', 'Calder');
         await page.locator('input[name="city"]').first().blur().catch(() => {});
@@ -253,7 +308,7 @@ async function selectSwatches(page) {
         await page.locator('place-order-button button').click().catch(() => {});
         const pressedAfter = Date.now() - editedAt;
         await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
-        const banner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
+        const banner = await checkoutErrors(page);
         check('guest checkout: order placed', page.url().includes('success'), banner || page.url());
         await shot(page, 'checkout-success');
         const guestOrderNumber = await page.evaluate(() => (document.body.innerText.match(/#\s*(\d{6,})/) || [])[1] || '');
@@ -366,9 +421,9 @@ async function selectSwatches(page) {
             page.on('request', (r) => { if (r.method() === 'POST' && /\/payment-information(\?|$)/.test(r.url())) orderPosts++; });
             await page.locator('place-order-button button').dblclick().catch(() => {});
             await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
-            const banner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
+            const banner = await checkoutErrors(page);
             check('customer checkout: order placed', page.url().includes('success'), banner || page.url());
-            check('customer checkout: a double click on Place Order sends one order and shows no error', page.url().includes('success') && orderPosts === 1 && banner.trim() === '', `${orderPosts} order requests; ${banner.replace(/\s+/g, ' ')}`);
+            check('customer checkout: a double click on Place Order sends one order and shows no error', page.url().includes('success') && orderPosts === 1 && banner.trim() === '', `${orderPosts} order requests; ${banner}`);
         }
     }
     check('customer journey: no RequireJS init script in the head of any visited page', headInitPages.length === 0, headInitPages.join(' '));

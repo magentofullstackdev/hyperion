@@ -7,17 +7,20 @@ import customerFixture from '../../../../fixtures/checkoutConfig.customer.json' 
 import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
 import { configureApiClient, resetApiClientForTests } from '../../../../api/client.js';
 import { setCheckoutConfig } from '../../../../bootstrap-config.js';
-import { initFlowActions, resetFlowActionsForTests } from '../../../../store/flow-actions.js';
+import { draftKey, startDraftPersistence } from '../../../../store/drafts.js';
+import { flowActions, initFlowActions, resetFlowActionsForTests } from '../../../../store/flow-actions.js';
 import { resetFlowSelectorsForTests } from '../../../../store/flow-selectors.js';
 import { createStore, setStoreForTests, type Store } from '../../../../store/index.js';
 import type { Address } from '../../../../types/address.js';
-import type { CheckoutConfig, PaypalExpressConfig } from '../../../../types/config.js';
+import type { CheckoutConfig } from '../../../../types/config.js';
 import type { Totals } from '../../../../types/totals.js';
 import { setActiveCatalogForTests, t } from '../../../../utils/i18n.js';
 import { navigateTo } from '../../../../utils/navigate.js';
 import '../../../place-order-button.js';
+import { prepareCheckout } from '../../checkout-gate.js';
 import { getPaymentRenderer, type PaymentRenderer } from '../../registry.js';
 import { getPaypalExpressConfig } from '../config.js';
+import type { PaypalExpressConfig } from '../../../../types/config.js';
 import {
     PaymentPaypalExpress,
     approvePaypalOrder,
@@ -38,8 +41,8 @@ const SECTION: PaypalExpressConfig = {
     styles: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal' },
     getTokenUrl: `${ORIGIN}/en/paypal/express/getTokenData/`,
     onAuthorizeUrl: `${ORIGIN}/en/paypal/express/onAuthorization/`,
-    onCancelUrl: `${ORIGIN}/en/paypal/express/cancel/`,
     startUrls: { paypal_express: `${ORIGIN}/en/paypal/express/start/` },
+    billingAgreementCode: {},
     markImageUrl: 'https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png',
     whatIsPaypalUrl: 'https://www.paypal.com/us/cgi-bin/webscr?cmd=xpt/Marketing/popup/OLCWhatIsPayPal-outside',
     payLater: {
@@ -81,7 +84,7 @@ function installConfig(section: Partial<PaypalExpressConfig> | null): void {
             ...base.hyperion,
             ...(section === null ? {} : { paypalExpress: { ...SECTION, ...section } }),
         },
-    });
+    } as unknown as CheckoutConfig);
 }
 
 function installStore(code: string): Store {
@@ -170,10 +173,52 @@ function calls(fetchMock: Mock): Array<{ url: string; method: string; body: stri
     }));
 }
 
+interface Answers {
+    save?: () => Response;
+    token?: () => Response;
+    authorize?: () => Response;
+    cart?: () => Response;
+}
+
 describe('<payment-paypal-express>', () => {
     let store: Store;
     let sdk: SdkDouble;
     let fetchMock: Mock;
+
+    /**
+     * Answer by endpoint. A payment save succeeds unless told otherwise, and
+     * any other request of the checkout (a read of the quote after a write)
+     * gets the payment details the quote already has, so the tests do not
+     * depend on how many requests a save takes.
+     */
+    function answer(answers: Answers = {}): void {
+        const config = customerFixture as unknown as CheckoutConfig;
+        fetchMock.mockImplementation(async (input: unknown): Promise<Response> => {
+            const url = String(input);
+            if (url.includes('/set-payment-information')) return (answers.save ?? (() => jsonResponse(true)))();
+            if (url.includes('/getTokenData')) return (answers.token ?? (() => jsonResponse({ success: false })))();
+            if (url.includes('/onAuthorization')) return (answers.authorize ?? (() => jsonResponse({ success: false })))();
+            if (answers.cart && /\/carts\/mine(\?|$)/.test(url)) return answers.cart();
+            return jsonResponse({
+                payment_methods: store.availablePaymentMethods.get(),
+                totals: config.totalsData,
+            });
+        });
+    }
+
+    /** What the write queue answers to a write offered right now. */
+    function offerWrite(): Promise<string> {
+        return flowActions().queue.enqueue({
+            key: 'coupon',
+            section: 'coupon',
+            returnsDetails: false,
+            run: async () => true,
+        }).then((outcome) => outcome.status);
+    }
+
+    function requestsTo(fragment: string): Array<{ url: string; method: string; body: string }> {
+        return calls(fetchMock).filter((request) => request.url.includes(fragment));
+    }
 
     beforeEach(() => {
         setActiveCatalogForTests(enUS);
@@ -189,7 +234,6 @@ describe('<payment-paypal-express>', () => {
             baseUrl: ORIGIN,
             storeCode: 'en',
             readFormKey: () => 'form-key-fixture',
-            readCustomerToken: () => null,
             fetch: fetchMock as unknown as typeof fetch,
         });
         document.cookie = 'form_key=form-key-fixture';
@@ -293,24 +337,24 @@ describe('<payment-paypal-express>', () => {
         });
 
         it('saves the payment information, then asks for the token', async () => {
-            fetchMock
-                .mockResolvedValueOnce(jsonResponse(true))
-                .mockResolvedValueOnce(jsonResponse({ success: true, error_message: '', token: 'EC-TOKEN' }));
+            answer({ token: () => jsonResponse({ success: true, error_message: '', token: 'EC-TOKEN' }) });
             await mountWithButton(sdk);
 
             await expect(sdk.buttons[0]?.createOrder()).resolves.toBe('EC-TOKEN');
 
-            const [save, token] = calls(fetchMock);
+            const [save] = requestsTo('/set-payment-information');
+            const [token] = requestsTo('/getTokenData');
+            const order = calls(fetchMock).map((request) => request.url);
+            expect(order.indexOf(save?.url ?? '')).toBeLessThan(order.indexOf(token?.url ?? ''));
             expect(save?.method).toBe('POST');
             expect(save?.url).toBe(`${ORIGIN}/rest/en/V1/carts/mine/set-payment-information`);
             expect(JSON.parse(save?.body ?? '{}')).toMatchObject({
                 paymentMethod: { method: 'paypal_express' },
                 billingAddress: { city: 'Milano', country_id: 'IT' },
             });
-            expect(token?.method).toBe('GET');
-            const tokenUrl = new URL(token?.url ?? '');
-            expect(tokenUrl.pathname).toBe('/en/paypal/express/getTokenData/');
-            expect(Object.fromEntries(tokenUrl.searchParams)).toEqual({
+            expect(token?.method).toBe('POST');
+            expect(token?.url).toBe(`${ORIGIN}/en/paypal/express/getTokenData/`);
+            expect(Object.fromEntries(new URLSearchParams(token?.body))).toEqual({
                 quote_id: '42',
                 customer_id: '1',
                 form_key: 'form-key-fixture',
@@ -324,16 +368,15 @@ describe('<payment-paypal-express>', () => {
             store.quoteId.set(null);
             store.maskedQuoteId.set('masked-quote-id' as never);
             store.email.set('guest@example.com');
-            fetchMock
-                .mockResolvedValueOnce(jsonResponse(true))
-                .mockResolvedValueOnce(jsonResponse({ success: true, token: 'EC-GUEST' }));
+            answer({ token: () => jsonResponse({ success: true, token: 'EC-GUEST' }) });
 
             await expect(createPaypalOrder()).resolves.toBe('EC-GUEST');
 
-            const [save, token] = calls(fetchMock);
+            const [save] = requestsTo('/set-payment-information');
+            const [token] = requestsTo('/getTokenData');
             expect(save?.url).toBe(`${ORIGIN}/rest/en/V1/guest-carts/masked-quote-id/set-payment-information`);
             expect(JSON.parse(save?.body ?? '{}')).toMatchObject({ email: 'guest@example.com' });
-            expect(new URL(token?.url ?? '').searchParams.get('quote_id')).toBe('masked-quote-id');
+            expect(new URLSearchParams(token?.body).get('quote_id')).toBe('masked-quote-id');
         });
 
         it('refuses the click while the checkout is incomplete', async () => {
@@ -341,7 +384,7 @@ describe('<payment-paypal-express>', () => {
             await mountWithButton(sdk);
             const actions = { resolve: vi.fn(), reject: vi.fn() };
 
-            sdk.buttons[0]?.onClick({ fundingSource: 'paypal' }, actions);
+            await sdk.buttons[0]?.onClick({ fundingSource: 'paypal' }, actions);
 
             expect(actions.reject).toHaveBeenCalled();
             expect(actions.resolve).not.toHaveBeenCalled();
@@ -350,20 +393,86 @@ describe('<payment-paypal-express>', () => {
             expect(fetchMock).not.toHaveBeenCalled();
         });
 
+        it('answers the click only after the pending edits are on the quote', async () => {
+            answer({ token: () => jsonResponse({ success: true, token: 'EC-TOKEN' }) });
+            await mountWithButton(sdk);
+            store.shippingDirty.set(true);
+            const actions = { resolve: vi.fn(), reject: vi.fn() };
+
+            const answered = sdk.buttons[0]?.onClick({ fundingSource: 'paypal' }, actions);
+            expect(actions.resolve).not.toHaveBeenCalled();
+            await answered;
+
+            expect(requestsTo('/shipping-information')).toHaveLength(1);
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(actions.resolve).toHaveBeenCalledTimes(1);
+            expect(actions.reject).not.toHaveBeenCalled();
+            expect(store.isPlacingOrder.get()).toBe(false);
+
+            // The order the SDK creates next needs no second flush.
+            await expect(sdk.buttons[0]?.createOrder()).resolves.toBe('EC-TOKEN');
+            expect(requestsTo('/shipping-information')).toHaveLength(1);
+        });
+
+        it('asks for the token with the write queue closed and opens it again', async () => {
+            let duringToken: Promise<string> | null = null;
+            answer({
+                token: () => {
+                    duringToken = offerWrite();
+                    return jsonResponse({ success: true, token: 'EC-TOKEN' });
+                },
+            });
+
+            await expect(createPaypalOrder()).resolves.toBe('EC-TOKEN');
+
+            await expect(duringToken).resolves.toBe('skipped');
+            await expect(offerWrite()).resolves.toBe('applied');
+            expect(store.isPlacingOrder.get()).toBe(false);
+        });
+
+        it('keeps an edit made while the token is requested for the next flush', async () => {
+            let latched = false;
+            answer({
+                token: () => {
+                    latched = store.isPlacingOrder.get();
+                    store.shippingDirty.set(true);
+                    void flowActions().queue.flush();
+                    return jsonResponse({ success: true, token: 'EC-TOKEN' });
+                },
+            });
+
+            await expect(createPaypalOrder()).resolves.toBe('EC-TOKEN');
+            expect(latched).toBe(true);
+            expect(requestsTo('/shipping-information')).toHaveLength(0);
+
+            await expect(prepareCheckout()).resolves.toBeNull();
+            expect(requestsTo('/shipping-information')).toHaveLength(1);
+            expect(store.shippingDirty.get()).toBe(false);
+        });
+
+        it('opens the write queue again when the token is refused', async () => {
+            answer({ token: () => jsonResponse({ success: false, error_message: 'Refused.' }) });
+
+            await expect(createPaypalOrder()).rejects.toThrow();
+
+            await expect(offerWrite()).resolves.toBe('applied');
+        });
+
         it('stops before the token when the payment information is rejected', async () => {
-            fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'Please accept the agreements.' }, 400));
+            answer({ save: () => jsonResponse({ message: 'Please accept the agreements.' }, 400) });
             await mountWithButton(sdk);
 
             await expect(sdk.buttons[0]?.createOrder()).rejects.toThrow();
 
-            expect(fetchMock).toHaveBeenCalledTimes(1);
+            expect(requestsTo('/set-payment-information')).toHaveLength(1);
+            expect(requestsTo('/getTokenData')).toHaveLength(0);
             expect(store.globalError.get()).toBe('Please accept the agreements.');
         });
 
         it('shows the reason PayPal refused the token, and the SDK error does not replace it', async () => {
-            fetchMock
-                .mockResolvedValueOnce(jsonResponse(true))
-                .mockResolvedValueOnce(jsonResponse({ success: false, error_message: 'PayPal gateway rejected the request.' }));
+            answer({
+                token: () => jsonResponse({ success: false, error_message: 'PayPal gateway rejected the request.' }),
+            });
             await mountWithButton(sdk);
 
             await expect(sdk.buttons[0]?.createOrder()).rejects.toThrow();
@@ -381,15 +490,15 @@ describe('<payment-paypal-express>', () => {
         });
 
         it('hands the approval to the server and follows its redirect', async () => {
-            fetchMock.mockResolvedValueOnce(
-                jsonResponse({ success: true, redirectUrl: `${ORIGIN}/en/checkout/onepage/success/` })
-            );
+            answer({
+                authorize: () => jsonResponse({ success: true, redirectUrl: `${ORIGIN}/en/checkout/onepage/success/` }),
+            });
             await mountWithButton(sdk);
-            sdk.buttons[0]?.onClick({ fundingSource: 'paylater' }, { resolve: vi.fn(), reject: vi.fn() });
+            await sdk.buttons[0]?.onClick({ fundingSource: 'paylater' }, { resolve: vi.fn(), reject: vi.fn() });
 
             await sdk.buttons[0]?.onApprove({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
 
-            const [authorize] = calls(fetchMock);
+            const [authorize] = requestsTo('/onAuthorization');
             expect(authorize?.method).toBe('POST');
             expect(authorize?.url).toBe(SECTION.onAuthorizeUrl);
             expect(Object.fromEntries(new URLSearchParams(authorize?.body))).toEqual({
@@ -400,24 +509,134 @@ describe('<payment-paypal-express>', () => {
             });
             expect(navigateTo).toHaveBeenCalledWith(`${ORIGIN}/en/checkout/onepage/success/`);
             expect(store.isPlacingOrder.get()).toBe(true);
+            await expect(offerWrite()).resolves.toBe('skipped');
+        });
+
+        it('authorizes after the pending edits are saved, with the write queue closed', async () => {
+            let duringAuthorization: Promise<string> | null = null;
+            answer({
+                authorize: () => {
+                    duringAuthorization = offerWrite();
+                    return jsonResponse({ success: true, redirectUrl: `${ORIGIN}/en/checkout/onepage/success/` });
+                },
+            });
+            store.shippingDirty.set(true);
+
+            await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+
+            const order = calls(fetchMock).map((request) => request.url);
+            const save = order.findIndex((url) => url.includes('/shipping-information'));
+            const authorize = order.findIndex((url) => url.includes('/onAuthorization'));
+            expect(save).toBeGreaterThanOrEqual(0);
+            expect(save).toBeLessThan(authorize);
+            await expect(duringAuthorization).resolves.toBe('skipped');
+        });
+
+        it('does not authorize while the checkout is incomplete', async () => {
+            answer({
+                authorize: () => jsonResponse({ success: true, redirectUrl: `${ORIGIN}/en/checkout/onepage/success/` }),
+            });
+            store.email.set('');
+
+            await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+
+            expect(requestsTo('/onAuthorization')).toHaveLength(0);
+            expect(navigateTo).not.toHaveBeenCalled();
+            expect(store.isPlacingOrder.get()).toBe(false);
+            expect(store.globalError.get()).toBe(t('Hyperion_Checkout::checkout_incomplete_email'));
         });
 
         it('keeps the checkout usable when the approval fails', async () => {
-            fetchMock.mockResolvedValueOnce(
-                jsonResponse({ success: false, error_message: 'We can\'t process Express Checkout approval.' })
-            );
+            answer({
+                authorize: () => jsonResponse({
+                    success: false,
+                    error_message: 'We can\'t process Express Checkout approval.',
+                }),
+            });
 
             await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
 
             expect(navigateTo).not.toHaveBeenCalled();
             expect(store.isPlacingOrder.get()).toBe(false);
             expect(store.globalError.get()).toBe('We can\'t process Express Checkout approval.');
+            await expect(offerWrite()).resolves.toBe('applied');
+        });
+
+        it('asks the quote when the approval gets no answer, and leaves for the success page once it is ordered', async () => {
+            answer({
+                authorize: () => { throw new TypeError('Failed to fetch'); },
+                cart: () => jsonResponse({ message: 'No such entity with %fieldName = %fieldValue' }, 404),
+            });
+
+            await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+
+            expect(requestsTo('/onAuthorization')).toHaveLength(1);
+            expect(store.orderPlaced.get()).toBe(true);
+            expect(store.isPlacingOrder.get()).toBe(true);
+            expect(store.globalError.get()).toBeNull();
+            expect(navigateTo).toHaveBeenCalledTimes(1);
+            await expect(offerWrite()).resolves.toBe('skipped');
+        });
+
+        it('reads the quote again for a while after a server error status, which may hide a request still at work', async () => {
+            let reads = 0;
+            answer({
+                authorize: () => jsonResponse('Bad Gateway', 502),
+                cart: () => {
+                    reads += 1;
+                    return reads < 3
+                        ? jsonResponse({ id: 42, is_active: true })
+                        : jsonResponse({ message: 'No such entity with %fieldName = %fieldValue' }, 404);
+                },
+            });
+            vi.useFakeTimers();
+            try {
+                const approval = approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+                await vi.advanceTimersByTimeAsync(15000);
+                await approval;
+            } finally {
+                vi.useRealTimers();
+            }
+
+            expect(reads).toBe(3);
+            expect(store.orderPlaced.get()).toBe(true);
+            expect(navigateTo).toHaveBeenCalledTimes(1);
+        });
+
+        it('gives the checkout back when the quote says the lost approval placed no order', async () => {
+            answer({
+                authorize: () => { throw new TypeError('Failed to fetch'); },
+                cart: () => jsonResponse({ id: 42, is_active: true }),
+            });
+
+            await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+
+            expect(navigateTo).not.toHaveBeenCalled();
+            expect(store.orderPlaced.get()).toBe(false);
+            expect(store.isPlacingOrder.get()).toBe(false);
+            expect(store.sectionStatus.get().order?.message).toBe(t('Hyperion_Checkout::order_not_placed_network'));
+            expect(store.globalError.get()).toBeNull();
+            await expect(offerWrite()).resolves.toBe('applied');
+        });
+
+        it('drops what the shopper typed once the approval went through', async () => {
+            const config = customerFixture as unknown as CheckoutConfig;
+            const key = draftKey(config.storeCode, '42');
+            const stop = startDraftPersistence(store, config);
+            sessionStorage.setItem(key, '{}');
+            answer({
+                authorize: () => jsonResponse({ success: true, redirectUrl: `${ORIGIN}/en/checkout/onepage/success/` }),
+            });
+
+            await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
+
+            expect(navigateTo).toHaveBeenCalled();
+            expect(sessionStorage.getItem(key)).toBeNull();
+            stop();
         });
 
         it('never follows a redirect that leaves the store', async () => {
-            fetchMock.mockResolvedValueOnce(
-                jsonResponse({ success: true, redirectUrl: 'https://evil.example/phish' })
-            );
+            answer({ authorize: () => jsonResponse({ success: true, redirectUrl: 'https://evil.example/phish' }) });
 
             await approvePaypalOrder({ orderID: 'EC-TOKEN', payerID: 'PAYER-1' });
 
@@ -425,7 +644,7 @@ describe('<payment-paypal-express>', () => {
             expect(store.globalError.get()).toBe(t('Hyperion_Checkout::paypal_express_failed'));
         });
 
-        it('tells the shopper the payment was cancelled and keeps the button', async () => {
+        it('tells the shopper the payment was canceled and keeps the button', async () => {
             const el = await mountWithButton(sdk);
 
             sdk.buttons[0]?.onCancel();
@@ -458,6 +677,96 @@ describe('<payment-paypal-express>', () => {
         });
     });
 
+    describe('billing agreement', () => {
+        const AGREEMENT = { billingAgreementCode: { paypal_express: 'paypal_ec_create_ba' } };
+
+        function checkbox(el: PaymentPaypalExpress): HTMLElement | null {
+            return el.querySelector<HTMLElement>('hc-checkbox[name="paypal_express_billing_agreement"]');
+        }
+
+        function tick(el: PaymentPaypalExpress, checked: boolean): void {
+            checkbox(el)?.dispatchEvent(new CustomEvent('value-change', { detail: { checked } }));
+        }
+
+        it('offers no checkbox when the server names no agreement key for the method', async () => {
+            const el = await mountWithButton(sdk);
+            expect(checkbox(el)).toBeNull();
+        });
+
+        it('shows the checkbox with the core sentence, unticked', async () => {
+            installConfig(AGREEMENT);
+            const el = await mountWithButton(sdk);
+
+            expect(checkbox(el)?.getAttribute('label')).toBe(
+                'Sign a billing agreement to streamline further purchases with PayPal.'
+            );
+            expect((checkbox(el) as unknown as { checked: boolean }).checked).toBe(false);
+            expect(store.paymentMethodData.get()['paypal_express']).toBeUndefined();
+        });
+
+        it('sends the choice as additional data with the payment information, before the token', async () => {
+            installConfig(AGREEMENT);
+            answer({ token: () => jsonResponse({ success: true, token: 'EC-TOKEN' }) });
+            const el = await mountWithButton(sdk);
+
+            tick(el, true);
+            await el.updateComplete;
+            expect((checkbox(el) as unknown as { checked: boolean }).checked).toBe(true);
+            await sdk.buttons[0]?.createOrder();
+
+            const [save] = requestsTo('/set-payment-information');
+            expect(JSON.parse(save?.body ?? '{}').paymentMethod).toMatchObject({
+                method: 'paypal_express',
+                additional_data: { paypal_ec_create_ba: 1 },
+            });
+        });
+
+        it('sends nothing once the box is unticked again', async () => {
+            installConfig(AGREEMENT);
+            answer({ token: () => jsonResponse({ success: true, token: 'EC-TOKEN' }) });
+            const el = await mountWithButton(sdk);
+
+            tick(el, true);
+            tick(el, false);
+            await sdk.buttons[0]?.createOrder();
+
+            const [save] = requestsTo('/set-payment-information');
+            expect(JSON.parse(save?.body ?? '{}').paymentMethod.additional_data).toBeUndefined();
+        });
+
+        it('carries the choice in the redirect flow too', async () => {
+            installConfig({ ...AGREEMENT, inContext: false });
+            answer();
+            const el = await mount();
+
+            tick(el, true);
+            await renderer().placeOrder?.();
+
+            const [save] = requestsTo('/set-payment-information');
+            expect(JSON.parse(save?.body ?? '{}').paymentMethod.additional_data).toEqual({ paypal_ec_create_ba: 1 });
+        });
+    });
+
+    describe('configuration types', () => {
+        it('keeps the scalar types of the button styles and reads the other maps as strings', () => {
+            installConfig({
+                styles: { layout: 'vertical', period: 6, tagline: false, size: '' } as never,
+                dataAttributes: { 'data-count': 3 } as never,
+            });
+
+            const config = getPaypalExpressConfig();
+            expect(config?.styles).toEqual({ layout: 'vertical', period: 6, tagline: false });
+            expect(config?.dataAttributes).toEqual({ 'data-count': '3' });
+            expect(config).not.toHaveProperty('onCancelUrl');
+        });
+
+        it('reads an empty PHP array as an empty map', () => {
+            installConfig({ styles: [] as never, billingAgreementCode: [] as never });
+            expect(getPaypalExpressConfig()?.styles).toEqual({});
+            expect(getPaypalExpressConfig()?.billingAgreementCode).toEqual({});
+        });
+    });
+
     describe('redirect flow', () => {
         beforeEach(() => {
             installConfig({ inContext: false, payLater: null });
@@ -476,17 +785,17 @@ describe('<payment-paypal-express>', () => {
         });
 
         it('saves the payment information and resolves with the start URL', async () => {
-            fetchMock.mockResolvedValueOnce(jsonResponse(true));
+            answer();
 
             await expect(renderer().placeOrder?.()).resolves.toBe(SECTION.startUrls['paypal_express']);
 
-            const requests = calls(fetchMock);
+            const requests = requestsTo('/set-payment-information');
             expect(requests).toHaveLength(1);
             expect(requests[0]?.url).toBe(`${ORIGIN}/rest/en/V1/carts/mine/set-payment-information`);
         });
 
         it('stays on the checkout when the payment information is rejected', async () => {
-            fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'The billing address is invalid.' }, 400));
+            answer({ save: () => jsonResponse({ message: 'The billing address is invalid.' }, 400) });
 
             await expect(renderer().placeOrder?.()).resolves.toBeNull();
 
@@ -524,7 +833,7 @@ describe('<payment-paypal-express>', () => {
 
         it('continues on the start URL instead of placing the order in the redirect flow', async () => {
             installConfig({ inContext: false, payLater: null });
-            fetchMock.mockResolvedValueOnce(jsonResponse(true));
+            answer();
             const el = await mountButton();
 
             el.querySelector('hc-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -532,14 +841,16 @@ describe('<payment-paypal-express>', () => {
             await vi.waitFor(() =>
                 expect(navigateTo).toHaveBeenCalledWith(SECTION.startUrls['paypal_express'])
             );
-            expect(calls(fetchMock).map((request) => request.url)).toEqual([
+            expect(requestsTo('/set-payment-information').map((request) => request.url)).toEqual([
                 `${ORIGIN}/rest/en/V1/carts/mine/set-payment-information`,
             ]);
+            expect(calls(fetchMock).filter((request) => /\/payment-information$/.test(request.url) && request.method === 'POST'))
+                .toEqual([]);
         });
 
         it('stays put and reports the reason when the redirect flow fails', async () => {
             installConfig({ inContext: false, payLater: null });
-            fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'The cart is empty.' }, 400));
+            answer({ save: () => jsonResponse({ message: 'The cart is empty.' }, 400) });
             const el = await mountButton();
 
             el.querySelector('hc-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

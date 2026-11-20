@@ -25,6 +25,7 @@
 @import './_pagebuilder.css';
 @import './_widgets.css';
 @import './_components.css';
+@import './_checkout-link.css';
 @import './_print.css';
 
 @tailwind base;

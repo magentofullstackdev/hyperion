@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Model\Checkout;
 
 use Magento\Checkout\Model\ConfigProviderInterface;
+use Magento\Customer\Helper\Session\CurrentCustomer;
 use Magento\Framework\Locale\ResolverInterface;
 use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\ObjectManagerInterface;
@@ -25,6 +26,11 @@ use Psr\Log\LoggerInterface;
  * (`ExpressConfigProvider`, `SmartButtonConfig`, `PayLaterConfig`), in a
  * flat shape: core nests them under `payment.paypalExpress` together with
  * RequireJS component names the Lit checkout has no use for.
+ *
+ * `billingAgreementCode` lists, per available method, the `additional_data`
+ * key of the "sign a billing agreement" choice. A method is in it under
+ * core's own rule: a logged-in customer, the method set to ask, and no
+ * active agreement of that customer yet.
  */
 class PaypalExpressConfigProvider implements ConfigProviderInterface
 {
@@ -32,6 +38,7 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
     private const CONFIG_FACTORY_CLASS = 'Magento\Paypal\Model\ConfigFactory';
     private const SMART_BUTTON_CONFIG_CLASS = 'Magento\Paypal\Model\SmartButtonConfig';
     private const PAY_LATER_CONFIG_CLASS = 'Magento\Paypal\Model\PayLaterConfig';
+    private const PAYPAL_HELPER_CLASS = 'Magento\Paypal\Helper\Data';
 
     private const METHOD_EXPRESS = 'paypal_express';
     private const METHOD_PAYFLOW_EXPRESS = 'payflow_express';
@@ -39,6 +46,11 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
         self::METHOD_EXPRESS => 'paypal/express/start',
         self::METHOD_PAYFLOW_EXPRESS => 'paypal/payflowexpress/start',
     ];
+
+    /**
+     * Value of `Magento\Paypal\Model\Express\Checkout::PAYMENT_INFO_TRANSPORT_BILLING_AGREEMENT`.
+     */
+    private const BILLING_AGREEMENT_CODE = 'paypal_ec_create_ba';
 
     private const SMART_BUTTON_PAGE = 'checkout';
     private const PAY_LATER_SECTION = 'checkout_payment';
@@ -49,6 +61,7 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
      * @param ObjectManagerInterface $objectManager
      * @param UrlInterface $urlBuilder
      * @param ResolverInterface $localeResolver
+     * @param CurrentCustomer $currentCustomer
      * @param LoggerInterface $logger
      */
     public function __construct(
@@ -56,6 +69,7 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
         private readonly ObjectManagerInterface $objectManager,
         private readonly UrlInterface $urlBuilder,
         private readonly ResolverInterface $localeResolver,
+        private readonly CurrentCustomer $currentCustomer,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -102,9 +116,14 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
         $config = $this->objectManager->get(self::CONFIG_FACTORY_CLASS)->create();
 
         $startUrls = [];
+        $billingAgreementCode = [];
         foreach (self::START_ROUTES as $code => $route) {
-            if ($config->isMethodAvailable($code)) {
-                $startUrls[$code] = $this->urlBuilder->getUrl($route);
+            if (!$config->isMethodAvailable($code)) {
+                continue;
+            }
+            $startUrls[$code] = $this->urlBuilder->getUrl($route);
+            if ($this->shouldAskForBillingAgreement($config, $code)) {
+                $billingAgreementCode[$code] = self::BILLING_AGREEMENT_CODE;
             }
         }
         if ($startUrls === []) {
@@ -119,15 +138,35 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
             'inContext' => isset($startUrls[self::METHOD_EXPRESS]) && (bool)(int)$config->getValue('in_context'),
             'sdkUrl' => (string)($smartButton['sdkUrl'] ?? ''),
             'dataAttributes' => $this->stringMap($smartButton['dataAttributes'] ?? []),
-            'styles' => $this->stringMap($smartButton['styles'] ?? []),
+            'styles' => $this->scalarMap($smartButton['styles'] ?? []),
             'getTokenUrl' => $this->urlBuilder->getUrl('paypal/express/getTokenData'),
             'onAuthorizeUrl' => $this->urlBuilder->getUrl('paypal/express/onAuthorization'),
-            'onCancelUrl' => $this->urlBuilder->getUrl('paypal/express/cancel'),
             'startUrls' => $startUrls,
+            'billingAgreementCode' => $billingAgreementCode,
             'markImageUrl' => (string)$config->getPaymentMarkImageUrl($this->localeResolver->getLocale()),
             'whatIsPaypalUrl' => (string)$config->getPaymentMarkWhatIsPaypalUrl($this->localeResolver),
             'payLater' => $this->buildPayLater(),
         ];
+    }
+
+    /**
+     * Whether the customer may be asked to sign a billing agreement for a method.
+     *
+     * @param mixed $config PayPal config model (`Magento\Paypal\Model\Config`)
+     * @param string $code
+     * @return bool
+     */
+    private function shouldAskForBillingAgreement(mixed $config, string $code): bool
+    {
+        $customerId = (int)$this->currentCustomer->getCustomerId();
+        if ($customerId === 0) {
+            return false;
+        }
+
+        $config->setMethod($code);
+
+        return (bool)$this->objectManager->get(self::PAYPAL_HELPER_CLASS)
+            ->shouldAskToCreateBillingAgreement($config, $customerId);
     }
 
     /**
@@ -158,20 +197,37 @@ class PaypalExpressConfigProvider implements ConfigProviderInterface
     }
 
     /**
-     * Keep the scalar entries of a core config array, as strings.
+     * Keep the scalar entries of a core config array with their types.
+     *
+     * The PayPal SDK reads button styles by type (a number stays a number);
+     * empty strings are left out so the SDK applies its own default.
+     *
+     * @param mixed $values
+     * @return array<string, bool|float|int|string>
+     */
+    private function scalarMap(mixed $values): array
+    {
+        $map = [];
+        foreach (is_array($values) ? $values : [] as $key => $value) {
+            if (is_scalar($value) && $value !== '') {
+                $map[(string)$key] = $value;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Keep the scalar entries of a core config array, as strings (URLs, HTML attributes).
      *
      * @param mixed $values
      * @return array<string, string>
      */
     private function stringMap(mixed $values): array
     {
-        $map = [];
-        foreach (is_array($values) ? $values : [] as $key => $value) {
-            if (is_scalar($value) && (string)$value !== '') {
-                $map[(string)$key] = (string)$value;
-            }
-        }
-
-        return $map;
+        return array_filter(
+            array_map('strval', $this->scalarMap($values)),
+            static fn (string $value): bool => $value !== ''
+        );
     }
 }

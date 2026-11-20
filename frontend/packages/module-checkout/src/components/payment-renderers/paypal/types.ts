@@ -19,7 +19,7 @@ export interface PaypalApproveData {
 }
 
 export interface PaypalButtonsOptions {
-    style: Readonly<Record<string, string>>;
+    style: Readonly<Record<string, string | number | boolean>>;
     onClick(data: PaypalClickData, actions: PaypalClickActions): unknown;
     createOrder(): Promise<string>;
     onApprove(data: PaypalApproveData): Promise<void>;

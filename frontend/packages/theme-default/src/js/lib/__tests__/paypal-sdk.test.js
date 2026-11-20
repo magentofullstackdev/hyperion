@@ -77,6 +77,22 @@ describe('paypal-sdk loader', () => {
         const paypal = finishSdkLoad();
         await expect(retry).resolves.toBe(paypal);
     });
+
+    test('can retry after a script that loaded without defining the SDK', async () => {
+        const failed = loadPaypalSdk(URL_A);
+        const first = sdkScripts()[0];
+        first.onload();
+        await expect(failed).rejects.toThrow('did not initialize');
+        expect(sdkScripts()).toHaveLength(0);
+
+        const retry = loadPaypalSdk(URL_A + '&locale=it_IT');
+        expect(retry).not.toBe(failed);
+        expect(sdkScripts()).toHaveLength(1);
+        expect(sdkScripts()[0]).not.toBe(first);
+        expect(sdkScripts()[0].getAttribute('src')).toBe(URL_A + '&locale=it_IT');
+        const paypal = finishSdkLoad();
+        await expect(retry).resolves.toBe(paypal);
+    });
 });
 
 describe('paypal-sdk scheduling', () => {

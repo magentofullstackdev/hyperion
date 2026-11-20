@@ -10,7 +10,7 @@
  *
  * Some endpoints also emit `trace` (dev-mode only) and `errors` (an
  * array of per-field messages). We normalise everything into
- * `MagentoApiError` (implemented in `api/client.ts`). The interfaces
+ * `MagentoApiError` (implemented in `api/errors.ts`). The interfaces
  * below describe the raw wire shapes.
  */
 
@@ -20,3 +20,24 @@ export interface MagentoWireError {
     trace?: string;
     errors?: readonly MagentoWireError[];
 }
+
+/**
+ * The classes of failure the checkout tells apart. Each has its own
+ * message and its own recovery; `api/error-kinds.ts` decides the class.
+ */
+export type CheckoutErrorKind =
+    | 'offline'
+    | 'network'
+    | 'timeout'
+    | 'session-expired'
+    | 'quote-gone'
+    | 'rate-limited'
+    | 'unavailable'
+    | 'blocked'
+    | 'cart-locked'
+    | 'shipping-method-rejected'
+    | 'stock'
+    | 'captcha'
+    | 'validation'
+    | 'order-unknown'
+    | 'unexpected';

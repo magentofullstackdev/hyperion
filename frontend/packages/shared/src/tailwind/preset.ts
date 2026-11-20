@@ -70,6 +70,7 @@ const preset: Partial<Config> = {
                 'success-subtle':  'rgb(var(--color-success-subtle) / <alpha-value>)',
                 'warning-light':   'rgb(var(--color-warning-light) / <alpha-value>)',
                 'focus-ring':      'rgb(var(--color-focus-ring) / <alpha-value>)',
+                heading: 'rgb(var(--color-heading) / <alpha-value>)',
                 // Checkout aliases -- kept in the preset so existing
                 // checkout component class names (`bg-brand`, `text-on-brand`)
                 // keep resolving without a per-component rewrite.
@@ -77,6 +78,12 @@ const preset: Partial<Config> = {
                 'on-brand': 'rgb(var(--checkout-color-on-brand) / <alpha-value>)',
                 danger: 'rgb(var(--checkout-color-danger) / <alpha-value>)',
                 'on-danger': 'rgb(var(--checkout-color-on-danger) / <alpha-value>)',
+            },
+            // Corner radii of `tokens/radius.css`: `rounded-control` for
+            // inputs, buttons and option rows, `rounded-card` for cards.
+            borderRadius: {
+                control: 'var(--radius-control)',
+                card: 'var(--radius-card)',
             },
             typography: () => ({
                 DEFAULT: {

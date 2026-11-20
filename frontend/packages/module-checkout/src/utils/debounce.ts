@@ -2,12 +2,14 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Minimal debounce: keeps a rate estimate or a billing sync from firing on
- * every keystroke. No dependency on lodash or dayjs: the bundle adds no
- * runtime dependencies.
+ * Minimal debounce: keeps a rate estimate, the save of a form or the save of
+ * a payment method selection from firing on every keystroke or click. No
+ * dependency on lodash or dayjs: the bundle adds no runtime dependencies.
  *
  * The returned function also exposes the pending call: `flush()` runs it
  * now (once), `cancel()` drops it, `pending()` tells whether one is waiting.
+ * The flow actions own every timer of the checkout and flush them before
+ * Place Order, so no edit waits behind a delay when the order is sent.
  */
 
 export interface Debounced<A extends readonly unknown[]> {

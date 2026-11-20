@@ -6,12 +6,15 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\ViewModel;
 
 use Magento\Catalog\Helper\Image;
+use Magento\Catalog\Helper\Product\Configuration as ProductConfiguration;
 use Magento\Catalog\Helper\Product\ConfigurationPool;
+use Magento\Catalog\Model\Product;
+use Magento\Catalog\Model\Product\Configuration\Item\ItemResolverInterface;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\Checkout\Model\Session;
-use Magento\Customer\Model\Address as CustomerAddress;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\DataObject;
 use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\UrlInterface;
@@ -24,6 +27,9 @@ use Magento\Quote\Model\Quote\Item\Option as QuoteItemOption;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Tax\Helper\Data as TaxHelper;
 use Magento\Tax\Model\Config as TaxConfig;
+use Magentofullstackdev\HyperionCheckout\Model\Cart\CheckoutBlocker;
+use Magentofullstackdev\HyperionCheckout\Model\Cart\EstimateDestination;
+use Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool;
 use Magentofullstackdev\HyperionCheckout\Model\WeeeBridge;
 use Magentofullstackdev\HyperionCore\Model\Purchase\Availability;
 use Psr\Log\LoggerInterface;
@@ -61,6 +67,12 @@ class CartData implements ArgumentInterface
      * @param ShippingMethodConverter $shippingMethodConverter
      * @param TaxHelper $taxHelper
      * @param StockRegistryInterface $stockRegistry
+     * @param TotalRowPool $totalRowPool
+     * @param CheckoutBlocker $checkoutBlocker
+     * @param EstimateDestination $estimateDestination
+     * @param ItemResolverInterface $itemResolver
+     * @param ProductConfiguration $productConfiguration
+     * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
         private readonly Session $checkoutSession,
@@ -77,7 +89,12 @@ class CartData implements ArgumentInterface
         private readonly Availability $availability,
         private readonly ShippingMethodConverter $shippingMethodConverter,
         private readonly TaxHelper $taxHelper,
-        private readonly StockRegistryInterface $stockRegistry
+        private readonly StockRegistryInterface $stockRegistry,
+        private readonly TotalRowPool $totalRowPool,
+        private readonly CheckoutBlocker $checkoutBlocker,
+        private readonly EstimateDestination $estimateDestination,
+        private readonly ItemResolverInterface $itemResolver,
+        private readonly ProductConfiguration $productConfiguration
     ) {
     }
 
@@ -125,9 +142,9 @@ class CartData implements ArgumentInterface
     {
         try {
             $address = $this->checkoutSession->getQuote()->getShippingAddress();
-            $estimate = $this->destinationOf($address);
-            if (!$this->hasDestination($estimate)) {
-                $estimate = $this->getCustomerDefaultShippingAddress() ?? $estimate;
+            $estimate = $this->estimateDestination->ofAddress($address);
+            if (!$this->estimateDestination->isSet($estimate)) {
+                $estimate = $this->estimateDestination->customerDefault() ?? $estimate;
             }
             if ($estimate['country_id'] === '') {
                 $estimate['country_id'] = (string) $this->scopeConfig->getValue(
@@ -164,6 +181,65 @@ class CartData implements ArgumentInterface
     public function hasEstimate(): bool
     {
         return $this->getSelectedShippingMethod() !== '' || $this->getShippingRates() !== [];
+    }
+
+    /**
+     * Whether the quote holds nothing to ship: no shipping estimate applies.
+     * A quote that cannot be read answers true, so nothing is offered for it.
+     *
+     * @return bool
+     */
+    public function isVirtual(): bool
+    {
+        try {
+            return (bool) $this->checkoutSession->getQuote()->isVirtual();
+        } catch (\Throwable $e) {
+            $this->loadFailed = true;
+            $this->logger->error('CartData::isVirtual -- ' . $e->getMessage());
+            return true;
+        }
+    }
+
+    /**
+     * Whether the estimator should ask for the rates of the customer's
+     * default shipping address once its panel is opened: the quote ships,
+     * has no rates and no destination yet, and the customer has a default
+     * address. Collecting carrier rates is the expensive part of the cart,
+     * so the page render never does it.
+     *
+     * @return bool
+     */
+    public function canPrefillShippingRates(): bool
+    {
+        try {
+            $quote = $this->checkoutSession->getQuote();
+            if (!$quote->getId() || $quote->isVirtual()) {
+                return false;
+            }
+
+            return $this->estimateDestination->canPrefill($quote->getShippingAddress());
+        } catch (\Throwable $e) {
+            $this->logger->error('CartData::canPrefillShippingRates -- ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Why the cart cannot go to the checkout yet, null when it can: a total
+     * below the minimum order amount (`minimum_amount`) or an error on the
+     * quote (`quote_error`), with the texts to show. Core's checkout
+     * controller sends the shopper back to the cart on the same conditions.
+     *
+     * @return array{reason: string, messages: string[]}|null
+     */
+    public function getCheckoutBlocker(): ?array
+    {
+        try {
+            return $this->checkoutBlocker->forQuote($this->checkoutSession->getQuote());
+        } catch (\Throwable $e) {
+            $this->logger->error('CartData::getCheckoutBlocker -- ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -282,9 +358,7 @@ class CartData implements ArgumentInterface
     public function getDiscountAmount(): float
     {
         try {
-            $quote = $this->checkoutSession->getQuote();
-            $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
-            return (float) $address->getDiscountAmount();
+            return (float) $this->totalsAddress($this->checkoutSession->getQuote())->getDiscountAmount();
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getDiscountAmount -- ' . $e->getMessage());
@@ -311,7 +385,7 @@ class CartData implements ArgumentInterface
     public function getShippingAmount(): float
     {
         try {
-            return (float) $this->checkoutSession->getQuote()->getShippingAddress()->getShippingAmount();
+            return (float) $this->totalsAddress($this->checkoutSession->getQuote())->getShippingAmount();
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getShippingAmount -- ' . $e->getMessage());
@@ -327,7 +401,7 @@ class CartData implements ArgumentInterface
     public function getTaxAmount(): float
     {
         try {
-            return (float) $this->checkoutSession->getQuote()->getShippingAddress()->getTaxAmount();
+            return (float) $this->totalsAddress($this->checkoutSession->getQuote())->getTaxAmount();
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getTaxAmount -- ' . $e->getMessage());
@@ -341,76 +415,35 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * Cart totals as display rows, following Stores > Configuration > Sales >
-     * Tax > Shopping Cart Display Settings (excl. / incl. / both for subtotal
-     * and shipping, tax inside the grand total, full tax summary, zero tax).
+     * Cart totals as display rows: every total the quote collected, in the
+     * store's totals sort order (see TotalRowPool). The first-party rows
+     * follow Stores > Configuration > Sales > Tax > Shopping Cart Display
+     * Settings (excl. / incl. / both for subtotal and shipping, tax inside
+     * the grand total, full tax summary, zero tax).
      *
      * @return array<int, array{code: string, label: string, note: string, value: string, kind: string}>
      */
     public function getTotalsRows(): array
     {
         try {
-            $quote = $this->checkoutSession->getQuote();
-            $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
-            $store = $quote->getStore();
-            $rows = [];
-
-            $this->addExclInclRows(
-                $rows,
-                'subtotal',
-                (string) __('Subtotal'),
-                (float) $address->getSubtotal(),
-                (float) $address->getSubtotalInclTax(),
-                $this->taxConfig->displayCartSubtotalBoth($store),
-                $this->taxConfig->displayCartSubtotalInclTax($store)
-            );
-
-            $fpt = $this->weee->getTotal($quote);
-            if ($fpt > 0 && !$this->weee->isIncludedInSubtotal((int) $quote->getStoreId())) {
-                $rows[] = $this->row('weee_tax', (string) __('FPT'), $fpt);
-            }
-
-            $discount = (float) $address->getDiscountAmount();
-            if ($discount < 0) {
-                $rows[] = $this->row('discount', (string) __('Discount'), $discount, 'discount', (string) $quote->getCouponCode());
-            }
-
-            if (!$quote->isVirtual() && $address->getShippingMethod() && !$this->carriesErrorRate($address)) {
-                $this->addExclInclRows(
-                    $rows,
-                    'shipping',
-                    (string) __('Shipping'),
-                    (float) $address->getShippingAmount(),
-                    (float) $address->getShippingInclTax(),
-                    $this->taxConfig->displayCartShippingBoth($store),
-                    $this->taxConfig->displayCartShippingInclTax($store)
-                );
-            }
-
-            $tax = (float) $address->getTaxAmount();
-            if ($tax > 0 || $this->taxConfig->displayCartZeroTax($store)) {
-                if ($this->taxConfig->displayCartFullSummary($store)) {
-                    foreach ($this->getAppliedTaxRates($address) as $rate) {
-                        $rows[] = $this->row('tax_rate', $rate['label'], $rate['amount'], 'detail');
-                    }
-                }
-                $rows[] = $this->row('tax', (string) __('Tax'), $tax);
-            }
-
-            $grandTotal = (float) $quote->getGrandTotal();
-            if ($this->taxConfig->displayCartTaxWithGrandTotal($store)) {
-                $rows[] = $this->row('grand_total_excl', (string) __('Order Total Excl. Tax'), $grandTotal - $tax);
-                $rows[] = $this->row('grand_total', (string) __('Order Total Incl. Tax'), $grandTotal, 'grand');
-            } else {
-                $rows[] = $this->row('grand_total', (string) __('Order Total'), $grandTotal, 'grand');
-            }
-
-            return $rows;
+            return $this->totalRowPool->getRows($this->checkoutSession->getQuote());
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getTotalsRows failed', ['exception' => $e]);
             return [];
         }
+    }
+
+    /**
+     * The address that carries the totals: billing for a virtual quote,
+     * shipping otherwise.
+     *
+     * @param Quote $quote
+     * @return Address
+     */
+    private function totalsAddress(Quote $quote): Address
+    {
+        return $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
     }
 
     /**
@@ -424,82 +457,10 @@ class CartData implements ArgumentInterface
         $quote = $this->checkoutSession->getQuote();
         $store = $quote->getStore();
         if ($this->taxConfig->displayCartSubtotalInclTax($store) || $this->taxConfig->displayCartSubtotalBoth($store)) {
-            $address = $quote->isVirtual() ? $quote->getBillingAddress() : $quote->getShippingAddress();
-            return (float) $address->getSubtotalInclTax();
+            return (float) $this->totalsAddress($quote)->getSubtotalInclTax();
         }
 
         return (float) $quote->getSubtotal();
-    }
-
-    /**
-     * Add one row (excl. or incl.) or both labelled rows for an amount.
-     *
-     * @param array $rows
-     * @param string $code
-     * @param string $label
-     * @param float $excl
-     * @param float $incl
-     * @param bool $both
-     * @param bool $inclOnly
-     * @return void
-     */
-    private function addExclInclRows(
-        array &$rows,
-        string $code,
-        string $label,
-        float $excl,
-        float $incl,
-        bool $both,
-        bool $inclOnly
-    ): void {
-        if ($both) {
-            $rows[] = $this->row($code . '_excl', (string) __('%1 (Excl. Tax)', $label), $excl);
-            $rows[] = $this->row($code . '_incl', (string) __('%1 (Incl. Tax)', $label), $incl);
-            return;
-        }
-        $rows[] = $this->row($code, $label, $inclOnly ? $incl : $excl);
-    }
-
-    /**
-     * One totals row.
-     *
-     * @param string $code
-     * @param string $label
-     * @param float $amount
-     * @param string $kind regular, detail, discount or grand
-     * @param string $note
-     * @return array{code: string, label: string, note: string, value: string, kind: string}
-     */
-    private function row(string $code, string $label, float $amount, string $kind = 'regular', string $note = ''): array
-    {
-        return [
-            'code' => $code,
-            'label' => $label,
-            'note' => $note,
-            'value' => $this->formatCurrency($amount),
-            'kind' => $kind,
-        ];
-    }
-
-    /**
-     * Applied tax rates of the address for the full tax summary.
-     *
-     * @param Address $address
-     * @return array<int, array{label: string, amount: float}>
-     */
-    private function getAppliedTaxRates(Address $address): array
-    {
-        $rates = [];
-        foreach ((array) $address->getAppliedTaxes() as $applied) {
-            $titles = [];
-            foreach ((array) ($applied['rates'] ?? []) as $rate) {
-                $percent = isset($rate['percent']) ? ' (' . (float) $rate['percent'] . '%)' : '';
-                $titles[] = ($rate['title'] ?? '') . $percent;
-            }
-            $rates[] = ['label' => implode(', ', $titles), 'amount' => (float) ($applied['amount'] ?? 0)];
-        }
-
-        return $rates;
     }
 
     /**
@@ -543,7 +504,12 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * @return array
+     * The visible lines of the cart. `options` is a list of label / value
+     * pairs in the order core gives them (two options may share a label),
+     * the values as plain text. `product_url` is empty when the line has no
+     * page to link to.
+     *
+     * @return array<int, array<string, mixed>>
      */
     public function getItems(): array
     {
@@ -559,8 +525,14 @@ class CartData implements ArgumentInterface
                     $imageUrl = '';
 
                     try {
+                        // The product core shows for the line: the chosen variant or the parent,
+                        // as the cart thumbnail settings of configurable and grouped products ask.
+                        $thumbnailProduct = $this->itemResolver->getFinalProduct($item);
                         $imageUrl = (string) $this->imageHelper
-                            ->init($product, 'mini_cart_product_thumbnail')
+                            ->init(
+                                $thumbnailProduct instanceof Product ? $thumbnailProduct : $product,
+                                'mini_cart_product_thumbnail'
+                            )
                             ->getUrl();
                     } catch (\Throwable $e) {
                         $this->logger->warning(
@@ -574,11 +546,8 @@ class CartData implements ArgumentInterface
                         $helper = $this->configurationPool->getByProductType((string) $product->getTypeId());
                         foreach ($helper->getOptions($item) as $option) {
                             $label = (string) ($option['label'] ?? '');
-                            $value = is_array($option['value'] ?? null)
-                                ? implode(', ', array_map($this->toPlainText(...), $option['value']))
-                                : (string) ($option['value'] ?? '');
                             if ($label !== '') {
-                                $options[$label] = $value;
+                                $options[] = ['label' => $label, 'value' => $this->optionValue((array) $option)];
                             }
                         }
                     } catch (\Throwable $e) {
@@ -602,7 +571,7 @@ class CartData implements ArgumentInterface
                         'sku' => (string) $item->getSku(),
                         'qty' => (float) $item->getQty(),
                         'image_url' => $imageUrl,
-                        'product_url' => (string) $product->getProductUrl(),
+                        'product_url' => $this->productUrl($item),
                         'row_total' => (float) $item->getRowTotal(),
                         'row_total_incl' => (float) $item->getRowTotalInclTax(),
                         ...$this->itemPrices($item, $priceMode),
@@ -774,6 +743,77 @@ class CartData implements ArgumentInterface
     }
 
     /**
+     * The page of the line, by core's cart rule: the redirect URL of the
+     * item when it has one, else the page of its product, or of the parent
+     * the `product_type` option names (the child of a grouped product has no
+     * page of its own). Empty when that product is not visible in the site.
+     *
+     * @param QuoteItem $item
+     * @return string
+     */
+    private function productUrl(QuoteItem $item): string
+    {
+        $redirectUrl = (string) $item->getData('redirect_url');
+        if ($redirectUrl !== '') {
+            return $redirectUrl;
+        }
+        $product = $item->getProduct();
+        $parent = $item->getOptionByCode('product_type');
+        if ($parent instanceof QuoteItemOption && $parent->getProduct() instanceof Product) {
+            $product = $parent->getProduct();
+        }
+        if (!$this->isVisibleInSite($product)) {
+            return '';
+        }
+
+        return (string) $product->getProductUrl();
+    }
+
+    /**
+     * Whether the product has a page in this store: by its visibility, or by
+     * the visibility of the URL rewrite core attached to it.
+     *
+     * @param Product $product
+     * @return bool
+     */
+    private function isVisibleInSite(Product $product): bool
+    {
+        if ($product->isVisibleInSiteVisibility()) {
+            return true;
+        }
+        $urlData = $product->getData('url_data_object');
+        if (!$urlData instanceof DataObject) {
+            return false;
+        }
+
+        return in_array($urlData->getData('visibility'), $product->getVisibleInSiteVisibilities());
+    }
+
+    /**
+     * The value of a configured option as plain text. A list (bundle
+     * selections, downloadable links) is joined with commas; an option with
+     * a customized view (an uploaded file) uses the value the catalog
+     * configuration helper formats for it, core's link to the file, of which
+     * the file name and its dimensions remain.
+     *
+     * @param array<string, mixed> $option
+     * @return string
+     */
+    private function optionValue(array $option): string
+    {
+        $value = $option['value'] ?? '';
+        if (is_array($value)) {
+            return implode(', ', array_map($this->toPlainText(...), $value));
+        }
+        if (!empty($option['custom_view'])) {
+            $formatted = $this->productConfiguration->getFormattedOptionValue($option);
+            $value = $formatted['value'] ?? $value;
+        }
+
+        return $this->toPlainText($value);
+    }
+
+    /**
      * Type helpers (bundle selections, downloadable links) return list values as core prints them:
      * HTML escaped, with the price in a span. The templates escape on output, so hand them text.
      *
@@ -847,8 +887,11 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * Shipping rates collected for the quote's shipping address, for the cart
-     * estimator. Each rate goes through core's converter (the object the REST
+     * Shipping rates the quote's shipping address already holds, for the cart
+     * estimator: this getter never asks the carriers. The estimate controller
+     * collects them, for a posted destination or, once the panel is opened,
+     * for the customer's default address (see canPrefillShippingRates()).
+     * Each rate goes through core's converter (the object the REST
      * estimate returns): the amounts are in the quote currency, with and
      * without tax, and the shipping tax display setting picks the one shown
      * (`formatted_price_excl` is set only when both are shown). A rate the
@@ -873,26 +916,7 @@ class CartData implements ArgumentInterface
                 return [];
             }
             $address = $quote->getShippingAddress();
-            // The rates are the ones stored with the address: the estimate
-            // controller collects and saves them. One exception, like Luma's
-            // estimator on load: a customer whose quote has no destination yet
-            // sees the rates of the default shipping address, collected in
-            // memory on the quote address (core's ShippingMethodManagement
-            // does the same for the REST estimate) and never saved, so the
-            // quote keeps no destination until the shopper picks a rate.
             $grouped = $address->getGroupedAllShippingRates();
-            if ($grouped === [] && !$quote->isVirtual() && !$this->hasDestination($this->destinationOf($address))) {
-                $default = $this->getCustomerDefaultShippingAddress();
-                if ($default !== null) {
-                    $address->setCountryId($default['country_id']);
-                    $address->setRegionId($default['region_id'] !== '' ? (int) $default['region_id'] : null);
-                    $address->setRegion($default['region'] !== '' ? $default['region'] : null);
-                    $address->setPostcode($default['postcode'] !== '' ? $default['postcode'] : null);
-                    $address->setCollectShippingRates(true);
-                    $address->collectShippingRates();
-                    $grouped = $address->getGroupedAllShippingRates();
-                }
-            }
             $rates = [];
             $currencyCode = (string) $quote->getQuoteCurrencyCode();
             $both = $this->taxHelper->displayShippingBothPrices();
@@ -923,81 +947,5 @@ class CartData implements ArgumentInterface
             $this->logger->error('CartData::getShippingRates -- ' . $e->getMessage());
             return [];
         }
-    }
-
-    /**
-     * Whether the method applied to the address is a rate the carrier
-     * answered with an error (a quote saved before such rates were refused):
-     * its 0.00 amount is not a shipping cost to show.
-     */
-    private function carriesErrorRate(Address $address): bool
-    {
-        $method = (string) $address->getShippingMethod();
-        foreach ((array) $address->getGroupedAllShippingRates() as $carrierRates) {
-            foreach ($carrierRates as $rate) {
-                if ((string) $rate->getCode() === $method) {
-                    return (string) $rate->getErrorMessage() !== '';
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Country, region and postcode of a quote address, in the estimator's shape.
-     *
-     * @param Address $address
-     * @return array{country_id: string, region_id: string, region: string, postcode: string}
-     */
-    private function destinationOf(Address $address): array
-    {
-        return [
-            'country_id' => (string) $address->getCountryId(),
-            'region_id' => (int) $address->getRegionId() > 0 ? (string) (int) $address->getRegionId() : '',
-            'region' => (string) $address->getRegion(),
-            'postcode' => (string) $address->getPostcode(),
-        ];
-    }
-
-    /**
-     * A destination is more than a country: a region or a postcode.
-     *
-     * @param array<string, string> $estimate country_id, region_id, region, postcode
-     */
-    private function hasDestination(array $estimate): bool
-    {
-        return $estimate['region_id'] !== '' || $estimate['region'] !== '' || $estimate['postcode'] !== '';
-    }
-
-    /**
-     * The logged-in customer's default shipping address with a country, null
-     * for a guest or a customer without one. The cart blocks are
-     * `cacheable="false"`, so the customer session is not depersonalized here.
-     *
-     * @return array{country_id: string, region_id: string, region: string, postcode: string}|null
-     */
-    private function getCustomerDefaultShippingAddress(): ?array
-    {
-        if (!$this->customerSession->isLoggedIn()) {
-            return null;
-        }
-        $default = $this->customerSession->getCustomer()->getDefaultShippingAddress();
-        if (!$default instanceof CustomerAddress) {
-            return null;
-        }
-        $data = $default->getDataModel();
-        $country = (string) $data->getCountryId();
-        if ($country === '') {
-            return null;
-        }
-        $region = $data->getRegion();
-        $regionId = $region !== null ? (int) $region->getRegionId() : 0;
-        return [
-            'country_id' => $country,
-            'region_id' => $regionId > 0 ? (string) $regionId : '',
-            'region' => $region !== null ? (string) $region->getRegion() : '',
-            'postcode' => (string) $data->getPostcode(),
-        ];
     }
 }

@@ -165,7 +165,7 @@ export function installBraintreeDouble(options: { eligible?: readonly string[] }
         environment: null,
     };
     const googlePaymentCreate = vi.fn().mockResolvedValue(googlePayment);
-    const clientCreate = vi.fn().mockResolvedValue({ getVersion: () => '3.112.0' });
+    const clientCreate = vi.fn().mockResolvedValue({ getVersion: () => '3.123.1' });
     const hostedFieldsCreate = vi.fn().mockResolvedValue(hostedFields);
     const dataCollectorCreate = vi.fn().mockResolvedValue({ deviceData: DEVICE_DATA });
     const threeDSecureCreate = vi.fn().mockResolvedValue(threeDSecure);

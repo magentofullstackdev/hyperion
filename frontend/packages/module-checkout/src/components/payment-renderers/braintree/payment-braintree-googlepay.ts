@@ -14,8 +14,14 @@
  *      this browser).
  *   2. A click checks the same gate as the checkout's own button (email,
  *      addresses, the shipping method the server confirmed, agreements,
- *      totals that are not being refreshed) and opens the Google Pay sheet with the base grand total, the base currency and the cart
- *      lines as display items.
+ *      totals that are not being refreshed) and opens the Google Pay sheet
+ *      with the base grand total, the base currency and the cart lines as
+ *      display items. The sheet is a window Google opens, and a browser
+ *      only allows that inside the click: nothing is awaited between the
+ *      click and `loadPaymentData()`. So the gate is read as it stands,
+ *      which is exact when it is open (no edit is waiting, no save is
+ *      running). When it is closed, the click saves what is pending and
+ *      names what is missing or being updated, and the next click pays.
  *   3. Google's response is parsed into a Braintree nonce. A card that is
  *      not network tokenized goes through 3D Secure under the usual rules;
  *      a network tokenized one is already verified by the network.
@@ -31,12 +37,13 @@ import { SignalWatcher } from '@lit-labs/signals';
 
 import { getCheckoutConfig } from '../../../bootstrap-config.js';
 import { getStore } from '../../../store/index.js';
+import { failureMessage } from '../../../store/section-status.js';
 import { flowActions } from '../../../store/flow-actions.js';
 import { requestValidation } from '../../../store/validation-request.js';
 import { t } from '../../../utils/i18n.js';
 import { navigateTo } from '../../../utils/navigate.js';
 import { decideRedirectTarget } from '../../../utils/safe-redirect.js';
-import { getCheckoutBlocker } from '../checkout-gate.js';
+import { getCheckoutBlocker, prepareCheckout } from '../checkout-gate.js';
 import { registerPaymentRenderer } from '../registry.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
@@ -247,6 +254,19 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
         if (blocker !== null) {
             requestValidation();
             store.globalError.set(blocker);
+            // Put the pending edits on the quote for the next click. What
+            // is still missing or failed replaces the first message; when
+            // everything was saved the first message stays (the flush
+            // clears the banner), because the shopper has to press again.
+            // A failed save shows its reason in its own section only.
+            this._paying = true;
+            try {
+                const remaining = await prepareCheckout();
+                const shownInSection = remaining !== null && failureMessage() === remaining;
+                store.globalError.set(shownInSection ? null : remaining ?? blocker);
+            } finally {
+                if (this.isConnected) this._paying = false;
+            }
             return;
         }
         store.globalError.set(null);
@@ -356,6 +376,8 @@ export function registerBraintreeGooglePayRenderer(): void {
             return Boolean(config?.isActive && config.clientToken);
         },
         ownsPlaceOrder: () => true,
+        // Core checks no reCAPTCHA form on a Google Pay order.
+        recaptchaAction: () => null,
         // Only the Google Pay button places this order; the data below is what it collected.
         beforePlaceOrder: async () => {
             if (!authorized) throw new Error(t('Hyperion_Checkout::braintree_googlepay_not_authorised'));

@@ -108,8 +108,10 @@ async function fillGuestAddress(page) {
 
 async function checkoutWithAgreement(page, label, agreementId) {
     const payloads = [];
+    // The order request only: selecting a method saves it through
+    // set-payment-information, which carries no agreements.
     page.on('request', (r) => {
-        if (r.method() === 'POST' && /payment-information$/.test(r.url())) {
+        if (r.method() === 'POST' && /\/payment-information(\?|$)/.test(r.url())) {
             try { payloads.push(JSON.parse(r.postData() ?? 'null')); } catch { payloads.push(null); }
         }
     });
@@ -128,7 +130,7 @@ async function checkoutWithAgreement(page, label, agreementId) {
     check(`${label}: Place Order enabled after accepting`, await button.isEnabled().catch(() => false));
     await button.click().catch(() => {});
     await page.waitForURL((u) => u.toString().includes('success'), { timeout: 45000 }).catch(() => {});
-    const banner = await page.evaluate(() => (document.querySelector('error-banner') || {}).innerText || '');
+    const banner = await page.evaluate(() => [...document.querySelectorAll('error-banner, hc-section-status')].map((el) => el.innerText.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' | '));
     check(`${label}: order placed with the agreement`, page.url().includes('success'), banner || page.url());
 
     const body = payloads.find((p) => p && p.paymentMethod);

@@ -13,8 +13,16 @@
  *      (`isReady` feeds `canPlaceOrder`);
  *   3. Place Order sends `payment_method_nonce`, `device_data` and the vault
  *      choice as `additional_data`.
- * The approval is dropped when the base grand total changes or when the
- * order POST fails, because the nonce is single-use and amount-bound.
+ * The approval is bound to what PayPal was shown: the base grand total and
+ * the shipping address sent as the override. It is dropped when either
+ * changes or when the order POST fails, because the nonce is single-use and
+ * the shopper approved that amount for that address.
+ *
+ * A click on a PayPal button first passes the checkout's own gate
+ * (`prepareCheckout()`): every pending edit is put on the quote, and the
+ * popup does not go on while something the order needs is missing or a save
+ * failed; the reason is named under the buttons. `onClick` may answer with
+ * a promise, so the click itself waits for the saves.
  *
  * Same PayPal options as core `method-renderer/paypal.js`: always the
  * `checkout` flow, plus `requestBillingAgreement` when a logged-in customer
@@ -32,6 +40,7 @@ import { Signal } from 'signal-polyfill';
 
 import { getStore } from '../../../store/index.js';
 import { t } from '../../../utils/i18n.js';
+import { prepareCheckout } from '../checkout-gate.js';
 import { registerPaymentRenderer } from '../registry.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
@@ -54,6 +63,7 @@ import type {
     PayPalButtonsInstance,
     PayPalCheckoutInstance,
     PayPalCreatePaymentOptions,
+    PayPalSdkOptions,
     PayPalShippingAddressOverride,
 } from './types.js';
 import '../../ui/checkbox.js';
@@ -66,6 +76,15 @@ export interface PayPalApproval {
     email: string;
     /** Base grand total the shopper authorized. */
     amount: string;
+    /** Fingerprint of the amount and the shipping address PayPal was shown. */
+    fingerprint: string;
+    savedForLater: boolean;
+}
+
+/** What a payment was created for, kept from `createOrder` until PayPal approves it. */
+interface PendingPayment {
+    amount: string;
+    fingerprint: string;
     savedForLater: boolean;
 }
 
@@ -83,11 +102,6 @@ export function setPayPalApproval(next: PayPalApproval | null): void {
     approval.set(next);
 }
 
-function isApprovalCurrent(): boolean {
-    const current = approval.get();
-    return current !== null && current.amount === getBaseGrandTotal();
-}
-
 export function buildShippingAddressOverride(): PayPalShippingAddressOverride | null {
     const address = getShippingAddress();
     if (!address) return null;
@@ -101,6 +115,60 @@ export function buildShippingAddressOverride(): PayPalShippingAddressOverride | 
         postalCode: address.postcode ?? '',
         state: regionCodeOf(address) ?? '',
     };
+}
+
+/**
+ * One string for the two things an approval covers. The address part is the
+ * override exactly as PayPal receives it, so an edit that PayPal would not
+ * see (a phone number) keeps the approval.
+ */
+export function approvalFingerprint(
+    amount: string = getBaseGrandTotal(),
+    override: PayPalShippingAddressOverride | null = buildShippingAddressOverride()
+): string {
+    return JSON.stringify([
+        amount,
+        override
+            ? [
+                override.recipientName,
+                override.line1,
+                override.line2,
+                override.city,
+                override.state,
+                override.postalCode,
+                override.countryCode,
+            ]
+            : null,
+    ]);
+}
+
+function isApprovalCurrent(): boolean {
+    const current = approval.get();
+    return current !== null && current.fingerprint === approvalFingerprint();
+}
+
+/**
+ * Options of `loadPayPalSDK()`, the ones core `method-renderer/paypal.js`
+ * passes: the component list, the page type and the nonce of the page's
+ * Content Security Policy as data attributes, and the PayPal locale.
+ * `commit` stays off because the order is completed with the checkout's own
+ * Place Order button, not inside the popup.
+ */
+export function buildPayPalSdkOptions(config: BraintreePayPalConfig, creditActive: boolean): PayPalSdkOptions {
+    const dataAttributes: Record<string, string> = { 'page-type': 'checkout' };
+    if (config.cspNonce) dataAttributes['csp-nonce'] = config.cspNonce;
+    const options: PayPalSdkOptions = {
+        'components': 'buttons,messages,funding-eligibility',
+        'enable-funding': creditActive ? 'credit' : 'paylater',
+        'currency': getBaseCurrencyCode(),
+        'commit': false,
+        dataAttributes,
+    };
+    if (config.locale) options['locale'] = config.locale;
+    if (config.environment === 'sandbox' && config.merchantCountry) {
+        options['buyer-country'] = config.merchantCountry;
+    }
+    return options;
 }
 
 export function buildCreatePaymentOptions(
@@ -137,6 +205,7 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
     @state() private _saveForLater = false;
 
     private _checkout: PayPalCheckoutInstance | null = null;
+    private _pending: PendingPayment | null = null;
     private _buttons: PayPalButtonsInstance[] = [];
     private _generation = 0;
     private _initQueued = false;
@@ -160,7 +229,9 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
                 ${approved && current ? this._renderApproved(current) : nothing}
                 ${!approved && current
                     ? html`<p class="text-sm text-muted" role="status">
-                          ${t('Hyperion_Checkout::braintree_paypal_amount_changed')}
+                          ${current.amount === getBaseGrandTotal()
+                              ? t('Hyperion_Checkout::braintree_paypal_address_changed')
+                              : t('Hyperion_Checkout::braintree_paypal_amount_changed')}
                       </p>`
                     : nothing}
                 ${this._message
@@ -219,7 +290,7 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
     /**
      * The PayPal SDK is only needed while there is nothing authorized: on the
      * first render, or once an approval is gone (changed by the shopper,
-     * amount change, failed order).
+     * another amount or shipping address, failed order).
      */
     protected override updated(): void {
         if (this._initQueued || !this._needsInit()) return;
@@ -258,16 +329,7 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
 
             const credit = getPayPalFundingConfig('credit');
             const payLater = getPayPalFundingConfig('paylater');
-            const sdkOptions: Record<string, string | boolean> = {
-                'components': 'buttons,funding-eligibility',
-                'enable-funding': credit?.isActive ? 'credit' : 'paylater',
-                'currency': getBaseCurrencyCode(),
-                'commit': false,
-            };
-            if (config.environment === 'sandbox' && config.merchantCountry) {
-                sdkOptions['buyer-country'] = config.merchantCountry;
-            }
-            await checkout.loadPayPalSDK(sdkOptions);
+            await checkout.loadPayPalSDK(buildPayPalSdkOptions(config, credit?.isActive === true));
             if (stale()) return;
 
             const rendered = await Promise.all([
@@ -299,19 +361,38 @@ export class PaymentBraintreePaypal extends SignalWatcher(LitElement) {
         const button = paypal.Buttons({
             fundingSource: funding,
             style,
+            // The SDK holds its window on a loader while this promise is
+            // open: the payment is created for the quote with every
+            // pending edit saved, or not at all.
+            onClick: async (_data, actions) => {
+                this._message = null;
+                const blocker = await prepareCheckout();
+                this._message = blocker;
+                return blocker === null ? actions.resolve() : actions.reject();
+            },
             createOrder: () => {
                 this._message = null;
-                return checkout.createPayment(buildCreatePaymentOptions(config, this._isSaving()));
+                const savedForLater = this._isSaving();
+                const options = buildCreatePaymentOptions(config, savedForLater);
+                this._pending = {
+                    amount: options.amount,
+                    fingerprint: approvalFingerprint(options.amount, options.shippingAddressOverride ?? null),
+                    savedForLater,
+                };
+                return checkout.createPayment(options);
             },
             onApprove: async (data) => {
-                const amount = getBaseGrandTotal();
-                const savedForLater = this._isSaving();
+                // Without a payment created here there is nothing the approval could be bound to.
+                const pending = this._pending;
+                this._pending = null;
+                if (!pending) throw new Error('PayPal approved a payment this checkout did not create');
                 const payload = await checkout.tokenizePayment(data);
                 approval.set({
                     nonce: payload.nonce,
                     email: payload.details.email ?? '',
-                    amount,
-                    savedForLater,
+                    amount: pending.amount,
+                    fingerprint: pending.fingerprint,
+                    savedForLater: pending.savedForLater,
                 });
             },
             onError: (err) => {
@@ -377,6 +458,8 @@ export function registerBraintreePayPalRenderer(): void {
             return Boolean(config?.isActive && config.clientToken);
         },
         isReady: isApprovalCurrent,
+        // Core checks no reCAPTCHA form on a Braintree PayPal order.
+        recaptchaAction: () => null,
         afterPlaceOrderFailed: () => approval.set(null),
         beforePlaceOrder: async () => {
             const config = getBraintreePayPalConfig();

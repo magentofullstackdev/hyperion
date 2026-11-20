@@ -6,9 +6,11 @@
  *
  * `canPlaceOrder` is the gate for the Place Order button.
  * Virtual carts skip shipping checks; non-virtual carts require a
- * chosen shipping method.
+ * chosen shipping method. `canPlaceOrderIgnoringLatch` is the same gate
+ * without the "an order is being placed" latch: what the order pipeline
+ * evaluates after it took the latch itself.
  *
- * Agreements gate (Q6): if `expectedAgreements` is set by bootstrap
+ * Agreements gate: if `expectedAgreements` is set by bootstrap
  * (from `checkoutConfig.checkoutAgreements`), every non-auto agreement
  * must appear in `acceptedAgreements`. When the admin has no active
  * agreements, `expectedAgreements` stays empty and the check is a
@@ -18,6 +20,9 @@ import { Signal } from 'signal-polyfill';
 
 import { getPaymentRenderer } from '../components/payment-renderers/registry.js';
 import { isAddressComplete } from '../utils/address-validation.js';
+import { offeredPaymentMethods } from '../utils/payment-offer.js';
+import { EMAIL_SHAPE } from '../validation/rules.js';
+import { antiAbuseBlocker } from './anti-abuse.js';
 import type { Store } from './index.js';
 
 /**
@@ -25,9 +30,6 @@ import type { Store } from './index.js';
  * unlocks. Populated by bootstrap from `checkoutConfig.checkoutAgreements`
  * (only manual-mode entries). Lives as a module-level signal
  * because it comes from config, not user action.
- *
- * This is a defensive placeholder -- the target store has no active
- * agreements today. See Appendix B: Q6 answer.
  */
 export const expectedAgreements = new Signal.State<readonly number[]>([]);
 
@@ -41,11 +43,11 @@ export function createSelectors(store: Store): {
     paymentMethodSelected: Signal.Computed<boolean>;
     paymentMethodReady: Signal.Computed<boolean>;
     agreementsAccepted: Signal.Computed<boolean>;
+    canPlaceOrderIgnoringLatch: Signal.Computed<boolean>;
     canPlaceOrder: Signal.Computed<boolean>;
 } {
     const emailValid = new Signal.Computed<boolean>(() => {
-        const e = store.email.get();
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+        return EMAIL_SHAPE.test(store.email.get());
     });
 
     const shippingAddressValid = new Signal.Computed<boolean>(() => {
@@ -53,9 +55,6 @@ export function createSelectors(store: Store): {
         return isAddressComplete(store.shippingAddress.get());
     });
 
-    // A billing address entered on its own (virtual quote, or "same as
-    // shipping" unchecked) must be complete AND already on the quote, with
-    // the payment methods and totals refreshed for it (`billingSynced`).
     const billingAddressValid = new Signal.Computed<boolean>(() => {
         if (store.billingSameAsShipping.get() && !store.isVirtual.get()) {
             return shippingAddressValid.get();
@@ -63,9 +62,14 @@ export function createSelectors(store: Store): {
         return isAddressComplete(store.billingAddress.get());
     });
 
+    // A billing address entered on its own (virtual quote, or "same as
+    // shipping" unchecked) must be on the quote as it stands in the form
+    // (`billingSynced`, not `billingDirty`), with no quote write running or
+    // waiting.
     const billingReady = new Signal.Computed<boolean>(() => {
+        if (store.quoteWritesPending.get() > 0) return false;
         if (store.billingSameAsShipping.get() && !store.isVirtual.get()) return true;
-        return !store.isSavingBilling.get() && store.billingSynced.get();
+        return !store.isSavingBilling.get() && store.billingSynced.get() && !store.billingDirty.get();
     });
 
     const shippingMethodSelected = new Signal.Computed<boolean>(() => {
@@ -75,13 +79,18 @@ export function createSelectors(store: Store): {
 
     // The selection must be one of the rates of the CURRENT address and the
     // server must have confirmed it (`appliedShippingMethod` is set by the
-    // last successful shipping-information save). While an estimate or a
-    // save is in flight nothing is known yet, so the gate stays closed.
+    // last successful shipping-information save). While an estimate, a
+    // save or any other quote write is in flight or waiting nothing is
+    // known yet, so the gate stays closed.
     const shippingReady = new Signal.Computed<boolean>(() => {
         if (store.isVirtual.get()) return true;
+        if (store.quoteWritesPending.get() > 0) return false;
         // The form was edited and no save confirmed the new address yet.
         if (store.shippingDirty.get()) return false;
         if (store.isLoadingShippingMethods.get() || store.isSavingShipping.get()) return false;
+        // The rates of the address could not be read: the list on screen
+        // belongs to another address.
+        if (store.estimateState.get() === 'error') return false;
         const selected = store.selectedShippingMethod.get();
         if (selected === null) return false;
         const offered = store.availableShippingMethods.get().some(
@@ -102,7 +111,8 @@ export function createSelectors(store: Store): {
     const paymentMethodSelected = new Signal.Computed<boolean>(() => {
         const code = store.selectedPaymentMethod.get();
         if (code === null) return false;
-        return store.availablePaymentMethods.get().some((m) => m.code === code);
+        return offeredPaymentMethods(store.availablePaymentMethods.get(), store.totals.get())
+            .some((m) => m.code === code);
     });
 
     // A renderer may hold Place Order back until the shopper finished a step
@@ -121,7 +131,7 @@ export function createSelectors(store: Store): {
         return expected.every((id) => accepted.has(id));
     });
 
-    const canPlaceOrder = new Signal.Computed<boolean>(() => {
+    const canPlaceOrderIgnoringLatch = new Signal.Computed<boolean>(() => {
         return (
             emailValid.get() &&
             shippingAddressValid.get() &&
@@ -129,14 +139,30 @@ export function createSelectors(store: Store): {
             shippingReady.get() &&
             billingAddressValid.get() &&
             billingReady.get() &&
+            antiAbuseBlocker(store) === null &&
             paymentMethodSelected.get() &&
             paymentMethodReady.get() &&
             agreementsAccepted.get() &&
             store.minimumOrderError.get() === null &&
-            !store.isRefreshingTotals.get() &&
+            !store.isSettlingTotals.get() &&
+            store.totals.get() !== null
+        );
+    });
+
+    // The latch: an order request is being prepared or sent, the order
+    // exists or may exist (the quote is being asked, and no press shortens
+    // that), or nothing can reach the quote any more (the session ended,
+    // the cart is gone). Each of the last three shows its own message and
+    // way forward next to the button.
+    const canPlaceOrder = new Signal.Computed<boolean>(() => {
+        const outcome = store.orderOutcome.get();
+        return (
+            canPlaceOrderIgnoringLatch.get() &&
             !store.isPlacingOrder.get() &&
             !store.orderPlaced.get() &&
-            store.totals.get() !== null
+            !store.sessionExpired.get() &&
+            !store.quoteGone.get() &&
+            outcome === 'none'
         );
     });
 
@@ -150,6 +176,7 @@ export function createSelectors(store: Store): {
         paymentMethodSelected,
         paymentMethodReady,
         agreementsAccepted,
+        canPlaceOrderIgnoringLatch,
         canPlaceOrder,
     };
 }

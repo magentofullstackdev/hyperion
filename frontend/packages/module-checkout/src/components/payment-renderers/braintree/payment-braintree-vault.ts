@@ -4,18 +4,23 @@
 /**
  * Braintree vault adapters + <payment-braintree-vault>.
  *
- * `braintree_cc_vault` (and `braintree_googlepay_vault`, a card stored through
- * Google Pay, which core handles with the same component) follows core
- * `method-renderer/vault.js`:
+ * `braintree_cc_vault` follows core `method-renderer/vault.js`:
  *   1. when the merchant enabled "CVV re-verification" for stored cards
  *      (`payment.braintree_cc_vault.cvvVerify`), a hosted CVV field is
  *      tokenized and sent to `braintree/payment/updatepaymentmethod`, which
- *      verifies the card and answers `{ success }`;
+ *      verifies the card and answers `{ success }`. The URL is the token's
+ *      `updatePaymentUrl` when the provider emits one, otherwise it is
+ *      derived from the nonce URL, which sits next to it;
  *   2. a one-time nonce comes from `braintree/payment/getnonce`;
  *   3. the nonce goes through 3D Secure under the same rules as a new card
  *      (skipped when stored cards are verified by CVV);
  *   4. `additional_data` = `public_hash`, `payment_method_nonce` and
  *      `device_data` when the collector delivered it.
+ *
+ * `braintree_googlepay_vault` (a card stored through Google Pay) takes steps
+ * 2 to 4 only: core `method-renderer/googlepay-vault.js` has no CVV field and
+ * goes from the nonce straight to the order, and a wallet card has no CVV
+ * the shopper could type.
  *
  * `braintree_paypal_vault` needs no UI: the default vault flow (nonce from
  * `getnonce`) is what core's `paypal-vault.js` does.
@@ -177,7 +182,10 @@ export class PaymentBraintreeVault extends LitElement {
     /** Tokenize the CVV and let Magento verify the stored card with it. */
     public async verifyCvv(token: VaultToken): Promise<void> {
         const instance = this._hostedFields;
-        if (!instance || this._status !== 'ready' || !token.nonceUrl) {
+        const target = token.updatePaymentUrl
+            ?? token.nonceUrl?.replace(/\/getnonce/i, '/updatepaymentmethod')
+            ?? null;
+        if (!instance || this._status !== 'ready' || target === null) {
             throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
         }
         let cvvNonce: string;
@@ -189,7 +197,7 @@ export class PaymentBraintreeVault extends LitElement {
             throw new Error(t('Hyperion_Checkout::braintree_card_cvv_invalid'), { cause: err });
         }
         const failure = new Error(t('Hyperion_Checkout::braintree_card_cvv_failed'));
-        const url = new URL(token.nonceUrl.replace(/\/getnonce/i, '/updatepaymentmethod'), window.location.href);
+        const url = new URL(target, window.location.href);
         if (url.origin !== window.location.origin) throw failure;
         url.searchParams.set('nonce', cvvNonce);
         url.searchParams.set('public_hash', token.publicHash);
@@ -212,13 +220,10 @@ if (!customElements.get('payment-braintree-vault')) {
     customElements.define('payment-braintree-vault', PaymentBraintreeVault);
 }
 
-export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
+/** Nonce, 3D Secure and device data of a stored card: the part both card vaults share. */
+async function storedCardPaymentData(token: VaultToken): Promise<Record<string, unknown>> {
     // A Google Pay card stored without the card method active still needs a client token for 3D Secure.
     const authorization = getBraintreeCardConfig()?.clientToken || getBraintreeGooglePayConfig()?.clientToken || '';
-    if (isCcVaultCvvVerifyEnabled()) {
-        if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
-        await activeElement.verifyCvv(token);
-    }
     const { nonce, bin } = await fetchVaultNonce(token);
     const verifiedNonce = authorization
         ? await verifyThreeDSecure({ authorization, nonce, bin, storedCard: true, savingCard: false })
@@ -231,6 +236,22 @@ export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promi
     };
 }
 
+export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
+    if (isCcVaultCvvVerifyEnabled()) {
+        if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
+        await activeElement.verifyCvv(token);
+    }
+    return storedCardPaymentData(token);
+}
+
+/** A card stored through Google Pay is never re-verified by CVV. */
+export function braintreeGooglePayVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
+    return storedCardPaymentData(token);
+}
+
+/** Core checks no reCAPTCHA form on an order paid with a stored Braintree token. */
+const noRecaptcha = (): null => null;
+
 export function registerBraintreeVaultAdapters(): void {
     registerVaultAdapter({
         code: BRAINTREE_CC_VAULT_CODE,
@@ -241,6 +262,7 @@ export function registerBraintreeVaultAdapters(): void {
         }),
         renderBody: (token) => html`<payment-braintree-vault .token=${token}></payment-braintree-vault>`,
         beforePlaceOrder: braintreeCcVaultBeforePlaceOrder,
+        recaptchaAction: noRecaptcha,
     });
     registerVaultAdapter({
         code: BRAINTREE_GOOGLEPAY_VAULT_CODE,
@@ -249,14 +271,15 @@ export function registerBraintreeVaultAdapters(): void {
             last4: detail(token, 'maskedCC'),
             expiry: detail(token, 'expirationDate'),
         }),
-        renderBody: (token) => html`<payment-braintree-vault .token=${token}></payment-braintree-vault>`,
-        beforePlaceOrder: braintreeCcVaultBeforePlaceOrder,
+        beforePlaceOrder: braintreeGooglePayVaultBeforePlaceOrder,
+        recaptchaAction: noRecaptcha,
     });
     registerVaultAdapter({
         code: BRAINTREE_PAYPAL_VAULT_CODE,
         label: (token) => t('Hyperion_Checkout::vault_paypal_label', {
             email: detail(token, 'payerEmail'),
         }),
+        recaptchaAction: noRecaptcha,
     });
 }
 

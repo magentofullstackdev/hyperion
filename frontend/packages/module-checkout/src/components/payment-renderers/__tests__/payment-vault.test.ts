@@ -78,6 +78,7 @@ describe('stored payment tokens', () => {
             code: 'braintree_cc_vault',
             publicHash: 'hash-mc-4444',
             nonceUrl: 'http://localhost:3000/braintree/payment/getnonce/',
+            updatePaymentUrl: null,
             details: { type: 'MC', maskedCC: '4444', expirationDate: '03/2029' },
         });
         expect(isVaultMethod('braintree_cc_vault')).toBe(true);
@@ -197,6 +198,7 @@ describe('stored payment tokens', () => {
             code: 'braintree_cc_vault',
             publicHash: 'hash-visa-1111',
             nonceUrl: 'https://evil.example/braintree/payment/getnonce/',
+            updatePaymentUrl: null,
             details: {},
         })).rejects.toThrow(t('Hyperion_Checkout::vault_nonce_failed'));
         expect(fetchMock).not.toHaveBeenCalled();

@@ -21,6 +21,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 
+import { getCheckoutConfig } from '../../../bootstrap-config.js';
 import { t } from '../../../utils/i18n.js';
 import { registerPaymentRenderer } from '../registry.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
@@ -393,6 +394,8 @@ export function registerBraintreeCardRenderer(): void {
             if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
             return activeElement.collectPaymentData();
         },
+        // Core checks a card order against the Braintree reCAPTCHA form when one is configured.
+        recaptchaAction: () => (getCheckoutConfig().hyperion?.recaptcha?.braintree ? 'braintree' : 'place_order'),
     });
 }
 

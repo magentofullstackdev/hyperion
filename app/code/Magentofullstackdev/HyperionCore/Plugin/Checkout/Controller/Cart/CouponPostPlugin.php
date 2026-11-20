@@ -35,6 +35,14 @@ use Magento\Framework\Controller\Result\RawFactory;
  * on an HTMX request: it drops the redirect and answers with the same
  * fragment body, so the shopper sees the message as a toast and the form
  * stays in place.
+ *
+ * A refused code (unknown coupon, a wrong CAPTCHA or reCAPTCHA answer, the
+ * request limit) is handed to the coupon block as `coupon_attempt` (the
+ * code that was sent) and `coupon_error` (the message as plain text), so
+ * the form renders open with the code still in the field and the reason
+ * under it. The toast carries the same message. Rendering the block again
+ * also renders its CAPTCHA child again, which generates a new image: an
+ * answer is good for one attempt.
  */
 class CouponPostPlugin
 {
@@ -42,6 +50,7 @@ class CouponPostPlugin
     private const CART_HANDLE = 'hyperion_checkout_cart_fragment';
     private const COUPON_BLOCK = 'hyperion.cart.coupon';
     private const TOTALS_BLOCK = 'hyperion.cart.totals';
+    private const COUPON_CODE_MAX_LENGTH = 255;
 
     public function __construct(
         private readonly HttpRequest $request,
@@ -107,7 +116,11 @@ class CouponPostPlugin
         $response = $this->rawFactory->create();
         $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
         $response->setContents(
-            $this->fragmentRenderer->render(self::CART_HANDLE, self::COUPON_BLOCK)
+            $this->fragmentRenderer->render(
+                self::CART_HANDLE,
+                self::COUPON_BLOCK,
+                $messages['has_error'] ? $this->failedAttempt($messages['html']) : []
+            )
             . "\n"
             . $this->fragmentRenderer->render(self::CART_HANDLE, self::TOTALS_BLOCK, ['oob' => true])
             . "\n"
@@ -115,5 +128,30 @@ class CouponPostPlugin
         );
 
         return $this->cacheHeaders->applyPrivate($response);
+    }
+
+    /**
+     * Block data of a refused apply request; empty for a cancel request or
+     * a request without a code (nothing to give back to the field).
+     *
+     * @param string $messageHtml The collected messages, escaped HTML.
+     * @return array<string, string>
+     */
+    private function failedAttempt(string $messageHtml): array
+    {
+        if ((int) $this->request->getParam('remove') === 1) {
+            return [];
+        }
+        $code = $this->request->getParam('coupon_code');
+        $code = is_string($code) ? trim($code) : '';
+        if ($code === '') {
+            return [];
+        }
+
+        return [
+            'coupon_attempt' => mb_substr($code, 0, self::COUPON_CODE_MAX_LENGTH),
+            // The template escapes block data: hand it text, not markup.
+            'coupon_error' => trim(html_entity_decode(strip_tags($messageHtml), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
+        ];
     }
 }

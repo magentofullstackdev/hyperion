@@ -12,8 +12,8 @@ vi.mock('../client.js', () => ({
     storefrontPostJson: vi.fn().mockResolvedValue({ errors: false, message: 'ok' }),
 }));
 
-import { storefrontPostJson } from '../client.js';
-import { loginOnStorefront, LOGIN_CAPTCHA_FORM_ID } from '../cart.js';
+import { apiFetch, storefrontPostJson } from '../client.js';
+import { isEmailAvailable, loginOnStorefront, LOGIN_CAPTCHA_FORM_ID } from '../cart.js';
 
 describe('loginOnStorefront', () => {
     it('posts the credentials with the login captcha form id', async () => {
@@ -35,5 +35,42 @@ describe('loginOnStorefront', () => {
             { captcha_form_id: 'user_login', username: 'a@example.com', password: 'secret', 'g-recaptcha-response': 'tok' },
             { 'g-recaptcha-response': 'tok' }
         );
+    });
+
+    it('adds the answer of the login CAPTCHA next to its form id', async () => {
+        await loginOnStorefront({ username: 'a@example.com', password: 'secret' }, null, 'aaaa');
+
+        expect(storefrontPostJson).toHaveBeenLastCalledWith(
+            'customer/ajax/login',
+            { captcha_form_id: 'user_login', captcha_string: 'aaaa', username: 'a@example.com', password: 'secret' },
+            undefined
+        );
+    });
+});
+
+describe('isEmailAvailable', () => {
+    it('is a lookup that may be repeated, without a signal by default', async () => {
+        await isEmailAvailable({ customerEmail: 'a@example.com' });
+
+        expect(apiFetch).toHaveBeenLastCalledWith('customers/isEmailAvailable', {
+            method: 'POST',
+            body: { customerEmail: 'a@example.com' },
+            auth: 'none',
+            idempotent: true,
+        });
+    });
+
+    it('forwards the signal so a superseded check can be canceled', async () => {
+        const controller = new AbortController();
+
+        await isEmailAvailable({ customerEmail: 'a@example.com', websiteId: 1 }, { signal: controller.signal });
+
+        expect(apiFetch).toHaveBeenLastCalledWith('customers/isEmailAvailable', {
+            method: 'POST',
+            body: { customerEmail: 'a@example.com', websiteId: 1 },
+            auth: 'none',
+            idempotent: true,
+            signal: controller.signal,
+        });
     });
 });

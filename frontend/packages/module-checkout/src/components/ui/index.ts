@@ -6,5 +6,3 @@ export { SelectInput } from './select-input.js';
 export type { SelectOption } from './select-input.js';
 export { Checkbox } from './checkbox.js';
 export { Button } from './button.js';
-export { RadioGroup } from './radio-group.js';
-export type { RadioOption } from './radio-group.js';

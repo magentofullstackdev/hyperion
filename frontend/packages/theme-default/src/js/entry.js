@@ -20,6 +20,8 @@ import { installMegaHover } from './lib/mega-hover.js';
 import { installLoadMoreFocus } from './lib/listing-load-more.js';
 import { installListingFilters } from './lib/listing-filters.js';
 import { installCollapsibleNav } from './lib/collapsible-nav.js';
+import { installCartQty } from './lib/cart-qty.js';
+import { installCheckoutLinkBusy } from './lib/checkout-link-busy.js';
 import { whenThemeStylesheetReady } from './lib/theme-stylesheet.js';
 // The confirmation dialog answers `hx-confirm` from the first htmx event on,
 // so it is the one component the entry carries itself.
@@ -359,13 +361,21 @@ const LAZY_COMPONENTS = {
     'hyperion-compare-sidebar': () => import('./components/hyperion-compare-sidebar.js'),
     'hyperion-recently-viewed': () => import('./components/hyperion-recently-viewed.js'),
     'hyperion-gtag': () => import('./components/hyperion-gtag.js'),
+    'hyperion-captcha': () => import('./components/hyperion-captcha.js'),
 };
+
+// A `<template>` keeps its content in a separate fragment a document query
+// does not reach; a component moves it into the page later (the children of
+// the cart coupon form), when no settle event runs the check again.
+function isInTemplate(tag) {
+    return Array.from(document.querySelectorAll('template')).some((template) => template.content?.querySelector(tag));
+}
 
 function bootLazyComponents(event) {
     const swapped = event?.detail?.elt;
     for (const [tag, load] of Object.entries(LAZY_COMPONENTS)) {
         if (customElements.get(tag)) continue;
-        if (document.querySelector(tag) || swapped?.querySelector?.(tag) || swapped?.matches?.(tag)) {
+        if (document.querySelector(tag) || swapped?.querySelector?.(tag) || swapped?.matches?.(tag) || isInTemplate(tag)) {
             styled.then(load);
         }
     }
@@ -400,6 +410,8 @@ function init() {
     installLoadMoreFocus(document);
     installListingFilters(document);
     installCollapsibleNav(document);
+    installCartQty(document);
+    installCheckoutLinkBusy(document);
     document.body.addEventListener('click', onSearchToggleClick);
     document.addEventListener('click', onSearchPanelOutsideClick);
     document.addEventListener('keydown', onDocumentKeydown);

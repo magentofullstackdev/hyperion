@@ -237,7 +237,7 @@ try {
         check('purchase order: Place Order opens once the number is typed', !state.softDisabled && !state.disabled, JSON.stringify(state));
         await page.locator('place-order-button button').click().catch(() => {});
         await page.waitForURL((url) => url.toString().includes('success'), { timeout: 45000 }).catch(() => {});
-        const banner = await page.evaluate(() => document.querySelector('error-banner')?.innerText || '');
+        const banner = await page.evaluate(() => [...document.querySelectorAll('error-banner, hc-section-status')].map((el) => el.innerText.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' | '));
         check('purchase order: guest order placed', page.url().includes('success'), banner || page.url().replace(base, ''));
         const body = orderBodies.find((b) => b && b.paymentMethod);
         check('purchase order: the number travels as a top-level field of the payment',

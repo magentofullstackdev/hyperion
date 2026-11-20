@@ -4,40 +4,393 @@
 /**
  * Lit checkout mount shell.
  *
- * Rendered by Magentofullstackdev\HyperionCheckout\Block\Checkout on /checkout. The three
- * elements below are the complete contract between the Magento backend
- * and the Lit frontend:
+ * Rendered by Magentofullstackdev\HyperionCheckout\Block\Checkout on /checkout. The
+ * contract between the Magento backend and the Lit frontend:
  *
- *   1. #checkout-root -- the empty mount node the bundle inserts
- *      <checkout-app> into.
+ *   1. #checkout-root -- the mount node. The bundle replaces its children
+ *      with <checkout-app> in one step. Until then it holds a skeleton with
+ *      the geometry of the application's first render (no layout shift, and
+ *      the footer stays below the fold of the checkout), after a <noscript>
+ *      line with a way back to the cart.
  *   2. #checkout-config -- a JSON island parsed once at boot. Delivered
  *      as `<script type="application/json">` (not inline JS) for CSP
  *      friendliness and DevTools inspectability.
- *   3. A module <script> tag and a stylesheet <link>.
+ *   3. The entry module <script>. The stylesheet and the module preloads
+ *      are in the head (checkout/head.phtml).
  *
  * Both <script> tags are emitted via SecureHtmlRenderer so the
  * CSP nonce is attached automatically. With `csp/mode/storefront/report_only=0`
  * the bundle continues to load under restrict-mode policies.
+ *
+ * The skeleton. Everything outside <checkout-app> is styled by the theme
+ * stylesheet, so the classes below are theme utilities, written out literally.
+ * It is made of the same boxes the application renders, top to bottom:
+ *
+ *   - the outer grid (one column; from `lg` the sections and a 380px rail);
+ *   - below `lg` the collapsed summary bar first, from `lg` the summary rail;
+ *   - the page heading line, then one card per section: contact, shipping
+ *     (not for a virtual quote), payment;
+ *   - a field is a 20px label line, 6px, a 42px control, 4px and a 20px
+ *     message line; fields are 16px apart. The email field of a guest is
+ *     followed by one more 20px line when the store offers the sign in
+ *     there. One loop draws every address row
+ *     (ViewModel\CheckoutSkeleton::getAddressRows(): one, two or three
+ *     fields that stack below `md`), another the saved address cards of a
+ *     customer who has some;
+ *   - the shipping and the payment method lists draw the rows the page
+ *     already carries for the application (the checkout configuration,
+ *     decoded once by the view model), so a quote that comes back with its
+ *     methods has their height from the start;
+ *   - the summary has one row per quote item (a 64px image box, the name
+ *     line, the option lines, the quantity line), the totals rows and the
+ *     coupon line.
+ *
+ * A text whose wrapping decides a height (the billing checkbox label, the
+ * waiting lines of the two lists, the payment method titles) is printed for
+ * real in transparent ink with the classes of the application, so it wraps
+ * where the real one does at any width. Those phrases are the checkout's own
+ * (`i18n/en_US.csv`), translated the same way for both sides.
+ *
+ * Bars pulse on a surface one step away from their card. The whole block is
+ * `aria-hidden` and built from `div` and `span` only: it adds no landmark, no
+ * heading and nothing focusable.
  *
  * @var \Magentofullstackdev\HyperionCheckout\Block\Checkout $block
  * @var \Magento\Framework\Escaper $escaper
  * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
  * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
  */
+$cartUrl = $block->getUrl('checkout/cart');
+$configJson = $block->getCheckoutConfigJson();
+if ($configJson === ''): ?>
+<div class="mx-auto max-w-6xl p-4">
+    <div class="rounded-xl border border-subtle bg-surface p-6 text-center space-y-4" role="alert">
+        <p class="text-lg text-muted">
+            <?= $escaper->escapeHtml(__('We couldn\'t initialise the checkout. Please refresh the page.')) ?>
+        </p>
+        <a href="<?= $escaper->escapeUrl($cartUrl) ?>"
+           class="inline-flex items-center px-6 py-3 rounded-lg font-bold uppercase tracking-wider text-sm
+                  bg-primary text-on-primary hover:bg-primary-hover transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-primary">
+            <?= $escaper->escapeHtml(__('Back to Cart')) ?>
+        </a>
+    </div>
+</div>
+    <?php return; ?>
+<?php endif;
+
 $beginCheckoutJson = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\GtagCheckout::class)
     ->getBeginCheckoutJson();
+
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\CheckoutSkeleton $skeleton */
+$skeleton = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\CheckoutSkeleton::class);
+$isVirtual = $skeleton->isVirtual();
+$isLoggedIn = $skeleton->isLoggedIn();
+$config = $skeleton->readConfig($configJson);
+$savedCards = $skeleton->getSavedAddressCards();
+$shippingRows = $skeleton->getShippingRows($config);
+$paymentRows = $skeleton->getPaymentRows($config);
+$addressRows = $skeleton->getAddressRows();
+$items = $skeleton->getItems();
+$totalsRows = $skeleton->getTotalsRowCount();
+// The address is entered in the shipping section, or in the payment section of a virtual quote.
+$cards = $isVirtual ? ['contact', 'payment'] : ['contact', 'shipping', 'payment'];
+$addressCard = $isVirtual ? 'payment' : 'shipping';
 ?>
-<div id="checkout-root"></div>
+<div id="checkout-root">
+    <noscript>
+        <div class="mx-auto max-w-6xl px-4 pt-4">
+            <p class="rounded-lg border border-subtle bg-surface-raised p-4 text-sm text-secondary">
+                <?= $escaper->escapeHtml(__('JavaScript is required to check out. Enable it in your browser, or go back to your cart.')) ?>
+                <a href="<?= $escaper->escapeUrl($cartUrl) ?>" class="font-semibold underline">
+                    <?= $escaper->escapeHtml(__('Back to Cart')) ?>
+                </a>
+            </p>
+        </div>
+    </noscript>
+    <div data-hyperion-checkout-skeleton aria-hidden="true"
+         class="mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 p-4">
+        <?php /* Phones and tablets: the collapsed summary bar (item count left, grand total right). */ ?>
+        <div class="lg:hidden flex h-14 items-center justify-between rounded-xl border border-subtle bg-surface-raised px-4"
+             data-hyperion-skeleton-part="summary-bar">
+            <span class="block h-4 w-40 rounded bg-subtle animate-pulse"></span>
+            <span class="block h-5 w-20 rounded bg-subtle animate-pulse"></span>
+        </div>
+
+        <div class="space-y-6" data-hyperion-skeleton-part="sections">
+            <?php /* Page heading: one 36px line. */ ?>
+            <div class="flex h-9 items-center" data-hyperion-skeleton-part="heading">
+                <span class="block h-6 w-40 rounded bg-surface-raised animate-pulse"></span>
+            </div>
+
+            <?php foreach ($cards as $card): ?>
+                <div class="rounded-xl border border-subtle bg-surface p-4 space-y-3"
+                     data-hyperion-skeleton-part="<?= $escaper->escapeHtmlAttr($card) ?>">
+                    <?php /* Section heading: one 28px line. */ ?>
+                    <div class="flex h-7 items-center">
+                        <span class="block h-4 w-32 rounded bg-surface-raised animate-pulse"></span>
+                    </div>
+
+                    <?php if ($card === 'contact'): ?>
+                        <?php if ($isLoggedIn): ?>
+                            <?php /* The customer's email: one 20px text line. */ ?>
+                            <div class="flex h-5 items-center">
+                                <span class="block h-3 w-48 rounded bg-surface-raised animate-pulse"></span>
+                            </div>
+                        <?php else: ?>
+                            <?php /* The email field. */ ?>
+                            <div data-hyperion-skeleton-field>
+                                <div class="flex h-5 items-center">
+                                    <span class="block h-3 w-24 rounded bg-surface-raised animate-pulse"></span>
+                                </div>
+                                <div class="mt-1.5 h-[2.625rem] rounded-lg border border-subtle bg-surface"></div>
+                                <div class="mt-1 h-5"></div>
+                                <?php if ($skeleton->isGuestLoginOffered()): ?>
+                                    <?php /* The line kept for the "account found, sign in" notice: 4px, 20px. */ ?>
+                                    <div class="mt-1 h-5" data-hyperion-skeleton-login-line></div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <?php /* The body of the section: blocks 16px apart in the payment section. */ ?>
+                        <div class="<?= $escaper->escapeHtmlAttr($card === 'payment' ? 'space-y-4' : 'block') ?>">
+                            <?php if ($card === 'payment' && !$isVirtual): ?>
+                                <?php /* "Billing address same as shipping": a 16px box and the label, which wraps on a narrow screen. */ ?>
+                                <div data-hyperion-skeleton-part="billing-same">
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="block h-4 w-4 rounded border border-subtle"></span>
+                                        <span class="text-sm text-transparent select-none"><?= $escaper->escapeHtml(__('My billing and shipping address are the same')) ?></span>
+                                    </span>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($card === $addressCard): ?>
+                                <div data-hyperion-skeleton-part="address">
+                                    <?php /* Address heading: one 24px line, 16px above the form (12px in the payment section). */ ?>
+                                    <div class="flex h-6 items-center <?= $escaper->escapeHtmlAttr($isVirtual ? 'mb-3' : 'mb-4') ?>">
+                                        <span class="block h-4 w-40 rounded bg-surface-raised animate-pulse"></span>
+                                    </div>
+                                    <?php if ($savedCards !== []): ?>
+                                        <?php /* Saved address cards, two per row from md (a row is as high as its tallest card), then the "new address" button. */ ?>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <?php foreach ($savedCards as $savedCard): ?>
+                                                <?php /* 12px padding; one 20px line per address line, 2px apart. */ ?>
+                                                <div class="rounded-lg border border-subtle bg-surface p-3 space-y-0.5"
+                                                     data-hyperion-skeleton-address-card>
+                                                    <?php for ($i = 0; $i < $savedCard['lines']; $i++): ?>
+                                                        <div class="flex h-5 items-center">
+                                                            <span class="block h-3 w-32 rounded bg-surface-raised animate-pulse"></span>
+                                                        </div>
+                                                    <?php endfor; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <div class="mt-4 h-9 w-40 rounded-lg border border-subtle bg-surface-raised" data-hyperion-skeleton-address-new></div>
+                                    <?php else: ?>
+                                        <div class="space-y-4">
+                                            <?php foreach ($addressRows as $row): ?>
+                                                <?php /* One, two or three fields; several stack below md like the form. */ ?>
+                                                <?php
+                                                $rowClass = 'block';
+                                                if ($row['columns'] === 3) {
+                                                    $rowClass = 'grid grid-cols-1 md:grid-cols-3 gap-4';
+                                                } elseif ($row['columns'] === 2) {
+                                                    $rowClass = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+                                                } elseif ($row['narrow']) {
+                                                    $rowClass = 'md:max-w-xs';
+                                                }
+                                                ?>
+                                                <div class="<?= $escaper->escapeHtmlAttr($rowClass) ?>"
+                                                     data-hyperion-skeleton-row="<?= $escaper->escapeHtmlAttr($row['field']) ?>">
+                                                    <?php for ($i = 0; $i < $row['columns']; $i++): ?>
+                                                        <div data-hyperion-skeleton-field>
+                                                            <div class="flex h-5 items-center">
+                                                                <span class="block h-3 w-24 rounded bg-surface-raised animate-pulse"></span>
+                                                            </div>
+                                                            <div class="mt-1.5 h-[2.625rem] rounded-lg border border-subtle bg-surface"></div>
+                                                            <div class="mt-1 h-5"></div>
+                                                        </div>
+                                                    <?php endfor; ?>
+                                                </div>
+                                            <?php endforeach; ?>
+                                            <?php if ($skeleton->hasSaveInAddressBook()): ?>
+                                                <?php /* "Save in address book": one 24px checkbox line. */ ?>
+                                                <div class="flex h-6 items-center gap-2" data-hyperion-skeleton-row="save_in_address_book">
+                                                    <span class="block h-4 w-4 rounded border border-subtle"></span>
+                                                    <span class="block h-3 w-36 rounded bg-surface-raised animate-pulse"></span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($card === 'shipping'): ?>
+                                <?php /* Shipping methods, 16px under the address: a divider, the 24px heading, a list that keeps the height of two 46px rows 8px apart. */ ?>
+                                <div class="mt-4 pt-2 border-t border-subtle" data-hyperion-skeleton-part="shipping-methods">
+                                    <div class="mb-2 flex h-6 items-center">
+                                        <span class="block h-4 w-36 rounded bg-surface-raised animate-pulse"></span>
+                                    </div>
+                                    <div class="min-h-[6.25rem] space-y-2">
+                                        <?php foreach ($shippingRows as $shippingRow): ?>
+                                            <?php if ($shippingRow === 'text'): ?>
+                                                <?php /* No address yet: the one line that asks for it, wrapping like the real one. */ ?>
+                                                <p class="text-sm text-transparent select-none"><?= $escaper->escapeHtml(__('Enter your country and postcode to see shipping options.')) ?></p>
+                                            <?php elseif ($shippingRow === 'heading'): ?>
+                                                <?php /* The subheading of a carrier with several methods: 4px, a 16px line. */ ?>
+                                                <div class="flex h-4 items-center pt-1 box-content">
+                                                    <span class="block h-2.5 w-24 rounded bg-surface-raised animate-pulse"></span>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="flex h-[2.875rem] items-center justify-between rounded-lg border border-subtle bg-surface px-3">
+                                                    <span class="block h-3 w-40 rounded bg-surface-raised animate-pulse"></span>
+                                                    <span class="block h-3 w-12 rounded bg-surface-raised animate-pulse"></span>
+                                                </div>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                    <?php if ($skeleton->hasShippingPolicy($config)): ?>
+                                        <?php /* The shipping policy link: 12px, one 24px line. */ ?>
+                                        <div class="pt-3">
+                                            <div class="flex h-6 items-center">
+                                                <span class="block h-3 w-40 rounded bg-surface-raised animate-pulse"></span>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($card === 'payment'): ?>
+                                <?php /* Payment methods: a divider, the 24px heading, then the rows the page already knows or the line that waits for the shipping method. */ ?>
+                                <div class="pt-2 border-t border-subtle" data-hyperion-skeleton-part="payment-methods">
+                                    <div class="mb-2 flex h-6 items-center">
+                                        <span class="block h-4 w-36 rounded bg-surface-raised animate-pulse"></span>
+                                    </div>
+                                    <?php if ($paymentRows !== []): ?>
+                                        <div class="space-y-2">
+                                            <?php foreach ($paymentRows as $paymentRow): ?>
+                                                <?php /* A row: 12px padding, the title line (it wraps like the real one) and, for a method without a renderer, the 16px note. */ ?>
+                                                <div class="rounded-md border border-subtle bg-surface" data-hyperion-skeleton-payment-row>
+                                                    <div class="flex items-start gap-3 p-3">
+                                                        <span class="mt-0.5 block h-4 w-4 rounded-full border border-subtle"></span>
+                                                        <span class="text-sm text-transparent select-none">
+                                                            <span class="font-medium"><?= $escaper->escapeHtml($paymentRow['title']) ?></span>
+                                                            <?php if (!$paymentRow['supported']): ?>
+                                                                <span class="block text-xs"><?= $escaper->escapeHtml(__('Not supported by this checkout yet')) ?></span>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <p class="text-sm text-transparent select-none"><?= $escaper->escapeHtml(__('Select a shipping method to continue.')) ?></p>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($card === 'payment'): ?>
+                        <?php /* Place Order: the 48px button, full width. Below lg the bar reaches the edges of the card and shows the grand total line above the button. */ ?>
+                        <div class="-mx-4 -mb-4 space-y-3 border-t border-subtle px-4 pt-3 pb-4 lg:mx-0 lg:mb-0 lg:space-y-0 lg:px-0 lg:pb-0"
+                             data-hyperion-skeleton-part="place-order">
+                            <div class="lg:hidden flex h-6 items-center justify-between">
+                                <span class="block h-4 w-24 rounded bg-surface-raised animate-pulse"></span>
+                                <span class="block h-4 w-20 rounded bg-surface-raised animate-pulse"></span>
+                            </div>
+                            <div class="h-12 w-full rounded-lg bg-surface-raised animate-pulse"></div>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($card === 'shipping' && $skeleton->hasGiftOptions()): ?>
+                    <?php /* The gift options link between shipping and payment: one 24px line. */ ?>
+                    <div class="flex h-6 items-center" data-hyperion-skeleton-part="gift-options">
+                        <span class="block h-3 w-28 rounded bg-surface-raised animate-pulse"></span>
+                    </div>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+
+        <?php /* From lg: the summary rail. Its card is on the raised surface, so the bars use the divider tone. */ ?>
+        <div class="hidden lg:block lg:self-start" data-hyperion-skeleton-part="summary">
+            <div class="rounded-xl border border-subtle bg-surface-raised p-4 space-y-3">
+                <div class="flex h-7 items-center">
+                    <span class="block h-4 w-32 rounded bg-subtle animate-pulse"></span>
+                </div>
+                <div class="divide-y divide-subtle">
+                    <?php foreach ($items as $item): ?>
+                        <?php /* Image box 64px; name 20px, option lines 16px each 2px apart, quantity 16px. */ ?>
+                        <div class="flex gap-3 py-2" data-hyperion-skeleton-item>
+                            <div class="h-16 w-16 shrink-0 rounded border border-subtle bg-subtle animate-pulse"></div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex h-5 items-center">
+                                    <span class="block h-3 w-40 max-w-full rounded bg-subtle animate-pulse"></span>
+                                </div>
+                                <?php if ($item['options'] > 0): ?>
+                                    <div class="mt-0.5 space-y-0.5">
+                                        <?php for ($i = 0; $i < $item['options']; $i++): ?>
+                                            <div class="flex h-4 items-center">
+                                                <span class="block h-2.5 w-24 rounded bg-subtle animate-pulse"></span>
+                                            </div>
+                                        <?php endfor; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="mt-1 flex h-4 items-center">
+                                    <span class="block h-2.5 w-12 rounded bg-subtle animate-pulse"></span>
+                                </div>
+                            </div>
+                            <div class="flex h-5 items-center">
+                                <span class="block h-3 w-12 rounded bg-subtle animate-pulse"></span>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php /* Totals: 20px rows 6px apart in a list that keeps room for the subtotal, shipping and tax rows; the 24px grand total under its divider sits at the bottom. */ ?>
+                <div class="border-t border-subtle pt-3" data-hyperion-skeleton-part="totals">
+                    <div class="flex flex-col gap-1.5 <?= $escaper->escapeHtmlAttr($isVirtual ? 'min-h-[5.3125rem]' : 'min-h-[6.9375rem]') ?>">
+                        <?php for ($i = 0; $i < $totalsRows; $i++): ?>
+                            <div class="flex h-5 items-center justify-between" data-hyperion-skeleton-total>
+                                <span class="block h-3 w-20 rounded bg-subtle animate-pulse"></span>
+                                <span class="block h-3 w-14 rounded bg-subtle animate-pulse"></span>
+                            </div>
+                        <?php endfor; ?>
+                        <div class="mt-auto flex h-6 items-center justify-between border-t border-subtle pt-2 box-content">
+                            <span class="block h-4 w-24 rounded bg-subtle animate-pulse"></span>
+                            <span class="block h-4 w-20 rounded bg-subtle animate-pulse"></span>
+                        </div>
+                    </div>
+                </div>
+                <?php if ($skeleton->hasCoupon()): ?>
+                    <?php /* An applied coupon: a bordered box, 12px padding, a 20px and a 16px line. */ ?>
+                    <div class="rounded-lg border border-subtle p-3" data-hyperion-skeleton-part="coupon">
+                        <div class="flex h-5 items-center">
+                            <span class="block h-3 w-28 rounded bg-subtle animate-pulse"></span>
+                        </div>
+                        <div class="flex h-4 items-center">
+                            <span class="block h-2.5 w-16 rounded bg-subtle animate-pulse"></span>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <?php /* The "have a code" link: one 24px line. */ ?>
+                    <div class="flex h-6 items-center" data-hyperion-skeleton-part="coupon">
+                        <span class="block h-3 w-32 rounded bg-subtle animate-pulse"></span>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
 <?php if ($beginCheckoutJson !== ''): ?>
 <span data-hyperion-gtag-event="begin_checkout" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($beginCheckoutJson) ?>" hidden></span>
 <?php endif; ?>
 <?= /* @noEscape */ $secureRenderer->renderTag(
     'script',
     ['type' => 'application/json', 'id' => 'checkout-config'],
-    $block->getCheckoutConfigJson(),
+    $configJson,
     false
 ) ?>
-<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getStylesUrl()) ?>"/>
 <?= /* @noEscape */ $secureRenderer->renderTag(
     'script',
     ['type' => 'module', 'src' => $block->getBundleUrl()],
