@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The per tile hooks on the search results.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!-- Core declares the `default` renderer (category.product.type.details.renderers.default, no
+             template): a second block with the same alias would not be used, so the marker template goes
+             onto core's block. -->
+        <referenceBlock name="category.product.type.details.renderers.default"
+                        template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+            <arguments>
+                <argument name="marker" xsi:type="string">details.renderers</argument>
+                <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+            </arguments>
+        </referenceBlock>
+        <referenceBlock name="catalogsearch.product.addto">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.search.addto"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">addto</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

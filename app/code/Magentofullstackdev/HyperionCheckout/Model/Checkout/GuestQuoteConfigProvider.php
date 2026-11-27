@@ -32,7 +32,9 @@ use Psr\Log\LoggerInterface;
  *   "billing same as shipping".
  *
  * Addresses are emitted flat (`region` name, `region_id`, `region_code`,
- * `street` as a list, `QuoteAddressExporter`); the bundle normalizes them into
+ * `street` as a list, `QuoteAddressExporter`), plus the values of the
+ * declared address fields (`custom_attributes`, `extension_attributes`,
+ * `AddressFieldsValues`); the bundle normalizes them into
  * its `Address` shape (`utils/checkout-config.ts`). Null for a logged in
  * customer (core's `customerData` and `hyperion.initial` are the sources
  * there) and for a quote that belongs to a customer who is not logged in.
@@ -43,7 +45,8 @@ class GuestQuoteConfigProvider implements ConfigProviderInterface
         private readonly CheckoutSession $checkoutSession,
         private readonly CustomerSession $customerSession,
         private readonly LoggerInterface $logger,
-        private readonly QuoteAddressExporter $addressExporter
+        private readonly QuoteAddressExporter $addressExporter,
+        private readonly AddressFieldsValues $addressFieldsValues
     ) {
     }
 
@@ -80,7 +83,19 @@ class GuestQuoteConfigProvider implements ConfigProviderInterface
 
         $shipping = $quote->getIsVirtual() ? null : $this->addressExporter->export($quote->getShippingAddress());
         $billing = $this->addressExporter->export($quote->getBillingAddress());
-        if ($billing !== null && $shipping !== null && $this->addressExporter->isSame($shipping, $billing)) {
+        $shippingExtras = $shipping !== null ? $this->addressFieldsValues->export($quote->getShippingAddress()) : [];
+        $billingExtras = $billing !== null ? $this->addressFieldsValues->export($quote->getBillingAddress()) : [];
+        if ($shipping !== null) {
+            $shipping += $shippingExtras;
+        }
+        if ($billing !== null) {
+            $billing += $billingExtras;
+        }
+        // isSame() compares the built-in fields only: a billing address that
+        // differs by a declared field (`hyperion.addressFields`) stays separate.
+        if ($billing !== null && $shipping !== null
+            && $this->addressExporter->isSame($shipping, $billing) && $billingExtras == $shippingExtras
+        ) {
             $billing = null;
         }
 

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Product tile hooks of the search results (Magento_Catalog::product/list.phtml prints the
+    `details.renderers` list under the price and the `addto` container at the end of the tile
+    actions). Core's own children are removed by name: the tile renders its own swatches, wish
+    list and compare controls, core's are RequireJS widgets. The removal is in this handle
+    because the grid fragment (hyperion/catalog/search) builds its layout from it without `default`. The list block is block cached
+    and the page edge cached: a child must be session agnostic and must not be cacheable="false".
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="category.product.type.details.renderers.configurable" remove="true"/>
+        <referenceBlock name="catalogsearch.product.addto.compare" remove="true"/>
+        <referenceBlock name="catalogsearch.product.addto.wishlist" remove="true"/>
+    </body>
+</page>

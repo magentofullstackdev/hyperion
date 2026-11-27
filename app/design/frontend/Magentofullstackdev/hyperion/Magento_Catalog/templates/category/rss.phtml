@@ -1,0 +1,27 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Category RSS feed link, printed next to the category title (category/title.phtml).
+ *
+ * Same conditions as core: the category feed is enabled (`rss/catalog/category`), RSS is
+ * enabled (`rss/config/active`, an empty link otherwise) and the category is a top level one.
+ * Store configuration only: the category page is edge cached.
+ *
+ * @var \Magento\Catalog\Block\Category\Rss\Link $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$link = $block->isRssAllowed() && $block->isTopCategory() ? (string) $block->getLink() : '';
+?>
+<?php if ($link !== ''): ?>
+    <a href="<?= $escaper->escapeUrl($link) ?>"
+       data-hyperion-category-rss
+       class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>
+        </svg>
+        <span><?= $escaper->escapeHtml($block->getLabel()) ?></span>
+    </a>
+<?php endif; ?>

@@ -36,13 +36,13 @@ the Magento root:
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.6
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.6   # optional, see below
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.7
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.7   # optional, see below
 ```
 
 `minimum-stability beta` is needed while the release is a beta: the theme
-requires its modules at the exact version `0.9.0-beta.6`, and a stability
-flag on the root constraint (`^0.9.0-beta.6`) does not reach those
+requires its modules at the exact version `0.9.0-beta.7`, and a stability
+flag on the root constraint (`^0.9.0-beta.7`) does not reach those
 transitive requirements. `prefer-stable` keeps every other package on its
 stable release, and Magento projects already ship with it set. The step
 disappears with the first stable release.
@@ -305,6 +305,14 @@ commands has an "Upgrade notes" block (`0.9.0-beta.6` asks for
 settings). If `pub/static` keeps symlinks to old hashed
 assets (developer mode), remove the dangling ones before the deploy:
 `find pub/static -xtype l -delete`.
+
+A `composer install` that stops with "The checksum verification of the file
+failed" on a `magentofullstackdev/*` archive runs from a `composer.lock`
+written before `0.9.0-beta.6` was published: the archives of the earlier
+releases were built again at that publication and got other checksums under
+the same URLs. `composer update --lock` writes the current checksums into
+the lock file without changing a version. From `0.9.0-beta.7` on a published
+archive is never built again.
 
 A store that installed a build before the search and mega menu modules
 existed receives them with `composer update`: `setup:upgrade` enables

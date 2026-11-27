@@ -66,7 +66,8 @@ class InitialStateConfigProvider implements ConfigProviderInterface
         private readonly QuoteAddressExporter $addressExporter,
         private readonly RateFields $rateFields,
         private readonly ScopeConfigInterface $scopeConfig,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly AddressFieldsValues $addressFieldsValues
     ) {
     }
 
@@ -192,9 +193,11 @@ class InitialStateConfigProvider implements ConfigProviderInterface
     {
         $shippingData = $this->customerAddress($shipping) ?? [];
         $billingData = $billing === null ? null : $this->customerAddress($billing);
+        // The declared address fields are compared too: isSame() reads the built-in fields only.
         if ($billingData !== null
             && $billingData['customer_address_id'] === ($shippingData['customer_address_id'] ?? null)
             && $this->addressExporter->isSame($shippingData, $billingData)
+            && $this->declaredValues($billingData) == $this->declaredValues($shippingData)
         ) {
             $billingData = null;
         }
@@ -217,7 +220,18 @@ class InitialStateConfigProvider implements ConfigProviderInterface
         $addressId = (int)$address->getData('customer_address_id');
         $data['customer_address_id'] = $addressId > 0 ? $addressId : null;
         $data['same_as_billing'] = (bool)$address->getData('same_as_billing');
-        return $data;
+        return $data + $this->addressFieldsValues->export($address);
+    }
+
+    /**
+     * The values of the declared address fields of an exported address.
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function declaredValues(array $data): array
+    {
+        return array_intersect_key($data, ['custom_attributes' => true, 'extension_attributes' => true]);
     }
 
     /**

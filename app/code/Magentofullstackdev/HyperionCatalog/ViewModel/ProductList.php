@@ -26,6 +26,7 @@ use Psr\Log\LoggerInterface;
 class ProductList implements ArgumentInterface
 {
     private const XML_PATH_ADD_TO_CART_FROM_LISTING = 'hyperion/catalog/add_to_cart_from_listing';
+    private const XML_PATH_SHOW_SWATCHES_IN_LIST = 'catalog/frontend/show_swatches_in_product_list';
 
     /**
      * Set once a price failed to render in this request (the tile then
@@ -221,7 +222,9 @@ class ProductList implements ArgumentInterface
     }
 
     /**
-     * Returns true for configurable products that expose swatch attributes.
+     * Returns true for configurable products that expose swatch attributes, while
+     * "Show Swatches in Product List" (`catalog/frontend/show_swatches_in_product_list`)
+     * is on: the tiles follow core's listing setting, the product page does not ask here.
      *
      * @param Product $product
      * @return bool
@@ -229,6 +232,10 @@ class ProductList implements ArgumentInterface
     public function isConfigurableWithSwatches(Product $product): bool
     {
         try {
+            if (!$this->scopeConfig->isSetFlag(self::XML_PATH_SHOW_SWATCHES_IN_LIST, ScopeInterface::SCOPE_STORE)) {
+                return false;
+            }
+
             return $this->swatchConfig->isConfigurableWithSwatches($product);
         } catch (\Throwable $e) {
             $this->logger->error(

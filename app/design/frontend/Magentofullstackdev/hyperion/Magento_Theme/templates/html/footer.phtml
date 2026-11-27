@@ -14,6 +14,12 @@ $storeName = $block->getStoreName();
 // Same accessible name as the header logo link: the image alt, or the label of the wordmark link.
 $homeLabel = __('%1 Home', $storeName);
 $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
+$logoSize = $block->getLogoDimensions();
+// Empty while "Enable Contact Us" is off.
+$contactUrl = $block->getContactUrl();
+// The subscribe block carries `ifconfig="newsletter/general/active"` (default.xml): empty while
+// the newsletter is off, and the whole column goes with it.
+$subscribeHtml = trim((string) $block->getChildHtml('subscribe'));
 ?>
 <?php /* The id is the render blocking marker of the pages with an inline critical sheet
          (HyperionCore RenderBlockingMarkerPlugin, `<link rel="expect">`): the first paint waits
@@ -37,7 +43,7 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                     <?php if ($logoUrl !== ''): ?>
                         <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
                              alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
-                             width="140" height="40"
+                             width="<?= (int) $logoSize['width'] ?>" height="<?= (int) $logoSize['height'] ?>"
                              class="h-10 w-auto object-contain"
                              loading="lazy" decoding="async">
                     <?php else: ?>
@@ -83,13 +89,15 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                     <?= $escaper->escapeHtml(__('Customer service')) ?>
                 </h2>
                 <ul class="space-y-2 text-sm" role="list">
-                    <li>
-                        <a href="<?= $escaper->escapeUrl($block->getContactUrl()) ?>"
-                           class="text-on-inverted-muted hover:text-primary transition-colors
-                                  focus:outline-none focus:ring-2 focus:ring-primary rounded">
-                            <?= $escaper->escapeHtml(__('Contact us')) ?>
-                        </a>
-                    </li>
+                    <?php if ($contactUrl !== ''): ?>
+                        <li>
+                            <a href="<?= $escaper->escapeUrl($contactUrl) ?>"
+                               class="text-on-inverted-muted hover:text-primary transition-colors
+                                      focus:outline-none focus:ring-2 focus:ring-primary rounded">
+                                <?= $escaper->escapeHtml(__('Contact us')) ?>
+                            </a>
+                        </li>
+                    <?php endif; ?>
                     <li>
                         <a href="<?= $escaper->escapeUrl($block->getOrderStatusUrl()) ?>"
                            class="text-on-inverted-muted hover:text-primary transition-colors
@@ -127,19 +135,20 @@ $logoAlt = $escaper->escapeHtmlAttr(__('%1 Home', $block->getLogoAlt()));
                 </ul>
             </div>
 
-            <?php /* Newsletter column -- delegated to Magento_Newsletter
-                   subscribe block when mounted by layout XML; falls back
-                   to an empty column when the subscribe block is absent
-                   so the 4-col grid still balances. */ ?>
-            <div>
-                <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
-                    <?= $escaper->escapeHtml(__('Stay in the loop')) ?>
-                </h2>
-                <p class="text-sm mb-4 text-on-inverted-muted">
-                    <?= $escaper->escapeHtml(__('Subscribe for new arrivals and exclusive offers.')) ?>
-                </p>
-                <?= $block->getChildHtml('subscribe') ?>
-            </div>
+            <?php /* Newsletter column -- the Magento_Newsletter subscribe form under its heading
+                   and lead. Without the form (newsletter off, or the block removed in layout XML)
+                   the column is left out and its grid track stays empty. */ ?>
+            <?php if ($subscribeHtml !== ''): ?>
+                <div data-hyperion-footer-newsletter>
+                    <h2 class="text-sm font-semibold uppercase tracking-wider text-on-inverted mb-4">
+                        <?= $escaper->escapeHtml(__('Stay in the loop')) ?>
+                    </h2>
+                    <p class="text-sm mb-4 text-on-inverted-muted">
+                        <?= $escaper->escapeHtml(__('Subscribe for new arrivals and exclusive offers.')) ?>
+                    </p>
+                    <?= /* @noEscape -- rendered block */ $subscribeHtml ?>
+                </div>
+            <?php endif; ?>
 
         </div>
     </div>

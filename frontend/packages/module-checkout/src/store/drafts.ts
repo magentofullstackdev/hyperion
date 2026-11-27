@@ -7,15 +7,22 @@
  *
  * One entry per store and quote, removed 60 minutes after its last write
  * and when the order is placed. A sign in changes the quote, so the entry
- * is copied to a handoff key first, accepted once for any quote of the same
- * store within 10 minutes.
+ * is copied to a handoff key first, with its writer: the signed-in customer
+ * of the checkout that wrote it, or nobody. The next boot of the same store
+ * takes it once within 10 minutes, for whatever quote it has, but puts it
+ * back only for the shopper it was written for (`isForThisShopper()`); any
+ * other boot just removes it.
  *
  * A draft never holds a password, payment data of any renderer (nonces,
  * tokens, device data, card or bank data, a purchase order number, vault
  * hashes), a CAPTCHA or reCAPTCHA answer, accepted agreements, the form key
  * or account data that came from the server (a saved address is kept as
- * its id only, a customer's email not at all). A new kind of value needs a
- * new schema version.
+ * its id only, a customer's email not at all; a handoff entry adds the id of
+ * the customer who wrote it). A new kind of value needs a
+ * new schema version. The values of the shipping extensions (a pickup
+ * point, a delivery date: the shopper's own delivery choice, never payment
+ * data) are one optional field of the same version; a draft without it
+ * restores as before.
  *
  * The lower half of the module is the plain storage (`readDraft()`,
  * `writeDraft()`, ...); the upper half binds it to the store of the running
@@ -25,16 +32,29 @@
  */
 import { Signal } from 'signal-polyfill';
 
+import type { ShippingExtensionValue } from '../../extension-api.js';
 import type { Address, Region } from '../types/address.js';
 import type { AddressId } from '../types/common.js';
 import type { CheckoutConfig } from '../types/config.js';
 import type { SelectedShippingMethod } from '../types/shipping.js';
 import { debounce, type Debounced } from '../utils/debounce.js';
 import { offeredPaymentMethods } from '../utils/payment-offer.js';
+import { watchValue } from '../extension/watch.js';
+import { isVaultMethod } from '../components/payment-host/payment-rows.js';
 import type { Store } from './index.js';
 
-export const DRAFT_KEY_PREFIX = 'hyperion.checkout.draft.v1';
+/**
+ * The start of every key the checkout writes to the tab's session storage
+ * (drafts, the handoff entry, the override fingerprints). The theme removes
+ * them at a sign-out with the same value (`CHECKOUT_STORAGE_PREFIX` of
+ * `src/js/lib/checkout-drafts.js` in the theme package, which never imports
+ * this one); a test on each side compares the two.
+ */
+export const CHECKOUT_STORAGE_PREFIX = 'hyperion.checkout.';
+export const DRAFT_KEY_PREFIX = `${CHECKOUT_STORAGE_PREFIX}draft.v1`;
 export const DRAFT_TTL_MS = 60 * 60 * 1000;
+/** The address a shipping extension put in place of the typed one, recorded by the shipping extension host; it goes with the draft. */
+export const OVERRIDE_KEY_PREFIX = `${CHECKOUT_STORAGE_PREFIX}override.v1`;
 export const HANDOFF_TTL_MS = 10 * 60 * 1000;
 /** How long the checkout state must stay unchanged before the draft is written. */
 export const DRAFT_WRITE_DELAY_MS = 300;
@@ -92,6 +112,10 @@ export interface CheckoutDraft {
     giftDrafts: Record<string, DraftGiftMessage>;
     /** The fingerprint of the server state the draft was written next to; diagnostics only. */
     fingerprint: string | null;
+    /** The last value of each shipping extension, by extension id; absent when none has one. */
+    shippingExtensions?: Record<string, ShippingExtensionValue>;
+    /** Handoff entry only: who wrote it (`writerOf()`). An entry without it is never put back. */
+    writer?: string;
 }
 
 /**
@@ -101,6 +125,13 @@ export interface CheckoutDraft {
  */
 export const couponDraft = new Signal.State<string>('');
 export const giftDrafts = new Signal.State<Readonly<Record<string, DraftGiftMessage>>>({});
+
+/**
+ * The shipping extension values the restored draft held, by extension id:
+ * the shipping extension host offers them to an element when the server
+ * has no value for it.
+ */
+export const restoredShippingExtensions = new Signal.State<Readonly<Record<string, ShippingExtensionValue>>>({});
 
 // -- Bound to the running checkout ------------------------------------------------
 
@@ -122,10 +153,38 @@ function draftsEnabled(config: CheckoutConfig): boolean {
     return config.hyperion?.persistDrafts !== false;
 }
 
+/** The writer of a handoff entry: the id of the signed-in customer, '' while nobody is signed in. */
+function writerOf(store: Store): string {
+    return String(store.customer.get()?.id ?? '');
+}
+
+const emailKey = (email: string | undefined): string => (email ?? '').trim().toLowerCase();
+
+/**
+ * Whether a handoff entry may fill the checkout of `store`: one the same
+ * customer wrote (an expired session, signed in again), one written while
+ * nobody was signed in when nobody is, and the entry a guest wrote just
+ * before signing in from the checkout when the customer signed in now has
+ * the account email that guest typed. Not for a remembered visitor of a
+ * persistent cart, a guest after a customer, another customer, nor an entry
+ * without a writer.
+ */
+function isForThisShopper(entry: CheckoutDraft, store: Store): boolean {
+    const me = writerOf(store);
+    if (entry.writer === me) return true;
+    const typed = emailKey(entry.email);
+    return entry.writer === '' && me !== '' && typed !== '' && typed === emailKey(store.customer.get()?.email);
+}
+
 /** What the store holds now, as a draft. Exported for the unit tests. */
 export function buildDraft(store: Store, quoteKey: string, fingerprint: string | null = null): CheckoutDraft {
     const method = store.selectedShippingMethod.get();
-    return {
+    const extensions: Record<string, unknown> = {};
+    for (const [id, state] of Object.entries(store.shippingExtensionData.get())) {
+        if (state.value !== null) extensions[id] = state.value;
+    }
+    const shippingExtensions = cleanShippingExtensions(extensions);
+    const draft: CheckoutDraft = {
         v: 1,
         savedAt: Date.now(),
         quoteKey,
@@ -144,6 +203,8 @@ export function buildDraft(store: Store, quoteKey: string, fingerprint: string |
         giftDrafts: cleanGiftDrafts(giftDrafts.get()),
         fingerprint,
     };
+    if (shippingExtensions !== null) draft.shippingExtensions = shippingExtensions;
+    return draft;
 }
 
 /**
@@ -154,8 +215,7 @@ export function buildDraft(store: Store, quoteKey: string, fingerprint: string |
 function restorablePaymentCode(store: Store): string | null {
     const code = store.selectedPaymentMethod.get();
     if (code === null) return null;
-    const data = store.paymentMethodData.get()[code];
-    return data !== undefined && 'public_hash' in data ? null : code;
+    return isVaultMethod(code) ? null : code;
 }
 
 /** The fields a shopper types; a country or a region alone is what an untouched form holds. */
@@ -191,7 +251,7 @@ export function startDraftPersistence(store: Store, config: CheckoutConfig): () 
     const write: Debounced<[]> = debounce((): void => {
         saveDraftNow();
     }, DRAFT_WRITE_DELAY_MS);
-    const unwatch = watchSignals(() => {
+    const unwatch = watchValue(() => {
         store.email.get();
         store.shippingAddress.get();
         store.selectedShippingAddressId.get();
@@ -204,7 +264,9 @@ export function startDraftPersistence(store: Store, config: CheckoutConfig): () 
         store.selectedPaymentMethod.get();
         couponDraft.get();
         giftDrafts.get();
-    }, write);
+        store.shippingExtensionData.get();
+        return {};
+    }, () => write());
     const onPageHide = (): void => {
         write.cancel();
         saveDraftNow();
@@ -235,16 +297,18 @@ export function saveDraftNow(): void {
 }
 
 /**
- * Keep what the shopper typed across a sign in: the quote changes with it,
- * so the current state goes to the handoff entry, which the next boot of
- * this store accepts once for whatever quote it finds.
+ * Keep what the shopper typed across a sign in (from the checkout, or again
+ * after the session expired): the quote changes with it, so the current
+ * state goes to the handoff entry with its writer, which the next boot of
+ * this store takes once for whatever quote it finds and puts back only for
+ * the same shopper.
  */
 export function copyDraftToHandoff(): void {
     if (session === null) return;
     const quoteKey = quoteKeyOf(session.store);
     if (quoteKey === null) return;
     writeDraft(session.storeCode, buildDraft(session.store, quoteKey, session.fingerprint));
-    copyToHandoff(session.storeCode, quoteKey);
+    copyToHandoff(session.storeCode, quoteKey, writerOf(session.store));
 }
 
 /**
@@ -257,7 +321,10 @@ export function discardDrafts(): void {
     const { store, storeCode, stop } = session;
     stop();
     const quoteKey = quoteKeyOf(store);
-    if (quoteKey !== null) clearDraft(storeCode, quoteKey);
+    if (quoteKey !== null) {
+        clearDraft(storeCode, quoteKey);
+        removeItem(`${OVERRIDE_KEY_PREFIX}:${storeCode}:${quoteKey}`);
+    }
     removeItem(handoffKey(storeCode));
     couponDraft.set('');
     giftDrafts.set({});
@@ -268,7 +335,9 @@ export function discardDrafts(): void {
  * server. The server wins for everything it provides, with two exceptions:
  * an address typed after the last successful save (`dirty`) replaces the
  * server's, and so does every address of a handoff entry (the quote it was
- * saved on is not the quote of this page). Only an address with something
+ * saved on is not the quote of this page). A handoff entry is removed by
+ * this read in any case and used only for the shopper who wrote it
+ * (`isForThisShopper()`). Only an address with something
  * typed in it counts: the defaults of an untouched form (a country) never
  * replace anything. An address put back this way
  * starts as ahead of the quote, so it is saved before an order can be
@@ -284,7 +353,8 @@ export function restoreDraft(store: Store, config: CheckoutConfig): void {
     const quoteKey = quoteKeyOf(store);
     if (quoteKey === null) return;
     const own = readDraft(storeCode, quoteKey);
-    const handed = consumeHandoff(storeCode);
+    const taken = consumeHandoff(storeCode);
+    const handed = taken !== null && isForThisShopper(taken, store) ? taken : null;
     const draft = handed ?? own;
     if (draft === null) return;
     const fromHandoff = handed !== null;
@@ -336,6 +406,7 @@ export function restoreDraft(store: Store, config: CheckoutConfig): void {
 
     couponDraft.set(draft.couponDraft);
     giftDrafts.set(draft.giftDrafts);
+    restoredShippingExtensions.set(draft.shippingExtensions ?? {});
 }
 
 /** The address a draft slice stands for: the saved address of its id, or the typed one. */
@@ -353,37 +424,6 @@ function addressOfSlice(store: Store, slice: DraftAddressSlice): Address | null 
         firstname: '',
         lastname: '',
         ...slice.address,
-    };
-}
-
-/**
- * Run `onChange` after any signal `read` touches changed (once per batch
- * of changes). Returns the function that stops it.
- */
-function watchSignals(read: () => void, onChange: () => void): () => void {
-    let stopped = false;
-    let scheduled = false;
-    const tracked = new Signal.Computed<object>(() => {
-        read();
-        return {};
-    });
-    const watcher = new Signal.subtle.Watcher(() => {
-        if (scheduled) return;
-        scheduled = true;
-        queueMicrotask(() => {
-            scheduled = false;
-            if (stopped) return;
-            tracked.get();
-            // A watcher reports once and then waits to be armed again.
-            watcher.watch();
-            onChange();
-        });
-    });
-    watcher.watch(tracked);
-    tracked.get();
-    return (): void => {
-        stopped = true;
-        watcher.unwatch(tracked);
     };
 }
 
@@ -489,11 +529,11 @@ export function clearDraft(storeCode: string, quoteKey: string): void {
     removeItem(draftKey(storeCode, quoteKey));
 }
 
-/** Copy the stored draft of this quote to the handoff key, with a fresh lifetime. */
-export function copyToHandoff(storeCode: string, quoteKey: string): void {
+/** Copy the stored draft of this quote to the handoff key, with a fresh lifetime and its `writer` (`writerOf()`). */
+export function copyToHandoff(storeCode: string, quoteKey: string, writer: string): void {
     const draft = getItem(draftKey(storeCode, quoteKey));
     if (draft === null) return;
-    setItem(handoffKey(storeCode), { ...draft, savedAt: Date.now() });
+    setItem(handoffKey(storeCode), { ...draft, savedAt: Date.now(), writer });
 }
 
 /** The handoff entry of the store, removed by this read; null when there is none or it expired. */
@@ -581,6 +621,20 @@ function cleanGiftDrafts(value: unknown): Record<string, DraftGiftMessage> {
     return out;
 }
 
+/** The shipping extension values a draft may hold: plain JSON objects, by extension id; null when none. */
+function cleanShippingExtensions(value: unknown): Record<string, ShippingExtensionValue> | null {
+    if (!isRecord(value)) return null;
+    const out: Record<string, ShippingExtensionValue> = {};
+    for (const [id, entry] of Object.entries(value)) {
+        if (isRecord(entry)) out[id] = entry as ShippingExtensionValue;
+    }
+    try {
+        return Object.keys(out).length > 0 ? JSON.parse(JSON.stringify(out)) as Record<string, ShippingExtensionValue> : null;
+    } catch {
+        return null;
+    }
+}
+
 function parseDraft(raw: string): CheckoutDraft | null {
     let value: unknown;
     try {
@@ -592,7 +646,8 @@ function parseDraft(raw: string): CheckoutDraft | null {
     if (typeof value.savedAt !== 'number' || typeof value.quoteKey !== 'string' || value.quoteKey === '') return null;
     const method = value.shippingMethod;
     const billing = isRecord(value.billing) ? value.billing : {};
-    return {
+    const shippingExtensions = cleanShippingExtensions(value.shippingExtensions);
+    const draft: CheckoutDraft = {
         v: 1,
         savedAt: value.savedAt,
         quoteKey: value.quoteKey,
@@ -607,4 +662,7 @@ function parseDraft(raw: string): CheckoutDraft | null {
         giftDrafts: cleanGiftDrafts(value.giftDrafts),
         fingerprint: typeof value.fingerprint === 'string' ? value.fingerprint : null,
     };
+    if (shippingExtensions !== null) draft.shippingExtensions = shippingExtensions;
+    if (typeof value.writer === 'string') draft.writer = value.writer;
+    return draft;
 }

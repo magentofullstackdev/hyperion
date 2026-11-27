@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../store/flow-actions.js', () => ({ flowActions: () => ({ flushShippingForm: vi.fn() }) }));
 
 import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type: 'json' };
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
@@ -10,6 +12,7 @@ import { createStore, setStoreForTests, type Store } from '../../store/index.js'
 import type { CheckoutConfig } from '../../types/config.js';
 import type { TotalSegment, Totals } from '../../types/totals.js';
 import { setActiveCatalogForTests } from '../../utils/i18n.js';
+import { installShippingExtensions, resetShippingExtensionsForTests } from '../shipping-extension-host.js';
 import '../summary-totals.js';
 import { readGrandTotal, type SummaryTotals } from '../summary-totals.js';
 
@@ -86,6 +89,36 @@ describe('<summary-totals>', () => {
         expect(text(row('shipping'))).toBe('Shipping & Handling (Flat Rate - Fixed) €5.00');
         expect(row('grand_total')!.hasAttribute('data-provisional')).toBe(false);
         expect(readGrandTotal(store)).toEqual({ label: 'Grand Total', text: '€61.29', settled: true });
+    });
+
+    it('prints the summary of an active shipping extension under the shipping row, and nothing without one', async () => {
+        store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29', tax_amount: '4.29' }));
+        store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        store.shippingExtensionData.set({ vendor_note: { value: { information: { note: 'x' } }, valid: true, message: null } });
+        await mount();
+        expect(el.querySelector('[data-shipping-extension-summary]')).toBeNull();
+        installShippingExtensions([{
+            id: 'vendor_locker', match: { carrier: 'locker', method: null }, slot: 'below-method', tag: 'vendor-locker-picker',
+            moduleUrl: null, kit: null, apiVersion: '1', required: false, sortOrder: 10, options: {}, phrases: {}, value: null,
+        }]);
+        await el.updateComplete;
+        const list = el.querySelector('[data-hyperion-totals]')!;
+        const childrenWithout = list.children.length;
+        expect(el.querySelector('[data-shipping-extension-summary]')).toBeNull();
+
+        store.shippingExtensionData.set({
+            vendor_locker: {
+                value: { summary: { label: 'Parcel locker', lines: ['Via Roma 1', 'Milano'] } },
+                valid: true,
+                message: null,
+            },
+        });
+        await el.updateComplete;
+        const summary = el.querySelector('[data-shipping-extension-summary]')!;
+        expect(summary.previousElementSibling).toBe(row('shipping'));
+        expect(summary.querySelector('dd')?.textContent).toBe('Parcel locker, Via Roma 1, Milano');
+        expect(list.children.length).toBe(childrenWithout + 1);
+        resetShippingExtensionsForTests();
     });
 
     it('never asks for shipping on a quote that does not ship', async () => {
@@ -242,6 +275,64 @@ describe('<summary-totals>', () => {
         store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29' }));
         store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
         await el.updateComplete;
-        expect(text(live())).toBe('Grand Total €61.29');
+        expect(text(live())).toBe('Order summary updated. Grand Total €61.29');
+        expect(live().getAttribute('aria-live')).toBe('polite');
+        expect(live().classList.contains('sr-only')).toBe(true);
+    });
+
+    it('announces only where a chain of recomputed totals ended, once the queue settled', async () => {
+        store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29' }));
+        store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        await mount();
+        expect(text(live())).toBe('');
+
+        // A coupon write: the answer recomputes the totals while the settling read is still on its way.
+        store.isSettlingTotals.set(true);
+        store.totals.set(totals([...WITH_SHIPPING.slice(0, 3), seg('grand_total', 'Grand Total', '55.29')]));
+        await el.updateComplete;
+        expect(text(live())).toBe('');
+
+        store.totals.set(totals([...WITH_SHIPPING.slice(0, 3), seg('grand_total', 'Grand Total', '51.00')]));
+        await el.updateComplete;
+        expect(text(live())).toBe('');
+
+        store.isSettlingTotals.set(false);
+        await el.updateComplete;
+        expect(text(live())).toBe('Order summary updated. Grand Total €51.00');
+
+        // The same total confirmed again (a payment information read) is not announced twice.
+        store.totals.set(totals([...WITH_SHIPPING.slice(0, 3), seg('grand_total', 'Grand Total', '51.00')]));
+        await el.updateComplete;
+        expect(text(live())).toBe('Order summary updated. Grand Total €51.00');
+    });
+
+    it('says nothing while the expected totals of an unanswered change are on screen', async () => {
+        store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29' }));
+        store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        await mount();
+
+        const changed = totals([...WITH_SHIPPING.slice(0, 3), seg('grand_total', 'Grand Total', '66.29')]);
+        store.optimisticTotals.set(changed);
+        store.totals.set(changed);
+        await el.updateComplete;
+        expect(text(live())).toBe('');
+
+        store.optimisticTotals.set(null);
+        await el.updateComplete;
+        expect(text(live())).toBe('Order summary updated. Grand Total €66.29');
+    });
+
+    it('a total that settles back to the one first shown is not news', async () => {
+        store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29' }));
+        store.appliedShippingMethod.set({ carrier_code: 'flatrate', method_code: 'flatrate' });
+        await mount();
+
+        store.isSettlingTotals.set(true);
+        store.totals.set(totals([...WITH_SHIPPING.slice(0, 3), seg('grand_total', 'Grand Total', '70.00')]));
+        await el.updateComplete;
+        store.totals.set(totals(WITH_SHIPPING, { grand_total: '61.29' }));
+        store.isSettlingTotals.set(false);
+        await el.updateComplete;
+        expect(text(live())).toBe('');
     });
 });

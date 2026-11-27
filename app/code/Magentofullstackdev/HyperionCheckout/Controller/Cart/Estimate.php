@@ -36,7 +36,10 @@ use Psr\Log\LoggerInterface;
  * them) is applied, the totals are recollected and the quote saved, so the
  * summary card shows the shipping cost and the taxes of that destination.
  * A rate the carrier answered with an error is never a choice: posting its
- * code is refused, and a quote that still carries one loses it.
+ * code is refused, and a quote that still carries one loses it. On a
+ * customer's cart of a session that is not signed in (a restored persistent
+ * cart), the saved destination is recorded as this session's own, so the
+ * estimator shows it back (`EstimateDestination::rememberEntered()`).
  *
  * HTMX requests get the cart fragment (`hyperion_checkout_cart_fragment`)
  * plus the toast out of band, like every other cart mutation; a plain POST
@@ -112,6 +115,7 @@ class Estimate implements HttpPostActionInterface, HttpGetActionInterface
                 ->setRegion($region !== '' ? $region : null)
                 ->setPostcode($postcode !== '' ? $postcode : null)
                 ->setCollectShippingRates(true);
+            $entered = $this->estimateDestination->takeEntered($quote);
             $this->recollect($quote);
 
             $current = (string) $address->getShippingMethod();
@@ -132,6 +136,7 @@ class Estimate implements HttpPostActionInterface, HttpGetActionInterface
             }
 
             $this->quoteRepository->save($quote);
+            $this->estimateDestination->rememberEntered($quote, $entered);
         } catch (LocalizedException $e) {
             $this->logger->warning('Hyperion cart estimate: rejected -- ' . $e->getMessage());
             $this->messageManager->addErrorMessage($e->getMessage());

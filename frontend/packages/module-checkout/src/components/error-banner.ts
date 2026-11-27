@@ -33,10 +33,10 @@ export class ErrorBanner extends SignalWatcher(LitElement) {
             <div role="alert"
                  data-error-banner
                  class="rounded-md border border-danger/40 bg-danger/5 p-3 flex items-start gap-3">
-                <p class="flex-1 text-sm text-danger">${globalErr ?? minOrderErr ?? ''}</p>
+                <p class="flex-1 text-sm text-error-strong">${globalErr ?? minOrderErr ?? ''}</p>
                 ${globalErr
                     ? html`<button type="button"
-                                   class="text-xs text-danger hover:underline"
+                                   class="text-xs text-error-strong hover:underline"
                                    @click=${() => store.globalError.set(null)}>
                               ${t('Hyperion_Checkout::dismiss')}
                           </button>`

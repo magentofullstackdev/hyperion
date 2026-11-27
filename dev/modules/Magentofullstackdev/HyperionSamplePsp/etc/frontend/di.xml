@@ -1,0 +1,121 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Storefront registration. The Hyperion pools are declared and filled in
+    etc/frontend/di.xml only: an item registered in the global etc/di.xml
+    would be dropped on the storefront, because the frontend array replaces
+    the global one by argument name. Class names inside pool items are
+    strings, resolved when the checkout configuration is built.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Payment\RendererPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <!-- Card with a hosted field iframe, fake 3D Secure and the "save card" box. -->
+                <item name="hyperion_sample_card" xsi:type="array">
+                    <item name="method" xsi:type="string">hyperion_sample_card</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="tag" xsi:type="string">sample-psp-card</item>
+                    <item name="module" xsi:type="string">Magentofullstackdev_HyperionSamplePsp::js/hyperion/card.js</item>
+                    <item name="api_version" xsi:type="string">1</item>
+                    <item name="owns_place_order" xsi:type="boolean">false</item>
+                    <item name="eager" xsi:type="boolean">false</item>
+                    <item name="awaits_ready" xsi:type="boolean">true</item>
+                    <item name="saves_on_selection" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">900</item>
+                    <item name="options" xsi:type="array">
+                        <item name="brand" xsi:type="string">Sample PSP</item>
+                    </item>
+                    <item name="options_provider" xsi:type="string">Magentofullstackdev\HyperionSamplePsp\Model\Hyperion\CardOptions</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="card_number" xsi:type="string" translate="true">Card number</item>
+                        <item name="save_card" xsi:type="string" translate="true">Save this card for later</item>
+                        <item name="incomplete" xsi:type="string" translate="true">Enter a complete card number.</item>
+                        <item name="verifying" xsi:type="string" translate="true">Verifying your card</item>
+                        <item name="verification" xsi:type="string" translate="true">Card verification</item>
+                        <item name="declined" xsi:type="string" translate="true">The card verification was declined.</item>
+                        <item name="field_failed" xsi:type="string" translate="true">The card field could not be loaded.</item>
+                        <item name="test_mode" xsi:type="string" translate="true">Sample PSP test mode</item>
+                        <item name="ending" xsi:type="string" translate="true">Sample card ending {last4}</item>
+                        <item name="no_totals" xsi:type="string" translate="true">The order total is not ready yet. Please try again.</item>
+                    </item>
+                </item>
+                <!-- Stored cards: the same element, which reads its token property. -->
+                <item name="hyperion_sample_card_vault" xsi:type="array">
+                    <item name="pattern" xsi:type="string">^hyperion_sample_card_vault$</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="tag" xsi:type="string">sample-psp-card</item>
+                    <item name="module" xsi:type="string">Magentofullstackdev_HyperionSamplePsp::js/hyperion/card.js</item>
+                    <item name="api_version" xsi:type="string">1</item>
+                    <item name="awaits_ready" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">899</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="ending" xsi:type="string" translate="true">Sample card ending {last4}</item>
+                        <item name="no_totals" xsi:type="string" translate="true">The order total is not ready yet. Please try again.</item>
+                    </item>
+                </item>
+                <!-- Hosted page after the order: no JavaScript. -->
+                <item name="hyperion_sample_redirect" xsi:type="array">
+                    <item name="method" xsi:type="string">hyperion_sample_redirect</item>
+                    <item name="type" xsi:type="string">redirect</item>
+                    <item name="redirect_route" xsi:type="string">hyperionsample/redirect/start</item>
+                    <item name="sort_order" xsi:type="number">910</item>
+                </item>
+                <!-- Declarative field: no JavaScript. -->
+                <item name="hyperion_sample_form" xsi:type="array">
+                    <item name="method" xsi:type="string">hyperion_sample_form</item>
+                    <item name="type" xsi:type="string">form</item>
+                    <!-- The server refuses an empty reference: write the method at Place Order only. -->
+                    <item name="saves_on_selection" xsi:type="boolean">false</item>
+                    <item name="sort_order" xsi:type="number">920</item>
+                    <item name="fields" xsi:type="array">
+                        <item name="reference" xsi:type="array">
+                            <item name="label" xsi:type="string" translate="true">Sample invoice reference</item>
+                            <item name="type" xsi:type="string">text</item>
+                            <item name="required" xsi:type="boolean">true</item>
+                            <item name="pattern" xsi:type="string">^[A-Z]{2}-[0-9]{4,8}$</item>
+                            <item name="target" xsi:type="string">additional_data</item>
+                        </item>
+                    </item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Payment\ExpressButtonPool">
+        <arguments>
+            <argument name="buttons" xsi:type="array">
+                <item name="hyperion_sample_express" xsi:type="array">
+                    <item name="placements" xsi:type="array">
+                        <item name="cart" xsi:type="string">cart</item>
+                        <item name="product" xsi:type="string">product</item>
+                        <item name="checkout_top" xsi:type="string">checkout-top</item>
+                    </item>
+                    <item name="tag" xsi:type="string">sample-psp-express</item>
+                    <item name="module" xsi:type="string">Magentofullstackdev_HyperionSamplePsp::js/hyperion/express.js</item>
+                    <item name="api_version" xsi:type="string">1</item>
+                    <item name="reserved_height" xsi:type="number">45</item>
+                    <item name="sort_order" xsi:type="number">90</item>
+                    <item name="provider" xsi:type="string">Magentofullstackdev\HyperionSamplePsp\Model\Hyperion\ExpressButton</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="pay" xsi:type="string" translate="true">Pay with Sample</item>
+                        <item name="failed" xsi:type="string" translate="true">The sample express payment could not start.</item>
+                    </item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- Stored cards in checkoutConfig.payment.vault (core's provider, frontend scope like core's own items). -->
+    <type name="Magento\Vault\Model\Ui\TokensConfigProvider">
+        <arguments>
+            <argument name="tokenUiComponentProviders" xsi:type="array">
+                <item name="hyperion_sample_card" xsi:type="object">Magentofullstackdev\HyperionSamplePsp\Model\Ui\TokenUiComponentProvider</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Storefront registration. The Hyperion pools are declared and filled in
+    etc/frontend/di.xml only: an item registered in the global etc/di.xml
+    would be dropped on the storefront, because the frontend array replaces
+    the global one by argument name. Class names inside pool items are
+    strings, resolved when the page configuration is built.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!--
+        Switched off (hyperion_sample_extension/general/enabled = 0), the
+        module adds nothing to the checkout: the options providers of the
+        locker picker and of the generic extension throw
+        SkipExtensionException, and Plugin\CheckoutConfigPlugin drops the
+        address field (an address field has no provider).
+    -->
+    <type name="Magento\Checkout\Model\CompositeConfigProvider">
+        <plugin name="hyperion_sample_extension_switch"
+                type="Magentofullstackdev\HyperionSampleExtension\Plugin\CheckoutConfigPlugin"/>
+    </type>
+
+    <!-- The pickup point picker under the locker rate. -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Shipping\ExtensionPool">
+        <arguments>
+            <argument name="extensions" xsi:type="array">
+                <item name="hyperion_sample_locker" xsi:type="array">
+                    <item name="match" xsi:type="array">
+                        <item name="carrier" xsi:type="string">hyperionlocker</item>
+                        <item name="method" xsi:type="string">*</item>
+                    </item>
+                    <item name="slot" xsi:type="string">below-method</item>
+                    <item name="tag" xsi:type="string">sample-locker-picker</item>
+                    <item name="module" xsi:type="string">Magentofullstackdev_HyperionSampleExtension::js/hyperion/locker-picker.js</item>
+                    <item name="api_version" xsi:type="string">1</item>
+                    <item name="required" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">10</item>
+                    <item name="options_provider" xsi:type="string">Magentofullstackdev\HyperionSampleExtension\Model\Hyperion\LockerOptions</item>
+                    <item name="value_provider" xsi:type="string">Magentofullstackdev\HyperionSampleExtension\Model\Hyperion\LockerValue</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="find" xsi:type="string" translate="true">Find a pickup point</item>
+                        <item name="search" xsi:type="string" translate="true">Search</item>
+                        <item name="choose" xsi:type="string" translate="true">Choose a pickup point.</item>
+                        <item name="summary" xsi:type="string" translate="true">Pickup point</item>
+                        <item name="selected" xsi:type="string" translate="true">Selected: {name}</item>
+                        <item name="none" xsi:type="string" translate="true">No pickup point matches your search.</item>
+                        <item name="failed" xsi:type="string" translate="true">The pickup points could not be loaded.</item>
+                        <item name="retry" xsi:type="string" translate="true">Retry</item>
+                    </item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- The generic checkout API: a required module with a slot element, a filter and a gate; one address field. -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Checkout\ExtensionPool">
+        <arguments>
+            <argument name="extensions" xsi:type="array">
+                <item name="hyperion_sample_checkout" xsi:type="array">
+                    <item name="module" xsi:type="string">Magentofullstackdev_HyperionSampleExtension::js/hyperion/checkout-extension.js</item>
+                    <item name="api_version" xsi:type="string">1</item>
+                    <item name="required" xsi:type="boolean">true</item>
+                    <item name="options_provider" xsi:type="string">Magentofullstackdev\HyperionSampleExtension\Model\Hyperion\CheckoutOptions</item>
+                    <item name="slots" xsi:type="array">
+                        <item name="confirmation" xsi:type="array">
+                            <item name="slot" xsi:type="string">after-agreements</item>
+                            <item name="tag" xsi:type="string">sample-checkout-confirmation</item>
+                        </item>
+                    </item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="confirm" xsi:type="string" translate="true">I confirm this is a sample order</item>
+                        <item name="gate" xsi:type="string" translate="true">Tick the sample confirmation</item>
+                    </item>
+                </item>
+            </argument>
+            <argument name="address_fields" xsi:type="array">
+                <item name="hyperion_sample_tax_code" xsi:type="array">
+                    <item name="label" xsi:type="string" translate="true">Sample tax code</item>
+                    <item name="type" xsi:type="string">text</item>
+                    <item name="target" xsi:type="string">extension_attributes</item>
+                    <item name="forms" xsi:type="array">
+                        <item name="billing" xsi:type="string">billing</item>
+                    </item>
+                    <item name="required" xsi:type="boolean">true</item>
+                    <item name="pattern" xsi:type="string">^[A-Z0-9]{6,16}$</item>
+                    <item name="max_length" xsi:type="number">16</item>
+                    <item name="countries" xsi:type="array">
+                        <item name="it" xsi:type="string">IT</item>
+                    </item>
+                    <item name="hint" xsi:type="string" translate="true">Six to sixteen letters or digits.</item>
+                    <item name="sort_order" xsi:type="number">200</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- The cart row of the sample fee (a total without a renderer would print as a plain row). -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="hyperion_sample_fee" xsi:type="string">Magentofullstackdev\HyperionSampleExtension\Model\Cart\SampleFeeRow</item>
+            </argument>
+        </arguments>
+    </type>
+</config>

@@ -7,6 +7,7 @@ namespace Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index;
 
 use Magento\Framework\App\RequestInterface;
 use Magento\Wishlist\Controller\Index\Add;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
 
 /**
  * HTMX transformer for the Add-to-Wishlist controller.
@@ -25,6 +26,8 @@ use Magento\Wishlist\Controller\Index\Add;
  * plugin hooks `afterDispatch` instead: it runs unconditionally. The
  * shared logic (guest reset, notification, OOB header counter) lives in
  * AbstractHtmxPlugin so the Remove plugin behaves identically.
+ *
+ * @internal
  */
 class AddPlugin extends AbstractHtmxPlugin
 {
@@ -39,5 +42,13 @@ class AddPlugin extends AbstractHtmxPlugin
     public function afterDispatch(Add $subject, $result, RequestInterface $request)
     {
         return $this->transform($result, $request);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function actionName(): string
+    {
+        return ActionResponse::ACTION_WISHLIST_ADD;
     }
 }

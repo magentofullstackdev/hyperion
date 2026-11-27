@@ -20,10 +20,18 @@ use Psr\Log\LoggerInterface;
  *
  * Same shape as the catalog mode guard: the check is fail-open and the
  * action runs exactly once, outside the try block.
+ *
+ * @internal The class is not public; its `routes` argument is (see the constructor).
  */
 class RateLimitPlugin
 {
     /**
+     * The `routes` argument is a public di.xml contract: items keyed by full
+     * action name (`catalogsearch_result_index`), the value a group of
+     * RateLimiter. Declared in etc/frontend/di.xml only.
+     *
+     * @api
+     * @since 0.9.0
      * @param RateLimiter $rateLimiter
      * @param TooManyRequests $tooManyRequests
      * @param HttpRequest $request

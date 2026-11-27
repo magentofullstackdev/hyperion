@@ -15,6 +15,8 @@ use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
  * `block_html`, so this is one place for every cached block, widgets with
  * their own `cache_lifetime` included. Other saves (config, layout, the
  * suggest cache) are not touched.
+ *
+ * @internal
  */
 class DegradedBlockCachePlugin
 {

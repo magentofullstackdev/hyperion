@@ -256,6 +256,76 @@ describe('<address-selector> saved address step', () => {
         expect(store.shippingAddress.get()).not.toHaveProperty('id');
     });
 
+    it('a saved address the store takes between the connection and the first render is shown selected, not as an empty form', async () => {
+        const point: Address = {
+            firstname: 'Veronica',
+            lastname: 'Costello',
+            company: 'Congress Avenue Locker',
+            street: ['100 Congress Ave'],
+            city: 'Austin',
+            postcode: '78701',
+            country_id: 'US',
+            region_id: '57',
+            telephone: '(555) 229-3326',
+        };
+        store.selectedShippingAddressId.set(null);
+        store.shippingAddress.set(point);
+        const el = document.createElement('address-selector') as AddressSelector;
+        el.mode = 'shipping';
+        const changes: unknown[] = [];
+        el.addEventListener('address-change', (e) => changes.push((e as CustomEvent).detail));
+        document.body.appendChild(el);
+        // The address an extension gives back, written before the first render.
+        store.selectedShippingAddressId.set('1');
+        store.shippingAddress.set(SAVED);
+        await settle(el);
+
+        expect(el.querySelector('address-form')).toBeNull();
+        expect(el.querySelector<HTMLInputElement>('[data-hyperion-address-card="1"] input[type="radio"]')?.checked).toBe(true);
+        expect(changes).toEqual([]);
+        expect(store.shippingAddress.get()).toBe(SAVED);
+    });
+
+    it('a saved address the store takes after the form was drawn on an address without an id closes that form and shows the card', async () => {
+        const point: Address = {
+            firstname: 'Veronica',
+            lastname: 'Costello',
+            company: 'Congress Avenue Locker',
+            street: ['100 Congress Ave'],
+            city: 'Austin',
+            postcode: '78701',
+            country_id: 'US',
+            region_id: '57',
+            telephone: '(555) 229-3326',
+            save_in_address_book: true,
+        };
+        store.selectedShippingAddressId.set(null);
+        store.shippingAddress.set(point);
+        const el = document.createElement('address-selector') as AddressSelector;
+        el.mode = 'shipping';
+        document.body.appendChild(el);
+        await settle(el);
+        expect(input(el, 'street_0').value).toBe('100 Congress Ave');
+
+        // Written later by something else than the shopper.
+        store.selectedShippingAddressId.set('1');
+        store.shippingAddress.set(SAVED);
+        await settle(el);
+
+        expect(el.querySelector('address-form')).toBeNull();
+        expect(el.querySelector<HTMLInputElement>('[data-hyperion-address-card="1"] input[type="radio"]')?.checked).toBe(true);
+        expect(store.shippingAddress.get()).toBe(SAVED);
+    });
+
+    it('a form the shopper opened stays open while the store still holds the saved address', async () => {
+        const el = await mount(store);
+        el.querySelector<HTMLElement>('[data-hyperion-address-new] button')!.click();
+        await settle(el);
+        store.shippingAddress.set({ ...SAVED });
+        await settle(el);
+        expect(el.querySelector('address-form')).not.toBeNull();
+    });
+
     it('a typed address already in the store opens the form filled from it and nothing is emitted at mount', async () => {
         const typed: Address = {
             firstname: 'Veronica',

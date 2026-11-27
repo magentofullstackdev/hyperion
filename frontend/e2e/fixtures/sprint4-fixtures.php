@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 // Fixtures for the fallback pages live check (e2e/pw-fallback-pages.mjs). Runs inside php-fpm as www-data:
-//   php /tmp/sprint4-fixtures.php /var/www/html documents <increment id>   invoices the order, ships it with a tracking
+//   php /tmp/sprint4-fixtures.php /var/www/html documents <increment id>   invoices the order (with a comment visible on
+//                                                                         the storefront), ships it with a tracking
 //                                                                         number and refunds one unit; prints JSON with
-//                                                                         the entity ids and the tracking popup URL
+//                                                                         the entity ids, the invoice comment and the
+//                                                                         tracking popup URL
 //   php /tmp/sprint4-fixtures.php /var/www/html page                      creates the CMS page /hyperion-fallback-check
 //                                                                         with the Orders and Returns widget
 //   php /tmp/sprint4-fixtures.php /var/www/html remove                    deletes the CMS page
@@ -47,16 +49,20 @@ if (!$order) {
 }
 $out = ['order_id' => (int) $order->getId()];
 $transactionFactory = $om->get(\Magento\Framework\DB\TransactionFactory::class);
+$invoiceComment = 'Hyperion e2e invoice comment';
 
 if ($order->canInvoice()) {
     $invoice = $om->get(\Magento\Sales\Model\Service\InvoiceService::class)->prepareInvoice($order);
     $invoice->setRequestedCaptureCase(\Magento\Sales\Model\Order\Invoice::CAPTURE_OFFLINE);
     $invoice->register();
+    // Not notified, visible on the storefront: the invoice pages print it.
+    $invoice->addComment($invoiceComment, false, true);
     $invoice->getOrder()->setIsInProcess(true);
     $transactionFactory->create()->addObject($invoice)->addObject($invoice->getOrder())->save();
 }
 $invoices = $order->getInvoiceCollection();
 $out['invoice_id'] = (int) ($invoices->getFirstItem()->getId() ?: 0);
+$out['invoice_comment'] = $invoiceComment;
 
 if ($order->canShip()) {
     $convert = $om->get(\Magento\Sales\Model\Convert\Order::class);

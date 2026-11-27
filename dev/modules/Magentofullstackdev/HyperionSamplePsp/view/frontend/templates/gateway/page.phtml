@@ -1,0 +1,49 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * The fake hosted payment page (redirect method and express button): Pay
+ * and Cancel post back to the module with the form key.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$orderNumber = (string) $block->getData('order_number');
+$fields = (array) $block->getData('fields');
+?>
+<!doctype html>
+<html lang="<?= $escaper->escapeHtmlAttr((string) $block->getData('lang')) ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title><?= $escaper->escapeHtml((string) $block->getData('heading')) ?></title>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getViewFileUrl('Magentofullstackdev_HyperionSamplePsp::css/gateway.css')) ?>">
+</head>
+<body class="sample-page">
+<main class="sample-page__main">
+    <h1 class="sample-page__title"><?= $escaper->escapeHtml((string) $block->getData('heading')) ?></h1>
+    <p><?= $escaper->escapeHtml(__('No money moves: this page belongs to the sample payment provider.')) ?></p>
+    <dl class="sample-page__summary">
+        <?php if ($orderNumber !== ''): ?>
+            <dt><?= $escaper->escapeHtml(__('Order')) ?></dt>
+            <dd data-sample-hosted-order><?= $escaper->escapeHtml($orderNumber) ?></dd>
+        <?php endif; ?>
+        <dt><?= $escaper->escapeHtml(__('Amount')) ?></dt>
+        <dd data-sample-hosted-amount><?= $escaper->escapeHtml((string) $block->getData('amount')) ?></dd>
+    </dl>
+    <form method="post" data-sample-hosted-form
+          action="<?= $escaper->escapeUrl($block->getUrl((string) $block->getData('action_path'))) ?>">
+        <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr((string) $block->getData('form_key')) ?>">
+        <?php foreach ($fields as $name => $value): ?>
+            <input type="hidden" name="<?= $escaper->escapeHtmlAttr((string) $name) ?>"
+                   value="<?= $escaper->escapeHtmlAttr((string) $value) ?>">
+        <?php endforeach; ?>
+        <div class="sample-page__actions">
+            <button type="submit" class="sample-page__button" name="sample_action" value="pay"><?= $escaper->escapeHtml(__('Pay')) ?></button>
+            <button type="submit" class="sample-page__button sample-page__button--secondary" name="sample_action" value="cancel"><?= $escaper->escapeHtml(__('Cancel')) ?></button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

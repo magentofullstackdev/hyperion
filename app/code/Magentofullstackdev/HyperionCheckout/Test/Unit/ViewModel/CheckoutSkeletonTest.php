@@ -19,6 +19,7 @@ use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address as QuoteAddress;
 use Magento\Quote\Model\Quote\Item as QuoteItem;
+use Magentofullstackdev\HyperionCheckout\Model\Checkout\CaptchaConfigProvider;
 use Magentofullstackdev\HyperionCheckout\ViewModel\CheckoutSkeleton;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -248,6 +249,115 @@ class CheckoutSkeletonTest extends TestCase
         self::assertSame([], $skeleton->getPaymentRows($skeleton->readConfig('{broken')));
     }
 
+    /**
+     * @return array<string, array{0: bool, 1: list<array{title: string, supported: bool}>}>
+     */
+    public static function rendererListProvider(): array
+    {
+        $served = [
+            ['title' => 'Stored Cards', 'supported' => true],
+            ['title' => 'Stored Cards', 'supported' => true],
+            ['title' => 'Check / Money order', 'supported' => true],
+            ['title' => 'Credit Card', 'supported' => true],
+        ];
+        $tail = [['title' => 'No Payment Information Required', 'supported' => true]];
+        return [
+            'a method no entry serves has no row' => [false, array_merge($served, $tail)],
+            'the diagnostic flag keeps its taller row' => [
+                true,
+                array_merge($served, [['title' => 'Fastlane', 'supported' => false]], $tail),
+            ],
+        ];
+    }
+
+    /**
+     * @param list<array{title: string, supported: bool}> $expected
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('rendererListProvider')]
+    public function testThePaymentRowsFollowTheRendererEntriesOfThePage(bool $showUnsupported, array $expected): void
+    {
+        $skeleton = $this->skeleton([]);
+        $config = $this->paymentConfig(
+            $this->firstPartyRenderers(),
+            ['showUnsupportedPayments' => $showUnsupported]
+        );
+
+        self::assertSame($expected, $skeleton->getPaymentRows($config));
+    }
+
+    public function testAThirdPartyEntryServesItsMethod(): void
+    {
+        $renderers = array_merge($this->firstPartyRenderers(), [[
+            'id' => 'fastlane', 'method' => 'payment_services_paypal_fastlane', 'pattern' => null,
+            'type' => 'element', 'tag' => 'vendor-fastlane', 'sortOrder' => 0,
+        ]]);
+
+        self::assertContains(
+            ['title' => 'Fastlane', 'supported' => true],
+            $this->skeleton([])->getPaymentRows($this->paymentConfig($renderers, []))
+        );
+    }
+
+    public function testAnEmptyRendererListHidesEveryMethodLikeTheApplication(): void
+    {
+        self::assertSame([], $this->skeleton([])->getPaymentRows($this->paymentConfig([], [])));
+    }
+
+    public function testAPageWithoutTheRendererListKeepsTheFirstPartyRowsAndLogs(): void
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('warning')->with(self::stringContains('paymentRenderers'));
+        $config = $this->paymentConfig([], []);
+        unset($config['hyperion']['paymentRenderers']);
+
+        self::assertContains(
+            ['title' => 'Fastlane', 'supported' => false],
+            $this->skeleton([], $logger)->getPaymentRows($config),
+            'without the list the rows are drawn as before: a method outside the first-party list keeps its note'
+        );
+    }
+
+    /**
+     * The first-party entries as the renderer pool emits them on a store where they are all active.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function firstPartyRenderers(): array
+    {
+        $json = (string) file_get_contents(dirname(__DIR__) . '/Model/Payment/_files/first-party-payment-renderers.json');
+        return json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @param array<mixed> $renderers
+     * @param array<string, bool> $debug
+     * @return array<string, mixed>
+     */
+    private function paymentConfig(array $renderers, array $debug): array
+    {
+        return [
+            'totalsData' => ['grand_total' => 59.0],
+            'vault' => ['braintree_cc_vault' => ['is_enabled' => true], 'other_vault' => ['is_enabled' => true]],
+            'payment' => ['vault' => [
+                'braintree_cc_vault_0' => ['config' => ['code' => 'braintree_cc_vault', 'publicHash' => 'a']],
+                'braintree_cc_vault_1' => ['config' => ['code' => 'braintree_cc_vault', 'publicHash' => 'b']],
+                'other_vault_0' => ['config' => ['code' => 'other_vault', 'publicHash' => 'c']],
+            ]],
+            'hyperion' => [
+                'paymentRenderers' => $renderers,
+                'debug' => $debug,
+                'initial' => ['paymentMethods' => [
+                    ['code' => 'checkmo', 'title' => 'Check / Money order'],
+                    ['code' => 'braintree_cc_vault', 'title' => 'Stored Cards'],
+                    ['code' => 'other_vault', 'title' => 'Other Stored Cards'],
+                    ['code' => 'braintree', 'title' => 'Credit Card'],
+                    ['code' => 'payment_services_paypal_fastlane', 'title' => 'Fastlane'],
+                    ['code' => 'free', 'title' => 'No Payment Information Required'],
+                ]],
+            ],
+        ];
+    }
+
     public function testTheShippingRowsFollowTheStoredRatesAndTheKindOfVisitor(): void
     {
         $rate = static fn (string $carrier, string $method, bool $available = true): array => [
@@ -320,6 +430,90 @@ class CheckoutSkeletonTest extends TestCase
         $alwaysFor = $captcha('after_fail', 'payment_processing_request');
         $alwaysFor['flags']['customer/captcha/always_for/payment_processing_request'] = true;
         self::assertSame(['captcha'], $this->skeleton($alwaysFor)->getOptionalSections());
+    }
+
+    public function testTheRecaptchaClientIsAnOptionalSectionOfAStoreThatProtectsAnAction(): void
+    {
+        self::assertSame(['recaptcha'], $this->skeleton(['recaptcha' => true])->getOptionalSections());
+        self::assertSame(
+            ['agreements', 'recaptcha'],
+            $this->skeleton([
+                'recaptcha' => true,
+                'flags' => ['checkout/options/enable_agreements' => true],
+            ])->getOptionalSections()
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @param string[] $expected
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('bodySectionProvider')]
+    public function testTheSectionsOfTheConfigurationFollowWhatTheApplicationAwaitsBeforeTheMount(
+        array $config,
+        bool $virtual,
+        array $expected
+    ): void {
+        $skeleton = $this->skeleton(['quote' => $this->quote(['virtual' => $virtual])]);
+        self::assertSame($expected, $skeleton->getBodySections($config));
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>, 1: bool, 2: string[]}>
+     */
+    public static function bodySectionProvider(): array
+    {
+        $offline = [
+            'id' => 'offline',
+            'method' => null,
+            'pattern' => '^(checkmo|banktransfer|cashondelivery|free)$',
+            'builtin' => 'offline',
+            'sortOrder' => 10,
+        ];
+        $card = ['id' => 'braintree_card', 'method' => 'braintree', 'pattern' => null, 'builtin' => 'braintree-card'];
+        $config = static fn (array $methods, string $total = '25.0000', array $extra = []): array => [
+            'totalsData' => ['grand_total' => $total],
+            'hyperion' => array_merge([
+                'paymentRenderers' => [$offline, $card],
+                'initial' => ['paymentMethods' => $methods],
+            ], $extra),
+        ];
+        $checkmo = ['code' => 'checkmo', 'title' => 'Check'];
+        $free = ['code' => 'free', 'title' => 'No Payment Information Required'];
+        $braintree = ['code' => 'braintree', 'title' => 'Card'];
+        return [
+            'the only offered offline method is selected' => [$config([$checkmo]), false, ['payment-host']],
+            'free at a zero total is selected' => [$config([$checkmo, $free], '0.0000'), false, ['payment-host']],
+            'free above zero selects nothing' => [$config([$checkmo, $free]), false, []],
+            'several methods select nothing' => [$config([$checkmo, $braintree]), false, []],
+            'a gateway is never selected' => [$config([$braintree]), false, []],
+            'a virtual quote has no initial state to select from' => [$config([$checkmo]), true, []],
+            'without an initial state nothing is selected' => [['hyperion' => ['paymentRenderers' => [$offline]]], false, []],
+            'a method no entry serves is not selected' => [
+                ['hyperion' => ['paymentRenderers' => [$card], 'initial' => ['paymentMethods' => [$checkmo]]]],
+                false,
+                [],
+            ],
+            'the diagnostic rows need the host' => [
+                $config([$checkmo, $braintree], '25.0000', ['debug' => ['showUnsupportedPayments' => true]]),
+                false,
+                ['payment-host'],
+            ],
+            'declared address fields' => [
+                $config([$checkmo, $braintree], '25.0000', ['addressFields' => [['code' => 'fiscal_code']]]),
+                false,
+                ['address-fields'],
+            ],
+            'no declared address field' => [$config([$checkmo, $braintree], '25.0000', ['addressFields' => []]), false, []],
+        ];
+    }
+
+    public function testAnUnreadableRecaptchaSetupIsLoggedAndPreloadsNothing(): void
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('hasRecaptcha'));
+
+        self::assertSame([], $this->skeleton(['recaptcha' => null], $logger)->getOptionalSections());
     }
 
     public function testACustomerThatCannotBeLoadedCountsNoAddress(): void
@@ -408,10 +602,12 @@ class CheckoutSkeletonTest extends TestCase
      *     flags?: array<string, bool>,
      *     name?: array<string, string>,
      *     customerAddresses?: int|array<int, array{company?: ?string, telephone?: ?string}>|null,
-     *     giftModule?: bool
+     *     giftModule?: bool,
+     *     recaptcha?: bool|null
      * } $state `quote` null: the session throws; `customerAddresses` absent: a guest, null: the customer
      *          cannot be loaded, a number: that many addresses, a list: one address per entry with
-     *          its company and telephone; settings that are not listed keep their stock values
+     *          its company and telephone; `recaptcha` null: its setup cannot be read; settings that
+     *          are not listed keep their stock values
      * @param LoggerInterface|null $logger
      */
     private function skeleton(array $state, ?LoggerInterface $logger = null): CheckoutSkeleton
@@ -476,6 +672,13 @@ class CheckoutSkeletonTest extends TestCase
         $moduleManager = $this->createStub(ModuleManager::class);
         $moduleManager->method('isEnabled')->willReturn($state['giftModule'] ?? false);
 
+        $captchaConfigProvider = $this->createStub(CaptchaConfigProvider::class);
+        if (array_key_exists('recaptcha', $state) && $state['recaptcha'] === null) {
+            $captchaConfigProvider->method('hasRecaptcha')->willThrowException(new \RuntimeException('unreadable'));
+        } else {
+            $captchaConfigProvider->method('hasRecaptcha')->willReturn($state['recaptcha'] ?? false);
+        }
+
         return new CheckoutSkeleton(
             $checkoutSession,
             $customerSession,
@@ -484,7 +687,8 @@ class CheckoutSkeletonTest extends TestCase
             $addressHelper,
             $configurationPool,
             $moduleManager,
-            $logger ?? $this->createStub(LoggerInterface::class)
+            $logger ?? $this->createStub(LoggerInterface::class),
+            $captchaConfigProvider
         );
     }
 }

@@ -2,37 +2,94 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Lazy loader of the PayPal JavaScript SDK, shared by
- * <hyperion-paypal-buttons> and <hyperion-paypal-message>.
+ * Script loading and shopper feedback shared by the PayPal components
+ * (<hyperion-paypal-buttons>, <hyperion-paypal-message>) and the express
+ * button context (lib/express-context.js).
  *
- * One `<script>` per page: the SDK registers a single `window.paypal`, and
- * every placement of a page gets the same URL from Magento
- * (`Magento\Paypal\Model\SdkUrl`), so the first URL asked for wins and
- * later callers share its promise.
+ * `loadPaypalSdk()`: one `<script>` per page. The SDK registers a single
+ * `window.paypal`, and every placement of a page gets the same URL from
+ * Magento (`Magento\Paypal\Model\SdkUrl`), so the first URL asked for wins
+ * and later callers share its promise. `loadScript()` is the general form:
+ * one script per URL, the page's CSP nonce, a failed load forgotten so a
+ * later call tries again.
  *
- * The script is never part of the page load. `whenWanted()` resolves once
- * the placement is near the viewport (or the shopper touches it),
- * `whenEngaged()` once somebody is actually using the page (a pointer
- * move, a scroll, a touch, a key), and `whenPageIdle()` then waits for the
- * window `load` event plus an idle slot, so a message at the top of the
- * page cannot compete with the page's own resources. The engagement step
- * is what keeps the SDK (about 450 KB of script in three frames, a long
- * task on a slow CPU) out of a page nobody interacts with: a product page
- * opened and closed, a prerender, a lab measurement.
+ * The scripts are never part of the page load: callers wait for the policy
+ * of lib/engagement.js first (re-exported here for the PayPal components).
  */
 
 import { htmlToText } from '@magentofullstackdev/hyperion-shared/html';
 
-const IDLE_TIMEOUT_MS = 2000;
-const PROXIMITY_MARGIN = '200px';
-const INTERACTION_EVENTS = ['pointerenter', 'pointerdown', 'focusin'];
-const ENGAGEMENT_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'wheel', 'scroll'];
+export { whenWanted, whenEngaged, whenPageIdle } from './engagement.js';
+
 const MESSAGES_COOKIE = 'mage-messages';
 const NOTIFICATION_SELECTOR = '[data-hyperion-notification]';
 const NOTIFICATION_AUTO_CLOSE_MS = '15000';
+const ATTRIBUTE_PATTERN = /^(data-[a-z0-9-]+|crossorigin|integrity|referrerpolicy)$/;
 
 let sdkPromise = null;
 let sdkUrl = '';
+const scripts = new Map();
+
+/**
+ * The CSP nonce of the page, read from a script the server rendered with
+ * one (browsers hide the attribute value, the property keeps it).
+ *
+ * @returns {string|null}
+ */
+export function cspNonce() {
+    const script = document.querySelector('script[nonce]');
+    const nonce = script ? script.nonce || script.getAttribute('nonce') : '';
+    return nonce ? String(nonce) : null;
+}
+
+function createScript(url, attributes) {
+    const script = document.createElement('script');
+    script.src = url;
+    script.async = true;
+    const nonce = cspNonce();
+    if (nonce) script.nonce = nonce;
+    for (const [name, value] of Object.entries(attributes || {})) {
+        if (ATTRIBUTE_PATTERN.test(name) && value !== null && value !== undefined && value !== '') {
+            script.setAttribute(name, String(value));
+        }
+    }
+    return script;
+}
+
+/**
+ * Load a classic script once per URL. A failed load is forgotten (and its
+ * element removed), so the next call requests it again.
+ *
+ * @param {string} url
+ * @param {Object<string, string>} [attributes] `data-*`, `crossorigin`, `integrity`, `referrerpolicy`
+ * @returns {Promise<void>}
+ */
+export function loadScript(url, attributes = {}) {
+    if (typeof url !== 'string' || url === '') {
+        return Promise.reject(new Error('The script URL is missing'));
+    }
+    const known = scripts.get(url);
+    if (known) return known;
+    const promise = new Promise((resolve, reject) => {
+        const script = createScript(url, attributes);
+        script.setAttribute('data-hyperion-script', '');
+        script.onload = () => resolve();
+        script.onerror = () => {
+            if (scripts.get(url) === promise) scripts.delete(url);
+            script.remove();
+            reject(new Error(`The script ${url} failed to load`));
+        };
+        document.head.appendChild(script);
+    });
+    scripts.set(url, promise);
+    return promise;
+}
+
+/** Forget every script loaded through loadScript() (tests only). */
+export function resetScripts() {
+    scripts.clear();
+    document.head.querySelectorAll('script[data-hyperion-script]').forEach((script) => script.remove());
+}
 
 /**
  * Load the SDK (once) and resolve with `window.paypal`.
@@ -53,15 +110,8 @@ export function loadPaypalSdk(url, attributes = {}) {
     }
     sdkUrl = url;
     sdkPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = url;
-        script.async = true;
+        const script = createScript(url, attributes);
         script.setAttribute('data-hyperion-paypal-sdk', '');
-        for (const [name, value] of Object.entries(attributes || {})) {
-            if (/^data-[a-z0-9-]+$/.test(name) && value !== null && value !== undefined && value !== '') {
-                script.setAttribute(name, String(value));
-            }
-        }
         script.onload = () => {
             if (window.paypal) {
                 resolve(window.paypal);
@@ -90,87 +140,6 @@ export function resetPaypalSdk() {
     sdkPromise = null;
     sdkUrl = '';
     document.head.querySelectorAll('script[data-hyperion-paypal-sdk]').forEach((script) => script.remove());
-}
-
-/**
- * Resolve when the element comes near the viewport or the shopper
- * interacts with it. The returned promise carries `cancel()`.
- *
- * @param {Element} element
- * @returns {Promise<void> & { cancel: () => void }}
- */
-export function whenWanted(element) {
-    let cancel = () => {};
-    const promise = new Promise((resolve) => {
-        let observer = null;
-        const done = () => {
-            cancel();
-            resolve();
-        };
-        cancel = () => {
-            observer?.disconnect();
-            observer = null;
-            for (const type of INTERACTION_EVENTS) element.removeEventListener(type, done);
-        };
-        for (const type of INTERACTION_EVENTS) {
-            element.addEventListener(type, done, { passive: true });
-        }
-        if (typeof IntersectionObserver !== 'function') {
-            done();
-            return;
-        }
-        observer = new IntersectionObserver((entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) done();
-        }, { rootMargin: PROXIMITY_MARGIN });
-        observer.observe(element);
-    });
-    promise.cancel = cancel;
-    return promise;
-}
-
-/**
- * Resolve once the shopper has shown up: the first pointer move, scroll,
- * touch or key on the document, or at once when the page is already
- * scrolled (the interaction happened before this code was loaded). A page
- * nobody touches never resolves, which is the point.
- *
- * @param {Document} [doc]
- * @param {Window} [win]
- * @returns {Promise<void>}
- */
-export function whenEngaged(doc = document, win = window) {
-    if ((win.scrollY || 0) > 0) return Promise.resolve();
-    return new Promise((resolve) => {
-        const done = () => {
-            for (const type of ENGAGEMENT_EVENTS) doc.removeEventListener(type, done, { capture: true });
-            resolve();
-        };
-        for (const type of ENGAGEMENT_EVENTS) {
-            doc.addEventListener(type, done, { capture: true, passive: true });
-        }
-    });
-}
-
-/**
- * Resolve in an idle slot after the window `load` event.
- *
- * @returns {Promise<void>}
- */
-export function whenPageIdle() {
-    return new Promise((resolve) => {
-        const idle = () => {
-            if (typeof window.requestIdleCallback === 'function') {
-                window.requestIdleCallback(() => resolve(), { timeout: IDLE_TIMEOUT_MS });
-            } else {
-                setTimeout(resolve, 1);
-            }
-        };
-        if (document.readyState === 'complete') {
-            idle();
-        } else {
-            window.addEventListener('load', idle, { once: true });
-        }
-    });
 }
 
 /** Value of a cookie, empty string when it is not set. */

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    What the storefront sends besides core's fields. Each key must be
+    declared here, or the REST input processor refuses the request.
+
+    - hyperion_sample_locker_id: the pickup point, in
+      shipping_address.extension_attributes (the locker picker);
+    - hyperion_sample_tax_code: the declarative address field, in the
+      billing address extension_attributes;
+    - hyperion_sample_confirmation: added by the generic extension's
+      paymentInformation filter.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Api/etc/extension_attributes.xsd">
+    <extension_attributes for="Magento\Quote\Api\Data\AddressInterface">
+        <attribute code="hyperion_sample_locker_id" type="string"/>
+        <attribute code="hyperion_sample_tax_code" type="string"/>
+    </extension_attributes>
+    <extension_attributes for="Magento\Quote\Api\Data\PaymentInterface">
+        <attribute code="hyperion_sample_confirmation" type="string"/>
+    </extension_attributes>
+</config>

@@ -66,7 +66,7 @@ if ($configJson === ''): ?>
 <div class="mx-auto max-w-6xl p-4">
     <div class="rounded-xl border border-subtle bg-surface p-6 text-center space-y-4" role="alert">
         <p class="text-lg text-muted">
-            <?= $escaper->escapeHtml(__('We couldn\'t initialise the checkout. Please refresh the page.')) ?>
+            <?= $escaper->escapeHtml(__('We couldn\'t initialize the checkout. Please refresh the page.')) ?>
         </p>
         <a href="<?= $escaper->escapeUrl($cartUrl) ?>"
            class="inline-flex items-center px-6 py-3 rounded-lg font-bold uppercase tracking-wider text-sm
@@ -90,6 +90,9 @@ $config = $skeleton->readConfig($configJson);
 $savedCards = $skeleton->getSavedAddressCards();
 $shippingRows = $skeleton->getShippingRows($config);
 $paymentRows = $skeleton->getPaymentRows($config);
+// The chunks the application awaits before the mount on a condition of the configuration.
+$bodyPreloads = $block->getSectionPreloadUrls($skeleton->getBodySections($config));
+$crossOrigin = $bodyPreloads !== [] && $block->isStaticCrossOrigin();
 $addressRows = $skeleton->getAddressRows();
 $items = $skeleton->getItems();
 $totalsRows = $skeleton->getTotalsRowCount();
@@ -97,6 +100,9 @@ $totalsRows = $skeleton->getTotalsRowCount();
 $cards = $isVirtual ? ['contact', 'payment'] : ['contact', 'shipping', 'payment'];
 $addressCard = $isVirtual ? 'payment' : 'shipping';
 ?>
+<?php foreach ($bodyPreloads as $preloadUrl): ?>
+<link rel="modulepreload" href="<?= $escaper->escapeUrl($preloadUrl) ?>"<?= $crossOrigin ? ' crossorigin' : '' ?>>
+<?php endforeach; ?>
 <div id="checkout-root">
     <noscript>
         <div class="mx-auto max-w-6xl px-4 pt-4">

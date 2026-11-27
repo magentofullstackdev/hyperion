@@ -12,6 +12,9 @@
  * The checkout renders one instance at a time, so the ids, the coupon form
  * and the live region of the grand total (inside <summary-totals>) exist
  * once. The total in the bar is part of the bar's name, not a live region.
+ *
+ * The `summary-after-totals` slot of the extension API follows the totals
+ * (hidden while no element is registered).
  */
 import { LitElement, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
@@ -24,6 +27,7 @@ import { readGrandTotal } from './summary-totals.js';
 import './summary-item.js';
 import './summary-totals.js';
 import './coupon-form.js';
+import '../extension/slot-outlet.js';
 
 /** How many thumbnails load with the page instead of lazily. */
 const EAGER_THUMBNAILS = 3;
@@ -89,6 +93,7 @@ export class OrderSummary extends SignalWatcher(LitElement) {
                 </div>
                 <div class="border-t border-subtle pt-3">
                     <summary-totals></summary-totals>
+                    <hc-slot-outlet name="summary-after-totals"></hc-slot-outlet>
                 </div>
                 <coupon-form class="block"></coupon-form>
                 <hc-section-status section="coupon"></hc-section-status>

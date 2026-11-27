@@ -5,14 +5,18 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart;
 
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
 use Magento\Checkout\Controller\Cart\Add;
 use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Controller\Result\RawFactory;
+use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\BlockFactory;
 use Magento\Framework\View\Element\Template;
+use Magento\Store\Model\ScopeInterface;
 use Magentofullstackdev\HyperionCore\ViewModel\GoogleGtag;
 use Psr\Log\LoggerInterface;
 
@@ -40,21 +44,56 @@ use Psr\Log\LoggerInterface;
  * options for your item.", which Magento queues via `setUseNotice(true)`)
  * as failures, so a missing swatch selection yields a red toast and a 422
  * instead of a green "success".
+ *
+ * The body goes through ActionResponse (event `hyperion_htmx_action_response`,
+ * action `cart_add`).
+ *
+ * With "After Adding a Product Redirect to Shopping Cart"
+ * (`checkout/cart/redirect_to_cart`) on, a successful add answers an empty
+ * 200 with `HX-Redirect` to the cart instead, and htmx navigates there like
+ * the native form would. The messages are not collected on that path: core's
+ * message plugin moves them into the `mage-messages` cookie when the result
+ * renders, and the cart page shows them. A refused add (any error, warning or
+ * notice) keeps the toast in place. The redirect carries no body, so it
+ * dispatches no `hyperion_htmx_action_response` and no `add_to_cart` event.
+ *
+ * An add made by an express button (the request carries `X-Hyperion-Express`
+ * with any non-empty value) is never redirected: the button goes on with its
+ * own flow on the same page, so it gets the toast answer of an ordinary add.
+ *
+ * @internal
  */
 class AddPlugin
 {
     private const HTMX_HEADER = 'HX-Request';
+    private const EXPRESS_HEADER = 'X-Hyperion-Express';
     private const RESPONSE_TEMPLATE = 'Magentofullstackdev_HyperionCatalog::product/addtocart-response.phtml';
 
+    /**
+     * @param HttpRequest $request
+     * @param RawFactory $resultRawFactory
+     * @param BlockFactory $blockFactory
+     * @param MessageCollector $messageCollector
+     * @param CheckoutSession $checkoutSession
+     * @param CacheHeadersInterface $cacheHeaders
+     * @param LoggerInterface $logger
+     * @param GoogleGtag $gtag
+     * @param ActionResponse $actionResponse
+     * @param ScopeConfigInterface $scopeConfig
+     * @param UrlInterface $urlBuilder
+     */
     public function __construct(
         private readonly HttpRequest $request,
         private readonly RawFactory $resultRawFactory,
         private readonly BlockFactory $blockFactory,
         private readonly MessageCollector $messageCollector,
         private readonly CheckoutSession $checkoutSession,
-        private readonly CacheHeaders $cacheHeaders,
+        private readonly CacheHeadersInterface $cacheHeaders,
         private readonly LoggerInterface $logger,
-        private readonly GoogleGtag $gtag
+        private readonly GoogleGtag $gtag,
+        private readonly ActionResponse $actionResponse,
+        private readonly ScopeConfigInterface $scopeConfig,
+        private readonly UrlInterface $urlBuilder
     ) {
     }
 
@@ -70,10 +109,23 @@ class AddPlugin
         }
 
         try {
+            if ($this->shouldRedirectToCart()) {
+                $response = $this->resultRawFactory->create();
+                $response->setHttpResponseCode(200);
+                $response->setHeader('HX-Redirect', $this->urlBuilder->getUrl('checkout/cart'), true);
+                $response->setContents('');
+
+                return $this->cacheHeaders->applyPrivate($response);
+            }
+
             $messages = $this->messageCollector->collect();
             $isError = $messages['has_error'];
 
-            $html = $this->renderHandle($messages['html'], $isError);
+            $html = $this->actionResponse->build(
+                ActionResponse::ACTION_CART_ADD,
+                $messages,
+                $this->renderHandle($messages['html'], $isError)
+            );
 
             $response = $this->resultRawFactory->create();
             $response->setHttpResponseCode($isError ? 422 : 200);
@@ -92,6 +144,32 @@ class AddPlugin
             $response->setContents('');
             return $this->cacheHeaders->applyPrivate($response);
         }
+    }
+
+    /**
+     * True when the answer to this add is the redirect to the cart.
+     *
+     * No express button made the request, the store sends the shopper to the
+     * cart and the add succeeded: a success message queued and no failure (the
+     * queue is not cleared).
+     *
+     * @return bool
+     */
+    private function shouldRedirectToCart(): bool
+    {
+        return !$this->isExpressAdd()
+            && $this->scopeConfig->isSetFlag('checkout/cart/redirect_to_cart', ScopeInterface::SCOPE_STORE)
+            && $this->messageCollector->hasOnlySuccess();
+    }
+
+    /**
+     * True when an express button marked the request with a non-empty `X-Hyperion-Express`.
+     *
+     * @return bool
+     */
+    private function isExpressAdd(): bool
+    {
+        return trim((string) $this->request->getHeader(self::EXPRESS_HEADER)) !== '';
     }
 
     /**
@@ -158,5 +236,4 @@ class AddPlugin
             return 0;
         }
     }
-
 }

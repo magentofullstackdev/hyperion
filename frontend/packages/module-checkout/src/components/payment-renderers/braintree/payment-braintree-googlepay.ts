@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <payment-braintree-googlepay> -- Google Pay through Braintree
+ * <hc-payment-braintree-googlepay> -- Google Pay through Braintree
  * (`braintree_googlepay`).
  *
  * The method owns Place Order, like core's renderer: the Google Pay button
@@ -25,26 +25,23 @@
  *   3. Google's response is parsed into a Braintree nonce. A card that is
  *      not network tokenized goes through 3D Secure under the usual rules;
  *      a network tokenized one is already verified by the network.
- *   4. The order is placed at once with `payment_method_nonce`,
- *      `device_data`, `is_network_tokenized` and, for an active vault with a
- *      non tokenized card, `is_active_payment_token_enabler`. The nonce is
- *      single use: a failed order drops it and the shopper pays again.
+ *   4. The order is placed at once through the checkout's order pipeline
+ *      (`context.placeOrder()`) with `payment_method_nonce`, `device_data`,
+ *      `is_network_tokenized` and, for an active vault with a non tokenized
+ *      card, `is_active_payment_token_enabler`. The nonce is single use: a
+ *      failed order drops it and the shopper pays again.
  * Closing the sheet is not an error.
  */
 import { LitElement, html, nothing } from 'lit';
-import { property, state } from 'lit/decorators.js';
-import { SignalWatcher } from '@lit-labs/signals';
+import { state } from 'lit/decorators.js';
 
-import { getCheckoutConfig } from '../../../bootstrap-config.js';
-import { getStore } from '../../../store/index.js';
-import { failureMessage } from '../../../store/section-status.js';
-import { flowActions } from '../../../store/flow-actions.js';
-import { requestValidation } from '../../../store/validation-request.js';
-import { t } from '../../../utils/i18n.js';
-import { navigateTo } from '../../../utils/navigate.js';
-import { decideRedirectTarget } from '../../../utils/safe-redirect.js';
-import { getCheckoutBlocker, prepareCheckout } from '../checkout-gate.js';
-import { registerPaymentRenderer } from '../registry.js';
+import type {
+    PaymentContext,
+    PaymentMethodInfo,
+    Unsubscribe,
+    VaultTokenInfo,
+} from '../../../../extension-api.js';
+import { firstPartyOf, type FirstPartyQuote, type FirstPartyServices } from '../first-party.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
     BRAINTREE_GOOGLEPAY_CODE,
@@ -67,22 +64,18 @@ import '../../ui/checkbox.js';
 
 type Status = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
 
-/** `additional_data` of the order the shopper just authorized; cleared once used. */
-let authorized: Record<string, unknown> | null = null;
-
-export function getGooglePayAuthorisation(): Record<string, unknown> | null {
-    return authorized;
-}
-
-export function buildPaymentDataRequest(config: BraintreeGooglePayConfig): Partial<GooglePayPaymentDataRequest> {
-    const store = getStore();
+export function buildPaymentDataRequest(
+    config: BraintreeGooglePayConfig,
+    quote: FirstPartyQuote,
+    t: (source: string) => string
+): Partial<GooglePayPaymentDataRequest> {
     const request: Partial<GooglePayPaymentDataRequest> = {
         transactionInfo: {
-            currencyCode: getBaseCurrencyCode(),
-            totalPrice: getBaseGrandTotal(),
+            currencyCode: getBaseCurrencyCode(quote),
+            totalPrice: getBaseGrandTotal(quote),
             totalPriceStatus: 'FINAL',
-            totalPriceLabel: t('Hyperion_Checkout::braintree_line_total'),
-            displayItems: buildGooglePayDisplayItems(store.items.get(), store.totals.get(), config.priceIncludesTax),
+            totalPriceLabel: t('Total'),
+            displayItems: buildGooglePayDisplayItems(quote.items, quote.totals, config.priceIncludesTax, t),
         },
         allowedPaymentMethods: [{
             type: 'CARD',
@@ -105,8 +98,29 @@ function isCancellation(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as GooglePayError).statusCode === 'CANCELED';
 }
 
-export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
-    @property({ type: String }) public code = BRAINTREE_GOOGLEPAY_CODE;
+const FAILED = 'The Google Pay payment could not be completed. Please try again.';
+
+export class PaymentBraintreeGooglepay extends LitElement {
+    public static readonly hyperionApi = '1';
+
+    /** Hidden without a client token, like core's renderer. */
+    public static canMakePayment(args: { config: Readonly<Record<string, unknown>> }): boolean {
+        const config = getBraintreeGooglePayConfig({ payment: { [BRAINTREE_GOOGLEPAY_CODE]: { ...args.config } } });
+        return Boolean(config?.isActive && config.clientToken);
+    }
+
+    /** Core checks no reCAPTCHA form on a Google Pay order. */
+    public static hyperionRecaptchaAction(): null {
+        return null;
+    }
+
+    public context!: PaymentContext;
+    public options: Readonly<Record<string, unknown>> = {};
+    public method!: PaymentMethodInfo;
+    public config: Readonly<Record<string, unknown>> = {};
+    public token: VaultTokenInfo | null = null;
+    /** The Google Pay button completes the order, like core's renderer. */
+    public readonly ownsPlaceOrder = true;
 
     @state() private _status: Status = 'idle';
     @state() private _message: string | null = null;
@@ -115,45 +129,69 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
     @state() private _paying = false;
     /** Google confirmed the payment and the order is being placed. */
     @state() private _placing = false;
+    /** An order is being placed (by any control): the button waits. */
+    @state() private _orderUnderWay = false;
 
     private _instance: GooglePaymentInstance | null = null;
     private _client: GooglePaymentsClient | null = null;
     private _generation = 0;
     private _initQueued = false;
+    private _unsubscribe: Unsubscribe | null = null;
 
     public override createRenderRoot(): HTMLElement { return this; }
 
+    private get _services(): FirstPartyServices {
+        const services = firstPartyOf(this.context);
+        if (services === null) throw new Error('the Google Pay renderer needs the first-party context');
+        return services;
+    }
+
+    private _config(): BraintreeGooglePayConfig | null {
+        return getBraintreeGooglePayConfig(this._services.config());
+    }
+
+    public override connectedCallback(): void {
+        super.connectedCallback();
+        this._orderUnderWay = this.context.snapshot().isPlacingOrder;
+        this._unsubscribe = this.context.subscribe((snapshot) => {
+            this._orderUnderWay = snapshot.isPlacingOrder;
+        });
+        this.dispatchEvent(new CustomEvent('hyperion-payment:ready', { bubbles: true, composed: true, detail: {} }));
+    }
+
     public override disconnectedCallback(): void {
         super.disconnectedCallback();
+        this._unsubscribe?.();
+        this._unsubscribe = null;
         this._generation++;
         this._status = 'idle';
         void this._teardown();
     }
 
     public override render(): unknown {
-        const config = getBraintreeGooglePayConfig();
-        const vaultEnabled = config !== null && isVaultEnabledFor(config.vaultCode);
-        const busy = this._paying || getStore().isPlacingOrder.get();
-        const placing = this._placing || getStore().isPlacingOrder.get();
+        const config = this._config();
+        const vaultEnabled = config !== null && isVaultEnabledFor(this._services.config(), config.vaultCode);
+        const busy = this._paying || this._orderUnderWay;
+        const placing = this._placing || this._orderUnderWay;
         return html`
             <div class="space-y-3">
-                <p class="text-sm text-muted">${t('Hyperion_Checkout::braintree_googlepay_hint')}</p>
+                <p class="text-sm text-muted">${this.context.t('Pay with Google Pay. Your order is placed as soon as Google confirms the payment.')}</p>
                 ${vaultEnabled
                     ? html`<hc-checkbox
                               name="braintree_googlepay_save"
-                              label=${t('Hyperion_Checkout::braintree_save_card')}
+                              label=${this.context.t('Save this card for future purchases')}
                               .checked=${this._saveCard}
                               @value-change=${this._onSaveChange}
                           ></hc-checkbox>`
                     : nothing}
                 ${this._status === 'loading'
                     ? html`<p class="text-sm text-muted" role="status" aria-live="polite">
-                          ${t('Hyperion_Checkout::braintree_googlepay_loading')}
+                          ${this.context.t('Loading Google Pay...')}
                       </p>`
                     : nothing}
                 ${placing
                     ? html`<p class="text-sm text-muted" role="status" aria-live="polite">
-                          ${t('Hyperion_Checkout::placing_order')}
+                          ${this.context.t('Processing your order\u2026')}
                       </p>`
                     : nothing}
                 ${this._message
@@ -163,7 +201,7 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
                     ? html`<button type="button"
                                    class="text-sm text-accent hover:underline"
                                    @click=${this._onRetry}>
-                              ${t('Hyperion_Checkout::braintree_retry')}
+                              ${this.context.t('Try again')}
                           </button>`
                     : nothing}
                 <div class="max-w-sm ${busy ? 'pointer-events-none opacity-60' : ''}"
@@ -192,14 +230,14 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
         this._status = 'loading';
         this._message = null;
         try {
-            const config = getBraintreeGooglePayConfig();
+            const config = this._config();
             if (!config?.clientToken) throw new Error('missing Braintree client token');
             const [client, googlePayment, google] = await Promise.all([
-                getBraintreeClient(config.clientToken),
-                loadBraintreeModule('google-payment'),
-                loadGooglePayLibrary(),
+                getBraintreeClient(this.context, config.clientToken),
+                loadBraintreeModule(this.context, 'google-payment'),
+                loadGooglePayLibrary(this.context),
             ]);
-            void getDeviceData(config.clientToken);
+            void getDeviceData(this.context, config.clientToken);
             if (stale()) return;
             await this._teardown();
             const instance = await googlePayment.create({
@@ -214,17 +252,17 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             this._instance = instance;
             const paymentsClient = new google.payments.api.PaymentsClient({ environment: config.environment });
             this._client = paymentsClient;
-            const allowedPaymentMethods = instance.createPaymentDataRequest(buildPaymentDataRequest(config)).allowedPaymentMethods;
+            const allowedPaymentMethods = instance.createPaymentDataRequest(this._request(config)).allowedPaymentMethods;
             const ready = await paymentsClient.isReadyToPay({ apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods });
             if (stale()) return;
             if (!ready.result) {
                 this._status = 'unavailable';
-                this._message = t('Hyperion_Checkout::braintree_googlepay_unavailable');
+                this._message = this.context.t('Google Pay is not available in this browser. Please choose another payment method.');
                 return;
             }
             const container = this.querySelector<HTMLElement>('[data-googlepay-button]');
             if (!container) throw new Error('missing Google Pay button container');
-            const locale = getCheckoutConfig().hyperion?.locale;
+            const locale = this._services.config().hyperion?.locale;
             container.replaceChildren(paymentsClient.createButton({
                 onClick: this._onPay,
                 buttonColor: config.buttonColor,
@@ -238,70 +276,64 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             if (stale()) return;
             console.error('[hyperion-checkout] Braintree Google Pay could not be initialized', err);
             this._status = 'error';
-            this._message = t('Hyperion_Checkout::braintree_googlepay_init_failed');
+            this._message = this.context.t('Google Pay could not be loaded. Try again or choose another payment method.');
         }
+    }
+
+    private _request(config: BraintreeGooglePayConfig): Partial<GooglePayPaymentDataRequest> {
+        return buildPaymentDataRequest(config, this._services.quote(), (source) => this.context.t(source));
     }
 
     /** The button click: gate, Google Pay sheet, nonce, 3D Secure, order. */
     private _onPay = async (event: Event): Promise<void> => {
         event.preventDefault();
-        const store = getStore();
-        const config = getBraintreeGooglePayConfig();
+        const config = this._config();
         const instance = this._instance;
         const client = this._client;
-        if (this._paying || store.isPlacingOrder.get() || !config || !instance || !client) return;
-        const blocker = getCheckoutBlocker();
+        const snapshot = this.context.snapshot();
+        if (this._paying || snapshot.isPlacingOrder || !config || !instance || !client) return;
+        const blocker = snapshot.blocker;
         if (blocker !== null) {
-            requestValidation();
-            store.globalError.set(blocker);
-            // Put the pending edits on the quote for the next click. What
-            // is still missing or failed replaces the first message; when
-            // everything was saved the first message stays (the flush
-            // clears the banner), because the shopper has to press again.
-            // A failed save shows its reason in its own section only.
+            // The sheet may only open inside the click: put the pending edits
+            // on the quote for the next click. What is still missing or
+            // failed replaces the first message; when everything was saved
+            // the first message stays, because the shopper has to press again.
+            this.context.setError(blocker);
             this._paying = true;
             try {
-                const remaining = await prepareCheckout();
-                const shownInSection = remaining !== null && failureMessage() === remaining;
-                store.globalError.set(shownInSection ? null : remaining ?? blocker);
+                if (await this.context.requestCheckoutValidation()) this.context.setError(blocker);
             } finally {
                 if (this.isConnected) this._paying = false;
             }
             return;
         }
-        store.globalError.set(null);
+        this.context.setError(null);
         this._message = null;
         this._paying = true;
+        let placed = false;
         try {
             let paymentData: GooglePayPaymentData;
             try {
-                paymentData = await client.loadPaymentData(instance.createPaymentDataRequest(buildPaymentDataRequest(config)));
+                paymentData = await client.loadPaymentData(instance.createPaymentDataRequest(this._request(config)));
             } catch (err) {
                 if (!isCancellation(err)) {
                     console.error('[hyperion-checkout] Google Pay sheet failed', err);
-                    this._message = t('Hyperion_Checkout::braintree_googlepay_failed');
+                    this._message = this.context.t(FAILED);
                 }
                 return;
             }
             this._placing = true;
             const data = await this._collectPaymentData(config, instance, paymentData);
-            authorized = data;
-            store.paymentMethodData.set({ ...store.paymentMethodData.get(), [this.code]: data });
-            // A number, or the marker of an order the quote confirmed after
-            // its answer was lost: both continue on the success page.
-            const orderId = await flowActions().placeOrder();
-            if (orderId !== null) {
-                navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
-                return;
-            }
-            authorized = null;
+            // A number, or an order the quote confirmed after its answer was
+            // lost: the checkout continues on the success page.
+            const outcome = await this.context.placeOrder({ additional_data: data });
+            placed = outcome.status === 'placed' || outcome.status === 'redirect';
         } catch (err) {
-            authorized = null;
-            this._message = (err as Error).message || t('Hyperion_Checkout::braintree_googlepay_failed');
+            this._message = (err as Error).message || this.context.t(FAILED);
         } finally {
             // Once the order exists the button stays busy until the
             // browser leaves the page.
-            if (this.isConnected && !store.orderPlaced.get()) {
+            if (this.isConnected && !placed) {
                 this._paying = false;
                 this._placing = false;
             }
@@ -318,21 +350,21 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
             payload = await instance.parseResponse(paymentData);
         } catch (err) {
             console.error('[hyperion-checkout] Google Pay response could not be tokenized', err);
-            throw new Error(t('Hyperion_Checkout::braintree_googlepay_failed'), { cause: err });
+            throw new Error(this.context.t(FAILED), { cause: err });
         }
         const networkTokenized = payload.details.isNetworkTokenized === true;
-        const vaultEnabled = isVaultEnabledFor(config.vaultCode);
+        const vaultEnabled = isVaultEnabledFor(this._services.config(), config.vaultCode);
         const savingCard = vaultEnabled && !networkTokenized && this._saveCard;
         const nonce = networkTokenized
             ? payload.nonce
-            : await verifyThreeDSecure({
+            : await verifyThreeDSecure(this.context, {
                 authorization: config.clientToken,
                 nonce: payload.nonce,
                 bin: payload.details.bin ?? '',
                 storedCard: false,
                 savingCard,
             });
-        const deviceData = await getDeviceData(config.clientToken);
+        const deviceData = await getDeviceData(this.context, config.clientToken);
         return {
             payment_method_nonce: nonce,
             ...(deviceData ? { device_data: deviceData } : {}),
@@ -363,32 +395,10 @@ export class PaymentBraintreeGooglepay extends SignalWatcher(LitElement) {
     };
 }
 
-if (!customElements.get('payment-braintree-googlepay')) {
-    customElements.define('payment-braintree-googlepay', PaymentBraintreeGooglepay);
+if (!customElements.get('hc-payment-braintree-googlepay')) {
+    customElements.define('hc-payment-braintree-googlepay', PaymentBraintreeGooglepay);
 }
-
-export function registerBraintreeGooglePayRenderer(): void {
-    registerPaymentRenderer({
-        code: BRAINTREE_GOOGLEPAY_CODE,
-        component: 'payment-braintree-googlepay',
-        isAvailable: () => {
-            const config = getBraintreeGooglePayConfig();
-            return Boolean(config?.isActive && config.clientToken);
-        },
-        ownsPlaceOrder: () => true,
-        // Core checks no reCAPTCHA form on a Google Pay order.
-        recaptchaAction: () => null,
-        // Only the Google Pay button places this order; the data below is what it collected.
-        beforePlaceOrder: async () => {
-            if (!authorized) throw new Error(t('Hyperion_Checkout::braintree_googlepay_not_authorised'));
-            return authorized;
-        },
-        afterPlaceOrderFailed: () => { authorized = null; },
-    });
-}
-
-registerBraintreeGooglePayRenderer();
 
 declare global {
-    interface HTMLElementTagNameMap { 'payment-braintree-googlepay': PaymentBraintreeGooglepay; }
+    interface HTMLElementTagNameMap { 'hc-payment-braintree-googlepay': PaymentBraintreeGooglepay; }
 }

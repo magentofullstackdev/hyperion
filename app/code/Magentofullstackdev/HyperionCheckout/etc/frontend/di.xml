@@ -9,7 +9,7 @@
     Registers Magentofullstackdev\HyperionCheckout\Model\ConfigProvider with Magento's
     `CompositeConfigProvider`. The composite aggregates every registered
     provider into a single payload that Magentofullstackdev\HyperionCheckout\Block\Checkout
-    serialises into the `#checkout-config` JSON island.
+    serializes into the `#checkout-config` JSON island.
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
@@ -22,8 +22,14 @@
                 <item name="hyperion_checkout_captcha_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\CaptchaConfigProvider</item>
                 <item name="hyperion_checkout_guest_quote_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\GuestQuoteConfigProvider</item>
                 <item name="hyperion_checkout_initial_state_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\InitialStateConfigProvider</item>
+                <item name="hyperion_checkout_payment_renderers_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\PaymentRenderersConfigProvider</item>
+                <item name="hyperion_checkout_shipping_extensions_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\ShippingExtensionsConfigProvider</item>
+                <item name="hyperion_checkout_extensions_config_provider" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Checkout\ExtensionsConfigProvider</item>
             </argument>
         </arguments>
+        <!-- A remembered (persistent cart), not signed-in shopper: no email or address of the customer in the page. -->
+        <plugin name="hyperion_checkout_persistent_cart_privacy"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Checkout\PersistentCartPrivacy"/>
     </type>
     <type name="Magentofullstackdev\HyperionCore\Model\Htmx\HeaderStatePool">
         <arguments>
@@ -36,16 +42,145 @@
             </argument>
         </arguments>
     </type>
-    <!-- Cart summary rows: one renderer per total code; a total without one prints as a plain row. -->
+    <!--
+        Cart summary rows: one renderer per total code, as a class name built the first time a quote
+        carries that total; a total without one (or with an unusable one, logged) prints as a plain row.
+        Declared in this scope only: a module adds its item in its own etc/frontend/di.xml.
+    -->
     <type name="Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool">
         <arguments>
             <argument name="renderers" xsi:type="array">
-                <item name="subtotal" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Subtotal</item>
-                <item name="weee_tax" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Fpt</item>
-                <item name="discount" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Discount</item>
-                <item name="shipping" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Shipping</item>
-                <item name="tax" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Tax</item>
-                <item name="grand_total" xsi:type="object">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\GrandTotal</item>
+                <item name="subtotal" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Subtotal</item>
+                <item name="weee_tax" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Fpt</item>
+                <item name="discount" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Discount</item>
+                <item name="shipping" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Shipping</item>
+                <item name="tax" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\Tax</item>
+                <item name="grand_total" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\GrandTotal</item>
+            </argument>
+        </arguments>
+    </type>
+    <!--
+        Payment renderers of the checkout (`checkoutConfig.hyperion.paymentRenderers`). The pool is
+        declared in this scope only: a module adds its entries in its own etc/frontend/di.xml.
+        First-party entries are `internal` and name a `builtin` id the checkout bundle resolves.
+    -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Payment\RendererPool">
+        <arguments>
+            <argument name="renderers" xsi:type="array">
+                <item name="offline" xsi:type="array">
+                    <item name="pattern" xsi:type="string">^(checkmo|banktransfer|cashondelivery|free)$</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">offline</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">10</item>
+                </item>
+                <item name="purchaseorder" xsi:type="array">
+                    <item name="method" xsi:type="string">purchaseorder</item>
+                    <item name="type" xsi:type="string">form</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">20</item>
+                    <item name="fields" xsi:type="array">
+                        <item name="po_number" xsi:type="array">
+                            <item name="label" xsi:type="string" translate="true">Purchase Order Number</item>
+                            <item name="type" xsi:type="string">text</item>
+                            <item name="required" xsi:type="boolean">true</item>
+                            <item name="target" xsi:type="string">po_number</item>
+                        </item>
+                    </item>
+                </item>
+                <item name="braintree_card" xsi:type="array">
+                    <item name="method" xsi:type="string">braintree</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">braintree-card</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="eager" xsi:type="boolean">true</item>
+                    <item name="awaits_ready" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">30</item>
+                </item>
+                <item name="braintree_paypal" xsi:type="array">
+                    <item name="method" xsi:type="string">braintree_paypal</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">braintree-paypal</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="eager" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">40</item>
+                </item>
+                <item name="braintree_googlepay" xsi:type="array">
+                    <item name="method" xsi:type="string">braintree_googlepay</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">braintree-googlepay</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="eager" xsi:type="boolean">true</item>
+                    <item name="owns_place_order" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">50</item>
+                </item>
+                <item name="braintree_vault" xsi:type="array">
+                    <item name="pattern" xsi:type="string">^braintree_(cc|googlepay|paypal)_vault$</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">braintree-vault</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="eager" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">60</item>
+                </item>
+                <item name="paypal_express" xsi:type="array">
+                    <item name="pattern" xsi:type="string">^(paypal_express|payflow_express)$</item>
+                    <item name="type" xsi:type="string">element</item>
+                    <item name="builtin" xsi:type="string">paypal-express</item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="eager" xsi:type="boolean">true</item>
+                    <item name="sort_order" xsi:type="number">70</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- Express buttons of the storefront (product, cart, mini-cart, top of the checkout). -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Payment\ExpressButtonPool">
+        <arguments>
+            <argument name="buttons" xsi:type="array">
+                <item name="paypal_express" xsi:type="array">
+                    <item name="placements" xsi:type="array">
+                        <item name="product" xsi:type="string">product</item>
+                        <item name="cart" xsi:type="string">cart</item>
+                        <item name="minicart" xsi:type="string">minicart</item>
+                    </item>
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="builtin" xsi:type="string">hyperion-paypal-buttons</item>
+                    <item name="tag" xsi:type="string">hyperion-paypal-buttons</item>
+                    <item name="reserved_height" xsi:type="number">45</item>
+                    <item name="sort_order" xsi:type="number">100</item>
+                    <item name="provider" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Payment\Express\PaypalButton</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="To check out, please sign in with your email address." xsi:type="string" translate="true">To check out, please sign in with your email address.</item>
+                        <item name="You need to choose options for your item." xsi:type="string" translate="true">You need to choose options for your item.</item>
+                        <item name="Something went wrong with your request. Please try again later." xsi:type="string" translate="true">Something went wrong with your request. Please try again later.</item>
+                        <item name="Express Checkout has been canceled." xsi:type="string" translate="true">Express Checkout has been canceled.</item>
+                        <item name="Submitting order information..." xsi:type="string" translate="true">Submitting order information...</item>
+                    </item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- First-party consumers of the generic checkout API, off by default (their options providers skip them). -->
+    <type name="Magentofullstackdev\HyperionCheckout\Model\Checkout\ExtensionPool">
+        <arguments>
+            <argument name="extensions" xsi:type="array">
+                <item name="hyperion_order_comment" xsi:type="array">
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="builtin" xsi:type="string">order-comment</item>
+                    <item name="options_provider" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\OrderComment\OptionsProvider</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="label" xsi:type="string" translate="true">Order comment</item>
+                        <item name="remaining" xsi:type="string" translate="true">{count} characters left</item>
+                    </item>
+                </item>
+                <item name="hyperion_newsletter_optin" xsi:type="array">
+                    <item name="internal" xsi:type="boolean">true</item>
+                    <item name="builtin" xsi:type="string">newsletter-optin</item>
+                    <item name="options_provider" xsi:type="string">Magentofullstackdev\HyperionCheckout\Model\Newsletter\OptionsProvider</item>
+                    <item name="phrases" xsi:type="array">
+                        <item name="label" xsi:type="string" translate="true">Sign up for our newsletter</item>
+                    </item>
+                </item>
             </argument>
         </arguments>
     </type>
@@ -54,6 +189,7 @@
         <arguments>
             <argument name="groups" xsi:type="array">
                 <item name="cart_estimate" xsi:type="string">hyperion/security/cart_estimate_limit</item>
+                <item name="cart_summary" xsi:type="string">hyperion/security/cart_summary_limit</item>
             </argument>
         </arguments>
     </type>
@@ -61,6 +197,7 @@
         <arguments>
             <argument name="routes" xsi:type="array">
                 <item name="hyperion_cart_estimate" xsi:type="string">cart_estimate</item>
+                <item name="hyperion_cart_summary" xsi:type="string">cart_summary</item>
             </argument>
         </arguments>
     </type>

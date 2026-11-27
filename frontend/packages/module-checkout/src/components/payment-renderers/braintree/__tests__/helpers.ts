@@ -3,20 +3,27 @@
 
 /**
  * Shared setup of the Braintree renderer tests: a checkout config built from
- * the customer capture plus the hand-written Braintree slice, a seeded store,
- * and a `window.braintree` double served through the injectable script loader.
+ * the customer capture plus the hand-written Braintree slice, a seeded store
+ * the first-party context reads the quote from, and a `window.braintree`
+ * double served through the context's script loader.
  */
 import { vi, type Mock } from 'vitest';
 
+import type { CheckoutSnapshot, PaymentElement, VaultTokenInfo } from '../../../../../extension-api.js';
+import { createMockContext, mountPaymentElement, SNAPSHOT, type MockContext } from '../../__tests__/mock-context.js';
+import type { FirstPartyServices } from '../../first-party.js';
+
 import customerFixture from '../../../../fixtures/checkoutConfig.customer.json' with { type: 'json' };
 import braintreeFixture from '../../../../fixtures/payment.braintree.json' with { type: 'json' };
+import paymentRenderers from '../../../../fixtures/payment-renderers.json' with { type: 'json' };
 import { setCheckoutConfig } from '../../../../bootstrap-config.js';
+import { initFlowSelectors } from '../../../../store/flow-selectors.js';
+import { placeOrderHint } from '../../../../store/place-order-hint.js';
 import { createStore, setStoreForTests, type Store } from '../../../../store/index.js';
 import type { Address } from '../../../../types/address.js';
 import type { CheckoutConfig } from '../../../../types/config.js';
 import type { Totals } from '../../../../types/totals.js';
 import { resetBraintreeClientsForTests } from '../client.js';
-import { setScriptLoaderForTests } from '../sdk.js';
 import type {
     GooglePayButtonOptions,
     GooglePayPaymentDataRequest,
@@ -52,10 +59,67 @@ export function installCheckoutConfig(patch: Record<string, Json> = {}, extra: J
         payment,
         vault: braintree.vault,
         paymentMethods: braintree.paymentMethods,
+        hyperion: { ...(base['hyperion'] as Json), paymentRenderers },
         ...extra,
     } as unknown as CheckoutConfig;
     setCheckoutConfig(config);
+    currentConfig = config;
     return config;
+}
+
+let currentConfig: CheckoutConfig | null = null;
+let currentDouble: BraintreeDouble | null = null;
+
+/**
+ * A first-party payment context over `store`: the quote, the email, the
+ * latch and the gate of the store (`blocker`, as the checkout computes it),
+ * `setError()` writing the store's banner, the configuration installed
+ * last, and the SDK double installed last as the script loader.
+ */
+export function braintreeContext(store: Store): MockContext {
+    const mock = createMockContext();
+    const services = mock.context.firstParty as { -readonly [K in keyof FirstPartyServices]: FirstPartyServices[K] };
+    services.config = () => currentConfig as CheckoutConfig;
+    services.quote = () => {
+        const virtual = store.isVirtual.get();
+        const shipping = virtual ? null : store.shippingAddress.get();
+        return {
+            items: store.items.get(),
+            totals: store.totals.get(),
+            shippingAddress: shipping,
+            billingAddress: store.billingSameAsShipping.get() && !virtual ? shipping : store.billingAddress.get(),
+        };
+    };
+    const context = mock.context as unknown as { snapshot: () => CheckoutSnapshot };
+    context.snapshot = () => Object.freeze({
+        ...SNAPSHOT,
+        email: store.email.get(),
+        isPlacingOrder: store.isPlacingOrder.get() || store.orderOutcome.get() !== 'none',
+        blocker: placeOrderHint(store, initFlowSelectors(), { skipPaymentReady: true }),
+    });
+    mock.spies.setError.mockImplementation((message: string | null) => store.globalError.set(message));
+    mock.spies.loadScript.mockImplementation((src: string) => (currentDouble === null
+        ? Promise.reject(new Error('no SDK double'))
+        : currentDouble.loader(src)));
+    return mock;
+}
+
+/** Mount a Braintree element over `store`, its properties set before it connects. */
+export function mountBraintreeElement<T extends PaymentElement>(
+    tag: string,
+    code: string,
+    store: Store,
+    token: VaultTokenInfo | null = null
+): { element: T; events: Array<{ type: string; detail: unknown }>; mock: MockContext } {
+    const mock = braintreeContext(store);
+    const payment = (currentConfig?.payment ?? {}) as Record<string, Json>;
+    const { element, events } = mountPaymentElement<T>(tag, {
+        context: mock.context,
+        method: { code, title: code },
+        config: payment[code] ?? {},
+        token,
+    });
+    return { element, events, mock };
 }
 
 export function installStore(): Store {
@@ -198,10 +262,9 @@ export function installBraintreeDouble(options: { eligible?: readonly string[] }
             googlePayment: { create: googlePaymentCreate },
         };
     });
-    setScriptLoaderForTests(loader);
     resetBraintreeClientsForTests();
 
-    return {
+    const double: BraintreeDouble = {
         loader,
         clientCreate,
         hostedFieldsCreate,
@@ -218,10 +281,12 @@ export function installBraintreeDouble(options: { eligible?: readonly string[] }
         googlePay,
         googlePayButton,
     };
+    currentDouble = double;
+    return double;
 }
 
 export function uninstallBraintreeDouble(): void {
-    setScriptLoaderForTests(null);
+    currentDouble = null;
     resetBraintreeClientsForTests();
     delete window.braintree;
     delete window.paypal;

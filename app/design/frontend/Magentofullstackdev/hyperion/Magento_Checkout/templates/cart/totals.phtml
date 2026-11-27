@@ -69,6 +69,9 @@ $barLinkClasses = 'shrink-0 inline-flex items-center justify-center min-h-11 px-
         class="text-base font-bold text-secondary uppercase tracking-wider mb-4">
         <?= $escaper->escapeHtml(__('Summary')) ?>
     </h2>
+    <?php /* Extension points (HyperionCheckout layout handle hyperion_cart_extensions): empty
+             containers print nothing. */ ?>
+    <?= $block->getChildHtml('totals_before') ?>
 
     <?php /* Estimate Shipping and Tax (theme Magento_Checkout::cart/estimate.phtml) */ ?>
     <?php if (!$block->isVirtual()): ?>
@@ -91,6 +94,7 @@ $barLinkClasses = 'shrink-0 inline-flex items-center justify-center min-h-11 px-
             </div>
         <?php endforeach; ?>
     </dl>
+    <?= $block->getChildHtml('totals_after') ?>
 
     <?php if ($blocker !== null): ?>
         <div id="<?= $escaper->escapeHtmlAttr($blockerId) ?>"
@@ -122,8 +126,8 @@ $barLinkClasses = 'shrink-0 inline-flex items-center justify-center min-h-11 px-
             <?= $escaper->escapeHtml(__('Proceed to Checkout')) ?>
         </a>
 
-        <?php /* PayPal smart buttons (theme Magento_Paypal/layout/checkout_cart_index.xml) */ ?>
-        <?= $block->getChildHtml('paypal_buttons') ?>
+        <?php /* Express buttons: container hyperion.express.cart */ ?>
+        <?= $block->getChildHtml('express') ?>
     <?php endif; ?>
 </aside>
 <div id="<?= $escaper->escapeHtmlAttr($targetId) ?>-bar"

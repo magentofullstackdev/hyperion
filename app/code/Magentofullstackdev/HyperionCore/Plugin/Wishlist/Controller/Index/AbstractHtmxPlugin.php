@@ -15,10 +15,11 @@ use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Url\EncoderInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\ScopeInterface;
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
-use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
-use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
+use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\RequestContext;
 
 /**
@@ -41,6 +42,12 @@ use Magentofullstackdev\HyperionCore\Model\Htmx\RequestContext;
  * action (`BeforeAuthUrl`), the plugin replays the stored request and the
  * visitor returns to the product with the item in the wish list. The queued
  * message stays in the session for the login page.
+ *
+ * A customer's body goes through ActionResponse (event
+ * `hyperion_htmx_action_response`); the guest answer carries no body to
+ * extend (htmx follows `HX-Redirect` and ignores it) and dispatches nothing.
+ *
+ * @internal
  */
 abstract class AbstractHtmxPlugin
 {
@@ -48,20 +55,42 @@ abstract class AbstractHtmxPlugin
     private const FRAGMENT_HANDLE = 'hyperion_customer_wishlist';
     private const FRAGMENT_BLOCK = 'hyperion.customer.wishlist.fragment';
 
+    /**
+     * @param RawFactory $resultRawFactory
+     * @param CustomerSession $customerSession
+     * @param CacheHeadersInterface $cacheHeaders
+     * @param HttpResponse $response
+     * @param MessageCollector $messageCollector
+     * @param NotificationRendererInterface $notificationRenderer
+     * @param FragmentRendererInterface $fragmentRenderer
+     * @param UrlInterface $urlBuilder
+     * @param EncoderInterface $urlEncoder
+     * @param RequestContext $requestContext
+     * @param ScopeConfigInterface $scopeConfig
+     * @param ActionResponse $actionResponse
+     */
     public function __construct(
         private readonly RawFactory $resultRawFactory,
         private readonly CustomerSession $customerSession,
-        private readonly CacheHeaders $cacheHeaders,
+        private readonly CacheHeadersInterface $cacheHeaders,
         private readonly HttpResponse $response,
         private readonly MessageCollector $messageCollector,
-        private readonly NotificationRenderer $notificationRenderer,
-        private readonly FragmentRenderer $fragmentRenderer,
+        private readonly NotificationRendererInterface $notificationRenderer,
+        private readonly FragmentRendererInterface $fragmentRenderer,
         private readonly UrlInterface $urlBuilder,
         private readonly EncoderInterface $urlEncoder,
         private readonly RequestContext $requestContext,
-        private readonly ScopeConfigInterface $scopeConfig
+        private readonly ScopeConfigInterface $scopeConfig,
+        private readonly ActionResponse $actionResponse
     ) {
     }
+
+    /**
+     * The action name of the `hyperion_htmx_action_response` event (ActionResponse::ACTION_*).
+     *
+     * @return string
+     */
+    abstract protected function actionName(): string;
 
     /**
      * @param mixed $result
@@ -77,7 +106,7 @@ abstract class AbstractHtmxPlugin
         $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
 
         if (!$this->customerSession->isLoggedIn()) {
-            // Neutralise the 302 + Location set by Customer\Model\Session::authenticate()
+            // Neutralize the 302 + Location set by Customer\Model\Session::authenticate()
             // and let htmx navigate to the login page instead.
             $this->response->setHttpResponseCode(200);
             $this->response->clearHeader('Location');
@@ -88,12 +117,16 @@ abstract class AbstractHtmxPlugin
         }
 
         $messages = $this->messageCollector->collect();
-        $tone = $messages['has_error'] ? NotificationRenderer::TONE_ERROR : NotificationRenderer::TONE_SUCCESS;
-        $response->setContents(
+        $tone = $messages['has_error']
+            ? NotificationRendererInterface::TONE_ERROR
+            : NotificationRendererInterface::TONE_SUCCESS;
+        $response->setContents($this->actionResponse->build(
+            $this->actionName(),
+            $messages,
             $this->notificationRenderer->render($messages['html'], $tone)
             . "\n"
             . $this->fragmentRenderer->render(self::FRAGMENT_HANDLE, self::FRAGMENT_BLOCK, ['oob' => true])
-        );
+        ));
 
         return $this->cacheHeaders->applyPrivate($response);
     }

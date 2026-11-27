@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCore\Model\Htmx;
 
+use Magento\Framework\App\ViewInterface;
 use Magento\Framework\View\Element\AbstractBlock;
 use Magento\Framework\View\Result\PageFactory;
 use Psr\Log\LoggerInterface;
@@ -20,12 +21,36 @@ use Psr\Log\LoggerInterface;
  * add / remove action, and it means the state attributes the toggle
  * components read (`data-hyperion-wishlist-items`, `data-hyperion-
  * compare-ids`) are emitted from one place.
+ *
+ * Every result page binds its own builder to the ONE shared layout, and
+ * core's `App\View` creates a page in its constructor. Controllers that
+ * implement ActionInterface directly (the header state, an order cancel, the
+ * cart estimator) create no `App\View` before they render: when a block of
+ * the fragment first needs it during the render (anything that depends on
+ * `CurrentCustomer`), its page would replace the fragment's builder and the
+ * next layout read would build the layout again. This class takes
+ * `App\View` as a dependency, so it exists before the fragment page and the
+ * fragment's builder is the last one bound.
+ *
+ * Type-hint FragmentRendererInterface, the public contract.
+ *
+ * @api
+ * @since 0.9.0
  */
-class FragmentRenderer
+class FragmentRenderer implements FragmentRendererInterface
 {
-    public function __construct(
+    /**
+     * Fragment renderer.
+     *
+     * @param PageFactory $pageFactory
+     * @param LoggerInterface $logger
+     * @param ViewInterface $view created here only so that it exists before the fragment page
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function __construct( // @phpstan-ignore constructor.unusedParameter
         private readonly PageFactory $pageFactory,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        ViewInterface $view
     ) {
     }
 
@@ -33,6 +58,7 @@ class FragmentRenderer
      * @param string $handle Layout handle to load (no `default` merge).
      * @param string $blockName Block to render from that handle.
      * @param array<string, mixed> $data Extra block data, e.g. ['oob' => true].
+     * @return string
      */
     public function render(string $handle, string $blockName, array $data = []): string
     {

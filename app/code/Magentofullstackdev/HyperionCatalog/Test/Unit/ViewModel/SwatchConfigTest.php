@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCatalog\Test\Unit\ViewModel;
 
 use Magento\Catalog\Model\Product;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\DataObject;
 use Magento\Framework\Json\EncoderInterface;
 use Magento\Framework\Module\Manager as ModuleManager;
@@ -42,6 +43,70 @@ class SwatchConfigTest extends TestCase
     ];
 
     private array $superAttribute = [];
+
+    /** @var array<int|string, array<string, mixed>> core's attributes of the configurable */
+    private array $attributes = ['93' => ['id' => '93', 'options' => []]];
+
+    /** `catalog/frontend/swatches_per_product` (core's default is 16) */
+    private string $swatchesPerProduct = '16';
+
+    /**
+     * The tiles show the first "Swatches per Product" options of every attribute, and the
+     * skeleton rows that reserve the tile's height list the same options.
+     */
+    public function testTheTileKeepsTheConfiguredNumberOfOptionsPerAttribute(): void
+    {
+        $this->swatchesPerProduct = '2';
+        $this->attributes = [
+            '93' => ['id' => '93', 'label' => 'Color', 'position' => 0, 'options' => $this->options(4)],
+            '144' => ['id' => '144', 'label' => 'Size', 'position' => 1, 'options' => $this->options(1)],
+        ];
+        $viewModel = $this->viewModel($this->stockStub());
+
+        $config = $this->decode($viewModel->getSerializedConfig($this->configurable(), true));
+        $rows = $viewModel->getSkeletonRows($this->configurable(), true);
+
+        self::assertSame(['1', '2'], array_column($config['attributes']['93']['options'], 'id'));
+        self::assertSame(['1'], array_column($config['attributes']['144']['options'], 'id'));
+        self::assertSame(['Option 1', 'Option 2'], array_column($rows[0]['options'], 'text'));
+        self::assertCount(1, $rows[1]['options']);
+    }
+
+    public function testTheProductPageKeepsEveryOption(): void
+    {
+        $this->swatchesPerProduct = '2';
+        $this->attributes = ['93' => ['id' => '93', 'label' => 'Color', 'options' => $this->options(4)]];
+        $viewModel = $this->viewModel($this->stockStub());
+
+        $config = $this->decode($viewModel->getSerializedConfig($this->configurable()));
+
+        self::assertCount(4, $config['attributes']['93']['options']);
+        self::assertCount(4, $viewModel->getSkeletonRows($this->configurable())[0]['options']);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function limitsThatCutNothing(): array
+    {
+        return [
+            'core default above the option count' => ['16', 4],
+            'zero' => ['0', 4],
+            'empty value' => ['', 4],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('limitsThatCutNothing')]
+    public function testALimitAboveTheOptionCountOrNoLimitKeepsTheTileUnchanged(string $limit, int $expected): void
+    {
+        $this->swatchesPerProduct = $limit;
+        $this->attributes = ['93' => ['id' => '93', 'label' => 'Color', 'options' => $this->options(4)]];
+
+        $config = $this->decode($this->viewModel($this->stockStub())->getSerializedConfig($this->configurable(), true));
+
+        self::assertSame($this->options(4), $config['attributes']['93']['options']);
+        self::assertCount($expected, $config['attributes']['93']['options']);
+    }
 
     public function testStockNoticesListTheVariantsWithinTheThreshold(): void
     {
@@ -146,7 +211,7 @@ class SwatchConfigTest extends TestCase
     {
         $block = $this->createStub(SwatchesBlock::class);
         $block->method('getJsonConfig')->willReturn(json_encode([
-            'attributes' => ['93' => ['id' => '93', 'options' => []]],
+            'attributes' => $this->attributes,
             'optionPrices' => [],
             'images' => [],
             'index' => [],
@@ -161,6 +226,10 @@ class SwatchConfigTest extends TestCase
         $encoder->method('encode')->willReturnCallback(static fn ($data): string => (string) json_encode($data));
         $modules = $this->createStub(ModuleManager::class);
         $modules->method('isEnabled')->willReturn(false);
+        $scopeConfig = $this->createStub(ScopeConfigInterface::class);
+        $scopeConfig->method('getValue')->willReturnCallback(
+            fn (string $path): ?string => $path === 'catalog/frontend/swatches_per_product' ? $this->swatchesPerProduct : null
+        );
 
         return new SwatchConfig(
             $factory,
@@ -170,7 +239,8 @@ class SwatchConfigTest extends TestCase
             $this->createStub(LoggerInterface::class),
             $modules,
             $this->createStub(ObjectManagerInterface::class),
-            $stock
+            $stock,
+            $scopeConfig
         );
     }
 
@@ -202,6 +272,21 @@ class SwatchConfigTest extends TestCase
         );
 
         return $product;
+    }
+
+    /**
+     * Text options of core's configurable config, ids from 1.
+     *
+     * @return array<int, array{id: string, label: string, products: string[]}>
+     */
+    private function options(int $count): array
+    {
+        $options = [];
+        for ($i = 1; $i <= $count; $i++) {
+            $options[] = ['id' => (string) $i, 'label' => 'Option ' . $i, 'products' => [(string) (100 + $i)]];
+        }
+
+        return $options;
     }
 
     private function child(int $id): Product

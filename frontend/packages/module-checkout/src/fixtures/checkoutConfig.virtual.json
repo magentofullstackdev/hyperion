@@ -9,7 +9,7 @@
     "groupLength": 3,
     "groupSymbol": ",",
     "integerRequired": false,
-    "pattern": "\u20ac%s",
+    "pattern": "€%s",
     "precision": 2,
     "requiredPrecision": 2
   },
@@ -19,24 +19,24 @@
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976090
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     },
     "sales_rule_coupon_request": {
       "imageHeight": 50,
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976090
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     },
     "user_login": {
       "imageHeight": 50,
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976090
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     }
   },
   "captchaPayments": {
@@ -45,37 +45,37 @@
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976090
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     }
   },
   "cardinal": {
     "environment": "production",
-    "requestJWT": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI0MDllNjJjZi1lYWRhLTQ4OWMtYjMzZi0wYzY5MzZmMzM5NWUiLCJpc3MiOiIiLCJpYXQiOjE3NzY5NzYwOTAsIk9yZ1VuaXRJZCI6IiIsIlBheWxvYWQiOnsiT3JkZXJEZXRhaWxzIjp7Ik9yZGVyTnVtYmVyIjoiMzc5IiwiQW1vdW50Ijo2MDAsIkN1cnJlbmN5Q29kZSI6IkVVUiJ9fSwiT2JqZWN0aWZ5UGF5bG9hZCI6dHJ1ZX0.UyIliJa64IV0vZdxF1Q4OVpSsd2A6dXwWAOMVIdUGiY"
+    "requestJWT": "placeholder-requestjwt"
   },
-  "cartUrl": "https://hyperion.local/checkout/cart/",
+  "cartUrl": "https://shop.example/checkout/cart/",
   "checkoutAgreements": {
     "isEnabled": false
   },
-  "checkoutUrl": "https://hyperion.local/checkout/",
+  "checkoutUrl": "https://shop.example/checkout/",
   "customerData": [],
   "defaultCountryId": "US",
   "defaultPostcode": null,
   "defaultRegionId": null,
-  "defaultSuccessPageUrl": "https://hyperion.local/checkout/onepage/success/",
+  "defaultSuccessPageUrl": "https://shop.example/checkout/onepage/success/",
   "displayBillingOnPaymentMethod": true,
-  "forgotPasswordUrl": "https://hyperion.local/customer/account/forgotpassword/",
-  "formKey": "6d609b0753d83904",
+  "forgotPasswordUrl": "https://shop.example/customer/account/forgotpassword/",
+  "formKey": "FixtureFormKey01",
   "getIncludeWeeeFlag": false,
   "hyperion": {
     "checkoutVersion": "2.0.0",
     "enabled": true
   },
   "imageData": {
-    "181": {
-      "alt": "Beginner's Yoga",
+    "4216": {
+      "alt": "Hyperion Gift Wrapping Service",
       "height": 156,
-      "src": "https://hyperion.local/media/catalog/product/cache/f784592cce1c1a37499dd87fb5ab4967/l/t/lt01.jpg",
+      "src": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Catalog/images/product/placeholder/thumbnail.jpg",
       "width": 156
     }
   },
@@ -87,103 +87,421 @@
   "isDisplayShippingBothPrices": false,
   "isDisplayShippingPriceExclTax": true,
   "isFullTaxSummaryDisplayed": false,
-  "isGuestCheckoutAllowed": false,
+  "isGuestCheckoutAllowed": true,
   "isIncludedInSubtotal": false,
   "isWeeeEnabled": "0",
   "isZeroTaxDisplayed": false,
   "maxCartItemsToDisplay": 10,
   "originCountryCode": "US",
-  "pageNotFoundUrl": "https://hyperion.local/checkout/noroute/",
+  "pageNotFoundUrl": "https://shop.example/checkout/noroute/",
   "payment": {
     "": [],
+    "braintree": {
+      "availableCardTypes": [
+        "AE",
+        "VI",
+        "MC",
+        "DI",
+        "JCB",
+        "DN",
+        "MI",
+        "ELO",
+        "UPD"
+      ],
+      "ccTypesMapper": {
+        "american-express": "AE",
+        "diners-club": "DN",
+        "discover": "DI",
+        "elo": "ELO",
+        "jcb": "JCB",
+        "maestro": "MI",
+        "master-card": "MC",
+        "mastercard": "MC",
+        "uk-maestro": "MI",
+        "unionpay": "UPD",
+        "visa": "VI"
+      },
+      "ccVaultCode": "braintree_cc_vault",
+      "clientToken": "placeholder-clienttoken",
+      "countrySpecificCardTypes": [],
+      "disabledFunding": {
+        "card": false,
+        "elv": false
+      },
+      "environment": "sandbox",
+      "icons": {
+        "AE": {
+          "alt": "AE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/AE.png",
+          "width": 48
+        },
+        "DI": {
+          "alt": "DI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DI.png",
+          "width": 48
+        },
+        "DN": {
+          "alt": "DN",
+          "height": 47,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DN.png",
+          "width": 50
+        },
+        "ELO": {
+          "alt": "ELO",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/ELO.png",
+          "width": 48
+        },
+        "JCB": {
+          "alt": "JCB",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/JCB.png",
+          "width": 48
+        },
+        "MC": {
+          "alt": "MC",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MC.png",
+          "width": 48
+        },
+        "MI": {
+          "alt": "MI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MI.png",
+          "width": 48
+        },
+        "NONE": {
+          "alt": "NONE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/NONE.png",
+          "width": 48
+        },
+        "UPD": {
+          "alt": "UPD",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/UPD.png",
+          "width": 48
+        },
+        "VI": {
+          "alt": "VI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/VI.png",
+          "width": 48
+        }
+      },
+      "isActive": true,
+      "merchantId": "placeholder-merchantid",
+      "style": {
+        "color": "gold",
+        "shape": "rect"
+      },
+      "useCvv": true
+    },
     "braintree_cc_vault": {
-      "cvvVerify": false
+      "cvvVerify": true
+    },
+    "braintree_googlepay": {
+      "btnColor": 0,
+      "cardTypes": [
+        "VISA",
+        "MASTERCARD",
+        "AMEX"
+      ],
+      "clientToken": "placeholder-clienttoken",
+      "environment": "TEST",
+      "icons": {
+        "AE": {
+          "alt": "AE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/AE.png",
+          "width": 48
+        },
+        "DI": {
+          "alt": "DI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DI.png",
+          "width": 48
+        },
+        "DN": {
+          "alt": "DN",
+          "height": 47,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DN.png",
+          "width": 50
+        },
+        "ELO": {
+          "alt": "ELO",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/ELO.png",
+          "width": 48
+        },
+        "JCB": {
+          "alt": "JCB",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/JCB.png",
+          "width": 48
+        },
+        "MC": {
+          "alt": "MC",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MC.png",
+          "width": 48
+        },
+        "MI": {
+          "alt": "MI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MI.png",
+          "width": 48
+        },
+        "NONE": {
+          "alt": "NONE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/NONE.png",
+          "width": 48
+        },
+        "UPD": {
+          "alt": "UPD",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/UPD.png",
+          "width": 48
+        },
+        "VI": {
+          "alt": "VI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/VI.png",
+          "width": 48
+        }
+      },
+      "isActive": true,
+      "isActiveShipping": false,
+      "merchantId": "placeholder-merchantid",
+      "multiCouponLimit": "1",
+      "paymentMarkSrc": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/GooglePay_AcceptanceMark.png",
+      "priceIncludesTax": false,
+      "skipOrderReviewStep": true,
+      "vaultCode": "braintree_googlepay_vault"
+    },
+    "braintree_paypal": {
+      "canSendCartLineItems": true,
+      "clientToken": "placeholder-clienttoken",
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": true,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "gold",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal (Braintree)",
+      "vaultCode": "braintree_paypal_vault"
+    },
+    "braintree_paypal_credit": {
+      "canSendCartLineItems": true,
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": false,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/ppc-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "darkblue",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal Credit"
+    },
+    "braintree_paypal_paylater": {
+      "canSendCartLineItems": true,
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": false,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isMessageActive": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "messageStyles": {
+        "text_align": "left",
+        "text_color": "black"
+      },
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/ppc-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "gold",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal PayLater"
     },
     "ccform": {
+      "availableTypes": {
+        "braintree": {
+          "AE": "American Express",
+          "DI": "Discover",
+          "DN": "Diners",
+          "ELO": "Elo",
+          "JCB": "JCB",
+          "MC": "MasterCard",
+          "MI": "Maestro International",
+          "UPD": "Union Pay through Discover",
+          "VI": "Visa"
+        }
+      },
+      "cvvImageUrl": {
+        "braintree": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Checkout/cvv.png"
+      },
+      "hasVerification": {
+        "braintree": true
+      },
       "icons": {
         "AE": {
           "height": 30,
           "title": "American Express",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/ae.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/ae.png",
           "width": 46
         },
         "AU": {
           "height": 30,
           "title": "Aura",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/au.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/au.png",
           "width": 46
         },
         "DI": {
           "height": 30,
           "title": "Discover",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/di.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/di.png",
           "width": 46
         },
         "DN": {
           "height": 30,
           "title": "Diners",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/dn.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/dn.png",
           "width": 46
         },
         "ELO": {
           "height": 30,
           "title": "Elo",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/elo.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/elo.png",
           "width": 46
         },
         "HC": {
           "height": 30,
           "title": "Hipercard",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/hc.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/hc.png",
           "width": 46
         },
         "JCB": {
           "height": 30,
           "title": "JCB",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/jcb.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/jcb.png",
           "width": 46
         },
         "MC": {
           "height": 30,
           "title": "MasterCard",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/mc.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/mc.png",
           "width": 46
         },
         "MD": {
           "height": 30,
           "title": "Maestro Domestic",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/md.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/md.png",
           "width": 46
         },
         "MI": {
           "height": 30,
           "title": "Maestro International",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/mi.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/mi.png",
           "width": 46
         },
         "SM": {
           "height": 30,
           "title": "Switch/Maestro",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/sm.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/sm.png",
           "width": 46
         },
         "SO": {
           "height": 30,
           "title": "Solo",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/so.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/so.png",
           "width": 46
         },
         "UN": {
           "height": 30,
           "title": "UnionPay",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/un.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/un.png",
           "width": 46
         },
         "VI": {
           "height": 30,
           "title": "Visa",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/vi.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/vi.png",
           "width": 46
+        }
+      },
+      "months": {
+        "braintree": {
+          "1": "01 - January",
+          "2": "02 - February",
+          "3": "03 - March",
+          "4": "04 - April",
+          "5": "05 - May",
+          "6": "06 - June",
+          "7": "07 - July",
+          "8": "08 - August",
+          "9": "09 - September",
+          "10": "10 - October",
+          "11": "11 - November",
+          "12": "12 - December"
+        }
+      },
+      "years": {
+        "braintree": {
+          "2026": 2026,
+          "2027": 2027,
+          "2028": 2028,
+          "2029": 2029,
+          "2030": 2030,
+          "2031": 2031,
+          "2032": 2032,
+          "2033": 2033,
+          "2034": 2034,
+          "2035": 2035,
+          "2036": 2036
         }
       }
     },
@@ -208,13 +526,13 @@
         "payflowpro": 2
       },
       "placeOrderUrl": {
-        "payflowpro": "https://hyperion.local/paypal/transparent/requestSecureToken/"
+        "payflowpro": "https://shop.example/paypal/transparent/requestSecureToken/"
       },
       "saveOrderUrl": {
-        "payflowpro": "https://hyperion.local/checkout/onepage/saveOrder/"
+        "payflowpro": "https://shop.example/checkout/onepage/saveOrder/"
       },
       "source": {
-        "payflowpro": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/blank.html"
+        "payflowpro": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/blank.html"
       },
       "timeoutTime": {
         "payflowpro": 30000
@@ -243,17 +561,102 @@
       "transportName": "ba_agreement_id"
     },
     "paypalExpress": {
-      "inContextConfig": [],
-      "isContextCheckout": false,
+      "billingAgreementCode": {
+        "paypal_express": null
+      },
+      "inContextConfig": {
+        "clientConfig": {
+          "button": [
+            "paypal-express-in-context-button"
+          ],
+          "dataAttributes": {
+            "data-csp-nonce": "placeholder-data-csp-nonce",
+            "data-partner-attribution-id": "placeholder-data-partner-attribution-id"
+          },
+          "getTokenUrl": "https://shop.example/paypal/express/getTokenData/",
+          "isGuestCheckoutAllowed": true,
+          "isVisibleOnProductPage": true,
+          "onAuthorizeUrl": "https://shop.example/paypal/express/onAuthorization/",
+          "onCancelUrl": "https://shop.example/paypal/express/cancel/",
+          "sdkUrl": "https://www.paypal.com/sdk/js?client-id=placeholder-client-id&locale=en_US&currency=EUR&buyer-country=IT&enable-funding=venmo%2Cpaylater&commit=true&intent=authorize&merchant-id=placeholder-merchant-id&disable-funding=card%2Cbancontact%2Ceps%2Cgiropay%2Cideal%2Cmybank%2Cp24%2Csofort&components=messages%2Cbuttons",
+          "styles": {
+            "color": "gold",
+            "label": "paypal",
+            "layout": "vertical",
+            "shape": "rect",
+            "size": "responsive"
+          }
+        },
+        "inContextId": "paypal-express-in-context-button",
+        "merchantId": "placeholder-merchantid"
+      },
+      "isContextCheckout": true,
       "paymentAcceptanceMarkHref": "https://www.paypal.com/us/cgi-bin/webscr?cmd=xpt/Marketing/popup/OLCWhatIsPayPal-outside",
-      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png"
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png",
+      "redirectUrl": {
+        "paypal_express": "https://shop.example/paypal/express/start/"
+      }
     },
-    "paypalIframe": []
+    "paypalIframe": [],
+    "three_d_secure": {
+      "ccVaultCode": "braintree_cc_vault",
+      "challengeRequested": false,
+      "enabled": false,
+      "ipAddress": "",
+      "specificCountries": [],
+      "thresholdAmount": 0,
+      "useCvvVault": true
+    },
+    "vault": []
   },
   "paymentMethods": [
     {
       "code": "checkmo",
       "title": "Check / Money order"
+    },
+    {
+      "code": "braintree_cc_vault",
+      "title": "Stored Cards"
+    },
+    {
+      "code": "braintree_googlepay",
+      "title": "Google Pay"
+    },
+    {
+      "code": "payment_services_paypal_hosted_fields",
+      "title": "Credit Card"
+    },
+    {
+      "code": "braintree_paypal",
+      "title": "PayPal (Braintree)"
+    },
+    {
+      "code": "paypal_express",
+      "title": "PayPal Express Checkout"
+    },
+    {
+      "code": "payment_services_paypal_smart_buttons",
+      "title": "PayPal"
+    },
+    {
+      "code": "payment_services_paypal_apple_pay",
+      "title": "Apple Pay"
+    },
+    {
+      "code": "braintree",
+      "title": "Credit Card Braintree"
+    },
+    {
+      "code": "payment_services_paypal_google_pay",
+      "title": "Google Pay"
+    },
+    {
+      "code": "payment_services_paypal_fastlane",
+      "title": "Fastlane"
+    },
+    {
+      "code": "payment_services_paypal_apm",
+      "title": "Local Payment Methods"
     }
   ],
   "persistenceConfig": {
@@ -691,6 +1094,12 @@
         "pattern": "^[0-9]{5}$"
       }
     },
+    "IE": {
+      "pattern_1": {
+        "example": "A65 F4E2",
+        "pattern": "^([AC-FHKNPRTV-Y]{1}[0-9]{2}|D6W)[ ]?[0-9AC-FHKNPRTV-Y]{4}$"
+      }
+    },
     "IL": {
       "pattern_1": {
         "example": "6687865",
@@ -979,6 +1388,10 @@
       "pattern_1": {
         "example": "1234 AB/1234AB",
         "pattern": "^[1-9][0-9]{3}\\s?[a-zA-Z]{2}$"
+      },
+      "pattern_2": {
+        "example": "1234",
+        "pattern": "^[1-9][0-9]{3}$"
       }
     },
     "NO": {
@@ -1311,22 +1724,22 @@
     "groupLength": 3,
     "groupSymbol": ",",
     "integerRequired": false,
-    "pattern": "\u20ac%s",
+    "pattern": "€%s",
     "precision": 2,
     "requiredPrecision": 2
   },
   "quoteData": {
     "applied_rule_ids": null,
     "base_currency_code": "EUR",
-    "base_grand_total": "6.0000",
-    "base_subtotal": "6.0000",
-    "base_subtotal_with_discount": "6.0000",
+    "base_grand_total": "9.9900",
+    "base_subtotal": "9.9900",
+    "base_subtotal_with_discount": "9.9900",
     "base_to_global_rate": "1.0000",
     "base_to_quote_rate": "1.0000",
     "checkout_method": null,
     "converted_at": null,
     "coupon_code": null,
-    "created_at": "2026-04-23 20:28:09",
+    "created_at": "2026-01-01 00:00:00",
     "customer_dob": null,
     "customer_email": null,
     "customer_firstname": null,
@@ -1342,14 +1755,14 @@
     "customer_suffix": null,
     "customer_tax_class_id": "3",
     "customer_taxvat": null,
-    "entity_id": "GOfJf7YsmmIGYvgAedRPBhIqXuJ6zCr6",
+    "entity_id": "FixtureMaskedQuoteId0000000000ab",
     "ext_shipping_info": null,
     "extension_attributes": {
       "shipping_assignments": []
     },
     "gift_message_id": null,
     "global_currency_code": "EUR",
-    "grand_total": "6.0000",
+    "grand_total": "9.9900",
     "is_active": "1",
     "is_changed": "1",
     "is_multi_shipping": "0",
@@ -1368,10 +1781,10 @@
     "store_id": 1,
     "store_to_base_rate": "0.0000",
     "store_to_quote_rate": "0.0000",
-    "subtotal": "6.0000",
-    "subtotal_with_discount": "6.0000",
+    "subtotal": "9.9900",
+    "subtotal_with_discount": "9.9900",
     "trigger_recollect": "0",
-    "updated_at": "2026-04-23 20:28:09"
+    "updated_at": "2026-01-01 00:00:00"
   },
   "quoteItemData": [
     {
@@ -1380,17 +1793,17 @@
       "base_cost": null,
       "base_discount_amount": "0.0000",
       "base_discount_tax_compensation_amount": "0.0000",
-      "base_price": "6.0000",
-      "base_price_incl_tax": "6.0000",
-      "base_row_total": "6.0000",
-      "base_row_total_incl_tax": "6.0000",
+      "base_price": "9.9900",
+      "base_price_incl_tax": "9.9900",
+      "base_row_total": "9.9900",
+      "base_row_total_incl_tax": "9.9900",
       "base_tax_amount": "0.0000",
       "base_tax_before_discount": null,
       "base_weee_tax_applied_amount": null,
       "base_weee_tax_applied_row_amnt": null,
       "base_weee_tax_disposition": null,
       "base_weee_tax_row_disposition": null,
-      "created_at": "2026-04-23 20:28:09",
+      "created_at": "2026-01-01 00:00:00",
       "custom_price": null,
       "description": null,
       "discount_amount": "0.0000",
@@ -1401,64 +1814,56 @@
       "has_error": false,
       "is_qty_decimal": false,
       "is_virtual": "1",
-      "item_id": "181",
+      "item_id": "4216",
       "message": "",
-      "name": "Beginner's Yoga",
+      "name": "Hyperion Gift Wrapping Service",
       "no_discount": "0",
-      "options": [
-        {
-          "label": "Downloads",
-          "value": "Beginner's Yoga"
-        }
-      ],
+      "options": [],
       "original_custom_price": null,
       "parent_item_id": null,
-      "price": "6.0000",
-      "price_incl_tax": "6.0000",
+      "price": "9.9900",
+      "price_incl_tax": "9.9900",
       "product": {
-        "attribute_set_id": "25",
-        "created_at": "2026-04-19 10:07:20",
+        "attribute_set_id": "4",
+        "created_at": "2026-01-01 00:00:00",
         "customer_group_id": "0",
-        "entity_id": "139",
+        "entity_id": "2041",
         "extension_attributes": {},
         "final_price": null,
         "has_options": "0",
-        "links_purchased_separately": "0",
-        "links_title": "Downloads",
-        "name": "Beginner's Yoga",
-        "price": "6.000000",
-        "request_path": "beginner-s-yoga",
+        "msrp_display_actual_price_type": "0",
+        "name": "Hyperion Gift Wrapping Service",
+        "price": "9.990000",
+        "request_path": "hyperion-gift-wrapping-service.html",
         "required_options": "0",
-        "sku": "240-LV04",
-        "small_image": "/l/t/lt01.jpg",
+        "sku": "HYP-VIRTUAL-GIFT-WRAP",
         "status": "1",
         "store_id": 1,
-        "thumbnail": "/l/t/lt01.jpg",
-        "type_id": "downloadable",
-        "updated_at": "2026-04-19 10:07:20",
-        "url_key": "beginner-s-yoga",
+        "tax_class_id": "2",
+        "type_id": "virtual",
+        "updated_at": "2026-01-01 00:00:00",
+        "url_key": "hyperion-gift-wrapping-service",
         "visibility": "4"
       },
-      "product_id": "139",
-      "product_option": {},
-      "product_type": "downloadable",
+      "product_id": "2041",
+      "product_type": "virtual",
       "qty": 1,
       "qty_options": [],
-      "quote_id": "379",
+      "quote_id": "2363",
       "redirect_url": null,
-      "row_total": "6.0000",
-      "row_total_incl_tax": "6.0000",
+      "row_total": "9.9900",
+      "row_total_incl_tax": "9.9900",
       "row_total_with_discount": "0.0000",
       "row_weight": "0.0000",
-      "sku": "240-LV04",
+      "sku": "HYP-VIRTUAL-GIFT-WRAP",
       "stock_state_result": {},
       "store_id": 1,
       "tax_amount": "0.0000",
       "tax_before_discount": null,
-      "tax_class_id": null,
+      "tax_class_id": "2",
       "tax_percent": "0.0000",
-      "thumbnail": "https://hyperion.local/media/catalog/product/cache/6a22b02b40e8b4dee10aff14eeef1c85/l/t/lt01.jpg",
-      "updated_at": "2026-04-23 20:28:09",
+      "thumbnail": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Catalog/images/product/placeholder/thumbnail.jpg",
+      "updated_at": "2026-01-01 00:00:00",
       "weee_tax_applied": null,
       "weee_tax_applied_amount": null,
       "weee_tax_applied_row_amount": null,
@@ -1468,10 +1873,10 @@
     }
   ],
   "quoteMessages": {
-    "181": ""
+    "4216": ""
   },
   "recaptcha_paypal": false,
-  "registerUrl": "https://hyperion.local/customer/account/create/",
+  "registerUrl": "https://shop.example/customer/account/create/",
   "reloadOnBillingAddress": true,
   "reviewItemPriceDisplayMode": "excluding",
   "reviewShippingDisplayMode": "excluding",
@@ -1481,43 +1886,43 @@
     "isEnabled": false,
     "shippingPolicyContent": ""
   },
-  "staticBaseUrl": "https://hyperion.local/static/version1776974555/",
-  "storeCode": "en",
+  "staticBaseUrl": "https://shop.example/static/version1700000000/",
+  "storeCode": "en_us",
   "storePickupApiSearchTermDelimiter": ":",
   "totalsData": {
     "base_currency_code": "EUR",
     "base_discount_amount": 0,
-    "base_grand_total": 6,
+    "base_grand_total": 9.99,
     "base_shipping_amount": 0,
     "base_shipping_discount_amount": 0,
     "base_shipping_incl_tax": 0,
     "base_shipping_tax_amount": 0,
-    "base_subtotal": 6,
-    "base_subtotal_incl_tax": 6,
-    "base_subtotal_with_discount": 6,
+    "base_subtotal": 9.99,
+    "base_subtotal_incl_tax": 9.99,
+    "base_subtotal_with_discount": 9.99,
     "base_tax_amount": 0,
     "coupon_code": "",
     "discount_amount": 0,
     "extension_attributes": [],
-    "grand_total": 6,
+    "grand_total": 9.99,
     "items": [
       {
         "base_discount_amount": 0,
-        "base_price": 6,
-        "base_price_incl_tax": 6,
-        "base_row_total": 6,
-        "base_row_total_incl_tax": 6,
+        "base_price": 9.99,
+        "base_price_incl_tax": 9.99,
+        "base_row_total": 9.99,
+        "base_row_total_incl_tax": 9.99,
         "base_tax_amount": 0,
         "discount_amount": 0,
         "discount_percent": 0,
-        "item_id": "181",
-        "name": "Beginner's Yoga",
-        "options": "[{\"value\":\"Beginner's Yoga\",\"label\":\"Downloads\"}]",
-        "price": 6,
-        "price_incl_tax": 6,
+        "item_id": "4216",
+        "name": "Hyperion Gift Wrapping Service",
+        "options": "[]",
+        "price": 9.99,
+        "price_incl_tax": 9.99,
         "qty": 1,
-        "row_total": 6,
-        "row_total_incl_tax": 6,
+        "row_total": 9.99,
+        "row_total_incl_tax": 9.99,
         "row_total_with_discount": "0.0000",
         "tax_amount": 0,
         "tax_percent": 0,
@@ -1531,9 +1936,9 @@
     "shipping_discount_amount": 0,
     "shipping_incl_tax": 0,
     "shipping_tax_amount": 0,
-    "subtotal": 6,
-    "subtotal_incl_tax": 6,
-    "subtotal_with_discount": 6,
+    "subtotal": 9.99,
+    "subtotal_incl_tax": 9.99,
+    "subtotal_with_discount": 9.99,
     "tax_amount": 0,
     "total_segments": [
       {
@@ -1541,7 +1946,7 @@
         "code": "subtotal",
         "extension_attributes": [],
         "title": "Subtotal",
-        "value": 6
+        "value": 9.99
       },
       {
         "area": null,
@@ -1557,11 +1962,15 @@
         "code": "grand_total",
         "extension_attributes": [],
         "title": "Grand Total",
-        "value": 6
+        "value": 9.99
       }
     ]
   },
   "useQty": true,
-  "vault": [],
+  "vault": {
+    "braintree_cc_vault": {
+      "is_enabled": false
+    }
+  },
   "websiteCode": "base"
 }

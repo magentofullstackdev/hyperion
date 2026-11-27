@@ -1,0 +1,38 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Native date inputs on customer forms.
+ *
+ * Core filters a posted date attribute through the store locale date format
+ * (Magento\Customer\Model\Metadata\Form\Date), and an ISO value only survives
+ * that filter in a few locales (en_US yes, de_DE / fr_FR come back empty). The
+ * script rewrites, in the submitted FormData, every `input[type="date"]` that
+ * carries `data-hyperion-date-format` into that format. It installs one
+ * listener per page however many times the template renders.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+/* One JavaScript line per string, with no indentation and no line comment inside the quotes:
+   the HTML minifier of the template engine collapses whitespace and cuts line comments in the
+   whole file, PHP strings included. */
+$script = implode("\n", [
+    '(function () {',
+    'if (window.hyperionDateFormat) { return; }',
+    'window.hyperionDateFormat = true;',
+    'document.addEventListener(\'formdata\', function (event) {',
+    'event.target.querySelectorAll(\'input[type="date"][data-hyperion-date-format]\').forEach(function (input) {',
+    'var parts = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(input.value);',
+    'if (!parts || !input.name || input.disabled) { return; }',
+    'var value = input.getAttribute(\'data-hyperion-date-format\').replace(/y+|M+|d+/g, function (token) {',
+    'return token.charAt(0) === \'y\' ? parts[1] : (token.charAt(0) === \'M\' ? parts[2] : parts[3]);',
+    '});',
+    'event.formData.set(input.name, value);',
+    '});',
+    '});',
+    '})();',
+]);
+?>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', ['type' => 'text/javascript'], $script, false) ?>

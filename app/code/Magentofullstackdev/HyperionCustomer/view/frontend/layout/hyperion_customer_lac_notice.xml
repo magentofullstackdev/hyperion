@@ -12,6 +12,11 @@
     (theme Magento_LoginAsCustomerFrontendUi::html/notices.phtml) as an
     out-of-band swap only when the session is an admin impersonation, and
     nothing otherwise. cacheable="false": session-bound.
+
+    `login-as-customer-notice-links` carries core's container name: blocks
+    added to it in this handle print next to the "Close Session" form, only
+    in the banner of an impersonated session. A child may read the session
+    (the answer is private); an empty container prints nothing.
 -->
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
@@ -19,6 +24,9 @@
         <block class="Magentofullstackdev\HyperionCustomer\Block\LoginAsCustomer\Notice"
                name="hyperion.customer.lac.notice"
                template="Magentofullstackdev_HyperionCustomer::login-as-customer/notice.phtml"
-               cacheable="false"/>
+               cacheable="false">
+            <container name="login-as-customer-notice-links" as="login-as-customer-notice-links"
+                       label="Login as Customer Banner: Links"/>
+        </block>
     </body>
 </page>

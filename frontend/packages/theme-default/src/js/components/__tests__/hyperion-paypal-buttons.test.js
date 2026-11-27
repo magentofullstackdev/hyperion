@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-// hyperion-paypal-buttons -- lazy SDK, core request shapes, visible failures.
+// hyperion-paypal-buttons -- an express element: lazy SDK, core request
+// shapes, visible failures.
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import '../hyperion-paypal-buttons.js';
 import { resetPaypalSdk } from '../../lib/paypal-sdk.js';
-import { mount } from './helpers.js';
+import { createExpressContext } from '../../lib/express-context.js';
 import {
     installIntersectionObserver,
     interceptSdkScripts,
@@ -34,10 +35,35 @@ function json(body, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function element(context = 'cart', config = {}) {
+const SIGN_IN = 'To check out, please sign in with your email address.';
+const OPTIONS = 'You need to choose options for your item.';
+const ERROR = 'Something went wrong with your request. Please try again later.';
+
+/**
+ * The element as <hyperion-express-slot> creates it: inside its box, with
+ * the context, the options and the placement set before it is connected.
+ */
+function element(placement = 'cart', config = {}, phrases = {}) {
+    const slot = document.createElement('div');
+    slot.setAttribute('data-test-slot', '');
+    slot.setAttribute('placement', placement);
+    if (placement === 'product') slot.setAttribute('form', '#product_addtocart_form');
+    const box = document.createElement('div');
+    slot.appendChild(box);
     const el = document.createElement('hyperion-paypal-buttons');
-    el.setAttribute('context', context);
-    el.setAttribute('config', JSON.stringify({ ...CONFIG, context, ...config }));
+    el.context = createExpressContext(slot, { id: 'paypal_express', phrases }, box);
+    el.options = config === null ? null : Object.freeze({ ...CONFIG, context: placement, ...config });
+    el.placement = placement;
+    el.box = box;
+    el.slotElement = slot;
+    return el;
+}
+
+/** Connect the element the way the express slot does. */
+async function mount(el) {
+    document.body.appendChild(el.slotElement);
+    el.box.appendChild(el);
+    await el.updateComplete;
     return el;
 }
 
@@ -106,20 +132,53 @@ describe('hyperion-paypal-buttons', () => {
         expect(paypal.buttonRenders[0]).toBe(first.querySelector('[data-hyperion-paypal-container]'));
     });
 
-    test('renders nothing without a config or when PayPal is not eligible', async () => {
-        const bare = document.createElement('hyperion-paypal-buttons');
-        await mount(bare);
+    test('declares the extension API major it was written for', () => {
+        expect(customElements.get('hyperion-paypal-buttons').hyperionApi).toBe('1');
+    });
+
+    test('says it is unavailable without a configuration or when PayPal is not eligible', async () => {
+        const unavailable = vi.fn();
+        document.addEventListener('hyperion-express:unavailable', unavailable);
+        await mount(element('cart', null));
         expect(observers.instances).toHaveLength(0);
+        expect(unavailable).toHaveBeenCalledTimes(1);
 
         const paypal = await render(element(), fakePaypal({ eligible: false }));
         expect(paypal.buttonRenders).toHaveLength(0);
+        expect(unavailable).toHaveBeenCalledTimes(2);
+        document.removeEventListener('hyperion-express:unavailable', unavailable);
     });
 
-    test('closes the buttons and stops waiting when removed', async () => {
+    test('says it is ready once the buttons are rendered', async () => {
+        const ready = vi.fn();
+        document.addEventListener('hyperion-express:ready', ready);
+        const el = element();
+        await render(el);
+        expect(ready).toHaveBeenCalledTimes(1);
+        expect(ready.mock.calls[0][0].target).toBe(el);
+        document.removeEventListener('hyperion-express:ready', ready);
+    });
+
+    test('a failed SDK makes it unavailable', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const unavailable = vi.fn();
+        document.addEventListener('hyperion-express:unavailable', unavailable);
+        await mount(element());
+        observers.triggerAll(true);
+        await settle();
+        sdkScripts()[0].onerror();
+        await settle();
+        expect(unavailable).toHaveBeenCalledTimes(1);
+        document.removeEventListener('hyperion-express:unavailable', unavailable);
+    });
+
+    test('requests nothing once removed, and closes rendered buttons', async () => {
         const waiting = element();
         await mount(waiting);
         waiting.remove();
-        expect(observers.instances[0].disconnected).toBe(true);
+        observers.triggerAll(true);
+        await settle();
+        expect(sdkScripts()).toHaveLength(0);
 
         const el = element();
         const paypal = await render(el);
@@ -162,9 +221,7 @@ describe('hyperion-paypal-buttons', () => {
 
     test('guest checkout not allowed: asks to sign in and requests nothing', async () => {
         const fetchSpy = vi.spyOn(globalThis, 'fetch');
-        const el = element('cart', { declined: true });
-        el.setAttribute('sign-in-message', 'Please sign in');
-        const paypal = await render(el);
+        const paypal = await render(element('cart', { declined: true }, { [SIGN_IN]: 'Please sign in' }));
 
         await expect(paypal.buttonOptions[0].createOrder()).rejects.toThrow('Please sign in');
         expect(fetchSpy).not.toHaveBeenCalled();
@@ -172,9 +229,7 @@ describe('hyperion-paypal-buttons', () => {
     });
 
     test('onClick rejects the click, with the message, before PayPal opens', async () => {
-        const el = element('cart', { declined: true });
-        el.setAttribute('sign-in-message', 'Please sign in');
-        const paypal = await render(el);
+        const paypal = await render(element('cart', { declined: true }, { [SIGN_IN]: 'Please sign in' }));
         const actions = { resolve: vi.fn(() => 'resolved'), reject: vi.fn(() => 'rejected') };
 
         expect(paypal.buttonOptions[0].onClick({ fundingSource: 'paypal' }, actions)).toBe('rejected');
@@ -216,6 +271,7 @@ describe('hyperion-paypal-buttons', () => {
             const [addUrl, addInit] = fetchSpy.mock.calls[0];
             expect(addUrl).toBe('https://shop.test/checkout/cart/add/product/1/');
             expect(addInit.headers['HX-Request']).toBe('true');
+            expect(addInit.headers['X-Hyperion-Express']).toBe('1');
             expect(addInit.body.get('super_attribute[93]')).toBe('5');
             expect(addInit.body.get('qty')).toBe('2');
             expect(addInit.body.get('form_key')).toBe('KEY123');
@@ -244,7 +300,7 @@ describe('hyperion-paypal-buttons', () => {
             expect(window.htmx.ajax).toHaveBeenCalledWith(
                 'POST',
                 'https://shop.test/checkout/cart/add/product/1/',
-                { source: form }
+                { source: form, headers: { 'X-Hyperion-Express': '1' } }
             );
             expect(fetchSpy).toHaveBeenCalledTimes(1);
         });
@@ -252,9 +308,7 @@ describe('hyperion-paypal-buttons', () => {
         test('missing options: visible message, nothing is posted', async () => {
             productForm({ superValue: '' });
             const fetchSpy = vi.spyOn(globalThis, 'fetch');
-            const el = element('product');
-            el.setAttribute('options-message', 'Choose your options');
-            const paypal = await render(el);
+            const paypal = await render(element('product', {}, { [OPTIONS]: 'Choose your options' }));
 
             await expect(paypal.buttonOptions[0].createOrder()).rejects.toThrow('Choose your options');
             expect(fetchSpy).not.toHaveBeenCalled();
@@ -334,13 +388,15 @@ describe('hyperion-paypal-buttons', () => {
         expect(document.cookie).not.toContain('mage-messages=[');
     });
 
-    test('an SDK error shows the generic message', async () => {
+    test('an SDK error is reported to the express slot with the generic message', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
-        const el = element();
-        el.setAttribute('error-message', 'Try again later');
-        const paypal = await render(el);
+        const errors = vi.fn();
+        document.addEventListener('hyperion-express:error', errors);
+        const paypal = await render(element('cart', {}, { [ERROR]: 'Try again later' }));
 
         paypal.buttonOptions[0].onError(new Error('boom'));
-        expect(toast().textContent).toBe('Try again later');
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(errors.mock.calls[0][0].detail).toEqual({ message: 'Try again later' });
+        document.removeEventListener('hyperion-express:error', errors);
     });
 });

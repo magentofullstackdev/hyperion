@@ -10,10 +10,11 @@ use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Escaper;
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
-use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
-use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
+use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -27,6 +28,8 @@ use Psr\Log\LoggerInterface;
  * the line). The quote items of the request still carry the error flag and
  * its text, so they are the toast here; the cart fragment prints the same
  * message under the line through `CartData::getItems()`.
+ *
+ * @internal
  */
 class UpdatePostPlugin extends AbstractCartMutationPlugin
 {
@@ -38,10 +41,11 @@ class UpdatePostPlugin extends AbstractCartMutationPlugin
     /**
      * @param HttpRequest $request
      * @param RawFactory $resultRawFactory
-     * @param CacheHeaders $cacheHeaders
+     * @param CacheHeadersInterface $cacheHeaders
      * @param MessageCollector $messageCollector
-     * @param NotificationRenderer $notificationRenderer
-     * @param FragmentRenderer $fragmentRenderer
+     * @param NotificationRendererInterface $notificationRenderer
+     * @param FragmentRendererInterface $fragmentRenderer
+     * @param ActionResponse $actionResponse
      * @param CheckoutSession $checkoutSession
      * @param Escaper $escaper
      * @param LoggerInterface $logger
@@ -49,10 +53,11 @@ class UpdatePostPlugin extends AbstractCartMutationPlugin
     public function __construct(
         HttpRequest $request,
         RawFactory $resultRawFactory,
-        CacheHeaders $cacheHeaders,
+        CacheHeadersInterface $cacheHeaders,
         MessageCollector $messageCollector,
-        NotificationRenderer $notificationRenderer,
-        FragmentRenderer $fragmentRenderer,
+        NotificationRendererInterface $notificationRenderer,
+        FragmentRendererInterface $fragmentRenderer,
+        ActionResponse $actionResponse,
         private readonly CheckoutSession $checkoutSession,
         private readonly Escaper $escaper,
         private readonly LoggerInterface $logger
@@ -63,7 +68,8 @@ class UpdatePostPlugin extends AbstractCartMutationPlugin
             $cacheHeaders,
             $messageCollector,
             $notificationRenderer,
-            $fragmentRenderer
+            $fragmentRenderer,
+            $actionResponse
         );
     }
 
@@ -78,6 +84,14 @@ class UpdatePostPlugin extends AbstractCartMutationPlugin
         $this->cartData = is_array($cartData) ? $cartData : [];
 
         return $this->transform($result);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function actionName(): string
+    {
+        return ActionResponse::ACTION_CART_UPDATE;
     }
 
     /**

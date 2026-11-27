@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Normalisation of the raw `checkoutConfig` JSON island.
+ * Normalization of the raw `checkoutConfig` JSON island.
  *
  * Magento's config providers emit model data as it comes from the
  * database, so numeric fields can arrive as strings:
@@ -11,9 +11,15 @@
  * the numeric `AGREEMENT_MODE_*` constants and keys the accepted set by
  * `agreementId`, so both are coerced to numbers once, here, and nothing
  * downstream has to care about the wire type.
+ *
+ * The keys of the extension API under `hyperion` are filled in when a page
+ * does not carry them (a module older than the bundle): every list with an
+ * empty one, the version with the bundle's own, the debug switch off when
+ * absent.
  */
 import type { Address, Region } from '../types/address.js';
-import type { AgreementEntry, CheckoutConfig, QuoteAddressConfig } from '../types/config.js';
+import type { AgreementEntry, CheckoutConfig, HyperionConfig, QuoteAddressConfig } from '../types/config.js';
+import { EXTENSION_API } from '../extension/version.js';
 
 /** `value` as a trimmed string, null when absent or blank. */
 function text(value: unknown): string | null {
@@ -62,7 +68,29 @@ export function normaliseQuoteAddress(raw: QuoteAddressConfig | null | undefined
     return address;
 }
 
+const EXTENSION_LISTS = [
+    'paymentRenderers',
+    'expressButtons',
+    'shippingExtensions',
+    'extensions',
+    'addressFields',
+    'staticOrigins',
+] as const;
+
+/** Fill in the extension keys of `hyperion` in place (see above). */
+export function normaliseExtensionConfig(hyperion: HyperionConfig): void {
+    const target = hyperion as unknown as Record<string, unknown>;
+    for (const key of EXTENSION_LISTS) {
+        if (!Array.isArray(target[key])) target[key] = [];
+    }
+    if (typeof hyperion.extensionApi !== 'string' || hyperion.extensionApi === '') {
+        target.extensionApi = EXTENSION_API;
+    }
+    target.debug ??= { showUnsupportedPayments: false };
+}
+
 export function normaliseCheckoutConfig(config: CheckoutConfig): CheckoutConfig {
+    if (config.hyperion && typeof config.hyperion === 'object') normaliseExtensionConfig(config.hyperion);
     const agreements = config.checkoutAgreements;
     if (!agreements || !Array.isArray(agreements.agreements)) {
         return config;

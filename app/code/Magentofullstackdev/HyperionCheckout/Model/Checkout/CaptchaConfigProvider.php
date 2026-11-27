@@ -51,6 +51,9 @@ class CaptchaConfigProvider implements ConfigProviderInterface
     private const DEFAULT_IMAGE_HEIGHT = 50;
     private const DEFAULT_IMAGE_WIDTH = 200;
 
+    /** @var array<string, array<string, string>>|null */
+    private ?array $recaptchaConfig = null;
+
     public function __construct(
         private readonly Recaptcha $recaptcha,
         private readonly CaptchaHelper $captchaHelper,
@@ -86,10 +89,27 @@ class CaptchaConfigProvider implements ConfigProviderInterface
     }
 
     /**
+     * True when at least one action of the checkout is protected by
+     * reCAPTCHA: the condition the bundle loads its reCAPTCHA client on, and
+     * the page preloads it on (`ViewModel\CheckoutSkeleton::getOptionalSections()`).
+     *
+     * @return bool
+     */
+    public function hasRecaptcha(): bool
+    {
+        return $this->buildRecaptcha() !== [];
+    }
+
+    /**
+     * Built once per request: the page head and the configuration both ask.
+     *
      * @return array<string, array<string, string>>
      */
     private function buildRecaptcha(): array
     {
+        if ($this->recaptchaConfig !== null) {
+            return $this->recaptchaConfig;
+        }
         $actions = self::RECAPTCHA_ACTIONS;
         if ($this->moduleManager->isEnabled(self::BRAINTREE_MODULE)) {
             $actions[] = self::RECAPTCHA_BRAINTREE;
@@ -107,6 +127,7 @@ class CaptchaConfigProvider implements ConfigProviderInterface
             }
             $config[$action] = $entry;
         }
+        $this->recaptchaConfig = $config;
         return $config;
     }
 

@@ -90,6 +90,7 @@ try {
         check('A guest category: wishlist / compare toggles still there', (await count(page, 'hyperion-list-toggle')) > 0);
         await go(page, PDP);
         check('A guest PDP: no add-to-cart form', (await count(page, '#product_addtocart_form')) === 0);
+        check('A guest PDP: no express button slot', (await count(page, 'hyperion-express-slot, [data-hyperion-express-button], hyperion-paypal-buttons')) === 0);
         check('A guest PDP: login notice shown', (await page.locator('[data-hyperion-purchase-restricted]').textContent().catch(() => '')).includes('Please log in to purchase items.'));
         check('A guest PDP: price still visible', (await count(page, '.price')) > 0);
         await go(page, '/checkout/cart/');
@@ -135,6 +136,7 @@ try {
         await go(cpage, PDP);
         check('B customer PDP: restricted notice for the account', (await cpage.locator('[data-hyperion-purchase-restricted]').textContent().catch(() => '')).includes('Your account is not allowed to purchase items.'));
         check('B customer PDP: no add-to-cart form', (await count(cpage, '#product_addtocart_form')) === 0);
+        check('B customer PDP: no express button slot', (await count(cpage, 'hyperion-express-slot, [data-hyperion-express-button], hyperion-paypal-buttons')) === 0);
         await go(cpage, '/');
         check('B customer home: no mini-cart', (await count(cpage, 'hyperion-mini-cart')) === 0);
         await go(cpage, '/checkout/cart/');

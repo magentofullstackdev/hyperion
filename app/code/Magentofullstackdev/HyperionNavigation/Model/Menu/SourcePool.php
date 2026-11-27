@@ -11,6 +11,12 @@ use Psr\Log\LoggerInterface;
  * The navigation sources registered through di.xml (`sources` argument, in
  * priority order); empty out of the box. A source that throws is skipped
  * and logged: the category tree always remains.
+ *
+ * Public contract: the `sources` argument, declared in etc/frontend/di.xml
+ * only (items are objects implementing SourceInterface, in priority order).
+ *
+ * @api
+ * @since 0.9.0
  */
 class SourcePool
 {

@@ -45,6 +45,10 @@ $actions = $viewModels->require(OrderActions::class);
         <?php endif; ?>
     </div>
 
+    <?php /* Children other modules add to `customer_account_dashboard_top` (this block): printed
+             above the orders like core does; nothing without one. The dashboard is private. */ ?>
+    <?= $block->getChildHtml() ?>
+
     <?php if (count($orders) > 0): ?>
         <div class="bg-surface border border-subtle rounded-xl overflow-hidden">
 

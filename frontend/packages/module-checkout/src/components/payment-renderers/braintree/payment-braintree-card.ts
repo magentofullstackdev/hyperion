@@ -2,28 +2,39 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <payment-braintree-card> -- Braintree credit card (method `braintree`).
+ * <hc-payment-braintree-card> -- Braintree credit card (method `braintree`).
  *
  * Card number, expiry and CVV are Braintree Hosted Fields: iframes mounted
  * into light-DOM containers that carry the same box styling as the other
  * checkout inputs, so card data never touches this page. The SDK is loaded
  * when the element connects, that is when the shopper picks the method.
  *
- * Place Order runs `beforePlaceOrder`: validate, tokenize, 3D Secure when
- * the merchant configured it, then hand Magento the `additional_data` the
- * gateway expects: `payment_method_nonce`, `device_data` and, for customers
- * of an active vault, `is_active_payment_token_enabler`. Any failure rejects
- * with a translated message and the order is not placed.
+ * The element reports `ready` once the fields are mounted (or could not be:
+ * then it shows its own error with a retry), so the checkout shows a
+ * placeholder of the same height until then.
+ *
+ * Place Order asks `getPaymentData()`: validate, tokenize, 3D Secure when
+ * the merchant configured it (reported as busy, so a challenge may take its
+ * time), then hand Magento the `additional_data` the gateway expects:
+ * `payment_method_nonce`, `device_data` and, for customers of an active
+ * vault, `is_active_payment_token_enabler`. Any failure rejects with a
+ * translated message and the order is not placed.
  *
  * The "save for later" box starts unchecked: storing a card is an explicit
  * opt-in (core pre-checks it).
  */
 import { LitElement, html, nothing } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { state } from 'lit/decorators.js';
 
-import { getCheckoutConfig } from '../../../bootstrap-config.js';
-import { t } from '../../../utils/i18n.js';
-import { registerPaymentRenderer } from '../registry.js';
+import type {
+    PaymentContext,
+    PaymentData,
+    PaymentMethodInfo,
+    VaultTokenInfo,
+} from '../../../../extension-api.js';
+import type { RecaptchaAction } from '../../../types/captcha.js';
+import type { CheckoutConfig } from '../../../types/config.js';
+import { firstPartyOf, type FirstPartyServices } from '../first-party.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
     BRAINTREE_CODE,
@@ -31,12 +42,7 @@ import {
     isVaultEnabledFor,
     type BraintreeCardConfig,
 } from './config.js';
-import {
-    HOSTED_FIELD_BOX,
-    hostedFieldProbes,
-    resolveHostedFieldStyles,
-} from './hosted-field-styles.js';
-import { getBillingAddress } from './quote.js';
+import { HOSTED_FIELD_BOX, resolveHostedFieldStyles } from './hosted-field-styles.js';
 import { loadBraintreeModule } from './sdk.js';
 import { verifyThreeDSecure } from './three-d-secure.js';
 import type {
@@ -56,24 +62,28 @@ interface FieldView {
 }
 
 const FIELD_LABELS: Readonly<Record<HostedFieldName, string>> = {
-    number: 'Hyperion_Checkout::braintree_card_number',
-    expirationDate: 'Hyperion_Checkout::braintree_card_expiry',
-    cvv: 'Hyperion_Checkout::braintree_card_cvv',
+    number: 'Card number',
+    expirationDate: 'Expiry date',
+    cvv: 'Security code (CVV)',
 };
 
 const FIELD_ERRORS: Readonly<Record<HostedFieldName, string>> = {
-    number: 'Hyperion_Checkout::braintree_card_number_invalid',
-    expirationDate: 'Hyperion_Checkout::braintree_card_expiry_invalid',
-    cvv: 'Hyperion_Checkout::braintree_card_cvv_invalid',
+    number: 'Enter a valid card number.',
+    expirationDate: 'Enter a valid expiry date.',
+    cvv: 'Enter a valid security code.',
 };
 
 const TOKENIZE_ERRORS: Readonly<Record<string, string>> = {
-    HOSTED_FIELDS_FIELDS_EMPTY: 'Hyperion_Checkout::braintree_card_fields_empty',
-    HOSTED_FIELDS_FIELDS_INVALID: 'Hyperion_Checkout::braintree_card_fields_invalid',
-    HOSTED_FIELDS_TOKENIZATION_FAIL_ON_DUPLICATE: 'Hyperion_Checkout::braintree_card_duplicate',
-    HOSTED_FIELDS_TOKENIZATION_CVV_VERIFICATION_FAILED: 'Hyperion_Checkout::braintree_card_cvv_failed',
-    HOSTED_FIELDS_TOKENIZATION_NETWORK_ERROR: 'Hyperion_Checkout::braintree_network_error',
+    HOSTED_FIELDS_FIELDS_EMPTY: 'Enter your card details to continue.',
+    HOSTED_FIELDS_FIELDS_INVALID: 'Some card details are not valid. Check the highlighted fields.',
+    HOSTED_FIELDS_TOKENIZATION_FAIL_ON_DUPLICATE: 'This card is already stored in your account. Pick it from your stored cards or use another one.',
+    HOSTED_FIELDS_TOKENIZATION_CVV_VERIFICATION_FAILED: 'The security code could not be verified. Check it and try again.',
+    HOSTED_FIELDS_TOKENIZATION_NETWORK_ERROR: 'The payment service could not be reached. Check your connection and try again.',
 };
+
+const TOKENIZE_FAILED = 'Your card could not be processed. Check the details or use another card.';
+const NOT_READY = 'The payment form is still loading. Please wait a moment and try again.';
+const NOT_ACCEPTED = '{type} cards are not accepted. Please use another card.';
 
 /**
  * Core `validator.js`: a detected card brand is accepted when the merchant
@@ -93,10 +103,25 @@ export function resolveAcceptedCardType(
     return accepted.includes(mageType) ? mageType : null;
 }
 
-let activeElement: PaymentBraintreeCard | null = null;
-
 export class PaymentBraintreeCard extends LitElement {
-    @property({ type: String }) public code = BRAINTREE_CODE;
+    public static readonly hyperionApi = '1';
+
+    /** Hidden without a client token, like core's renderer. */
+    public static canMakePayment(args: { config: Readonly<Record<string, unknown>> }): boolean {
+        const config = getBraintreeCardConfig({ payment: { [BRAINTREE_CODE]: { ...args.config } } });
+        return Boolean(config?.isActive && config.clientToken);
+    }
+
+    /** Core checks a card order against the Braintree reCAPTCHA form when one is configured. */
+    public static hyperionRecaptchaAction(config: CheckoutConfig): RecaptchaAction {
+        return config.hyperion?.recaptcha?.braintree ? 'braintree' : 'place_order';
+    }
+
+    public context!: PaymentContext;
+    public options: Readonly<Record<string, unknown>> = {};
+    public method!: PaymentMethodInfo;
+    public config: Readonly<Record<string, unknown>> = {};
+    public token: VaultTokenInfo | null = null;
 
     @state() private _status: Status = 'loading';
     @state() private _fields: Record<HostedFieldName, FieldView> = {
@@ -113,29 +138,40 @@ export class PaymentBraintreeCard extends LitElement {
 
     public override createRenderRoot(): HTMLElement { return this; }
 
+    private get _services(): FirstPartyServices {
+        const services = firstPartyOf(this.context);
+        if (services === null) throw new Error('the Braintree card renderer needs the first-party context');
+        return services;
+    }
+
+    private _config(): BraintreeCardConfig | null {
+        return getBraintreeCardConfig(this._services.config());
+    }
+
+    private _emit(name: string, detail: Record<string, unknown> = {}): void {
+        this.dispatchEvent(new CustomEvent(`hyperion-payment:${name}`, { bubbles: true, composed: true, detail }));
+    }
+
     public override connectedCallback(): void {
         super.connectedCallback();
-        activeElement = this;
         void this.updateComplete.then(() => this._init());
     }
 
     public override disconnectedCallback(): void {
         super.disconnectedCallback();
-        if (activeElement === this) activeElement = null;
         this._generation++;
         void this._teardown();
     }
 
     public override render(): unknown {
-        const config = getBraintreeCardConfig();
-        const vaultEnabled = config !== null && isVaultEnabledFor(config.ccVaultCode);
+        const config = this._config();
+        const vaultEnabled = config !== null && isVaultEnabledFor(this._services.config(), config.ccVaultCode);
         return html`
             <div class="space-y-3">
-                ${hostedFieldProbes()}
                 ${this._status === 'error' ? this._renderInitError() : nothing}
                 ${this._status === 'loading'
                     ? html`<p class="text-sm text-muted" role="status" aria-live="polite">
-                          ${t('Hyperion_Checkout::braintree_card_loading')}
+                          ${this.context.t('Loading the secure card form...')}
                       </p>`
                     : nothing}
                 <div class="space-y-3 ${this._status === 'error' ? 'hidden' : ''}">
@@ -147,7 +183,7 @@ export class PaymentBraintreeCard extends LitElement {
                     ${vaultEnabled
                         ? html`<hc-checkbox
                                   name="braintree_save_card"
-                                  label=${t('Hyperion_Checkout::braintree_save_card')}
+                                  label=${this.context.t('Save this card for future purchases')}
                                   .checked=${this._saveCard}
                                   @value-change=${this._onSaveCardChange}
                               ></hc-checkbox>`
@@ -161,11 +197,11 @@ export class PaymentBraintreeCard extends LitElement {
         return html`
             <div role="alert"
                  class="rounded-md border border-danger/40 bg-danger/5 p-3 flex items-start gap-3">
-                <p class="flex-1 text-sm text-danger">${t('Hyperion_Checkout::braintree_init_failed')}</p>
+                <p class="flex-1 text-sm text-error-strong">${this.context.t('The secure payment form could not be loaded. Try again or choose another payment method.')}</p>
                 <button type="button"
-                        class="text-xs text-danger hover:underline"
+                        class="text-xs text-error-strong hover:underline"
                         @click=${this._onRetry}>
-                    ${t('Hyperion_Checkout::braintree_retry')}
+                    ${this.context.t('Try again')}
                 </button>
             </div>
         `;
@@ -178,15 +214,15 @@ export class PaymentBraintreeCard extends LitElement {
         const labelId = `hc-bt-${name}-label`;
         const errorId = `hc-bt-${name}-err`;
         const message = rejectedBrand
-            ? t('Hyperion_Checkout::braintree_card_type_not_accepted', { type: this._brand?.niceType ?? '' })
-            : t(FIELD_ERRORS[name]);
+            ? this.context.t(NOT_ACCEPTED, { type: this._brand?.niceType ?? '' })
+            : this.context.t(FIELD_ERRORS[name]);
         return html`
             <div>
                 <div class="flex items-center justify-between gap-2">
                     <label id=${labelId}
                            class="block text-sm font-medium text-brand"
                            @click=${() => this._hostedFields?.focus(name)}>
-                        ${t(FIELD_LABELS[name])}
+                        ${this.context.t(FIELD_LABELS[name])}
                         <span aria-hidden="true" class="text-danger">*</span>
                     </label>
                     ${name === 'number' && this._brand
@@ -210,19 +246,19 @@ export class PaymentBraintreeCard extends LitElement {
         const stale = (): boolean => generation !== this._generation || !this.isConnected;
         this._status = 'loading';
         try {
-            const config = getBraintreeCardConfig();
+            const config = this._config();
             if (!config?.clientToken) throw new Error('missing Braintree client token');
             const [client, hostedFields] = await Promise.all([
-                getBraintreeClient(config.clientToken),
-                loadBraintreeModule('hosted-fields'),
+                getBraintreeClient(this.context, config.clientToken),
+                loadBraintreeModule(this.context, 'hosted-fields'),
             ]);
-            void getDeviceData(config.clientToken);
+            void getDeviceData(this.context, config.clientToken);
             if (stale()) return;
             await this._teardown();
             const instance = await hostedFields.create({
                 client,
                 fields: this._fieldOptions(config),
-                styles: resolveHostedFieldStyles(this),
+                styles: resolveHostedFieldStyles(this.context),
             });
             if (stale()) {
                 void instance.teardown().catch(() => undefined);
@@ -234,10 +270,13 @@ export class PaymentBraintreeCard extends LitElement {
             instance.on('blur', (event) => this._onBlur(event));
             this._hostedFields = instance;
             this._status = 'ready';
+            this._emit('ready');
         } catch (err) {
             if (stale()) return;
             console.error('[hyperion-checkout] Braintree hosted fields could not be initialized', err);
             this._status = 'error';
+            // Shown with its own error and retry instead of the placeholder.
+            this._emit('ready');
         }
     }
 
@@ -262,7 +301,7 @@ export class PaymentBraintreeCard extends LitElement {
             number: { container: container('number'), placeholder: '4111 1111 1111 1111' },
             expirationDate: {
                 container: container('expirationDate'),
-                placeholder: t('Hyperion_Checkout::braintree_card_expiry_placeholder'),
+                placeholder: this.context.t('MM/YY'),
             },
         };
         if (config.useCvv) fields.cvv = { container: container('cvv'), placeholder: '123' };
@@ -295,12 +334,12 @@ export class PaymentBraintreeCard extends LitElement {
     }
 
     private _isBrandAccepted(): boolean {
-        const config = getBraintreeCardConfig();
+        const config = this._config();
         if (!config || !this._brand) return true;
         return resolveAcceptedCardType(
             config,
             this._brand.type,
-            getBillingAddress()?.country_id ?? null
+            this._services.quote().billingAddress?.country_id ?? null
         ) !== null;
     }
 
@@ -311,6 +350,11 @@ export class PaymentBraintreeCard extends LitElement {
     private _onRetry = (): void => {
         void this._init();
     };
+
+    /** Place Order: the nonce and what goes with it, as `additional_data`. */
+    public async getPaymentData(): Promise<PaymentData> {
+        return { additional_data: await this.collectPaymentData() };
+    }
 
     /** One tokenization at a time: a second Place Order click joins the first. */
     public collectPaymentData(): Promise<Record<string, unknown>> {
@@ -323,13 +367,13 @@ export class PaymentBraintreeCard extends LitElement {
     }
 
     private async _collect(): Promise<Record<string, unknown>> {
-        const config = getBraintreeCardConfig();
+        const config = this._config();
         const instance = this._hostedFields;
         if (!config || !instance || this._status !== 'ready') {
-            throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
+            throw new Error(this.context.t(NOT_READY));
         }
         if (!this._isBrandAccepted()) {
-            throw new Error(t('Hyperion_Checkout::braintree_card_type_not_accepted', {
+            throw new Error(this.context.t(NOT_ACCEPTED, {
                 type: this._brand?.niceType ?? '',
             }));
         }
@@ -341,15 +385,22 @@ export class PaymentBraintreeCard extends LitElement {
             throw new Error(this._explainTokenizeError(err as BraintreeError), { cause: err });
         }
 
-        const vaultEnabled = isVaultEnabledFor(config.ccVaultCode);
-        const nonce = await verifyThreeDSecure({
-            authorization: config.clientToken,
-            nonce: payload.nonce,
-            bin: payload.details.bin ?? '',
-            storedCard: false,
-            savingCard: vaultEnabled && this._saveCard,
-        });
-        const deviceData = await getDeviceData(config.clientToken);
+        const vaultEnabled = isVaultEnabledFor(this._services.config(), config.ccVaultCode);
+        // A 3-D Secure challenge waits for the shopper: the checkout is told it is still at work.
+        this._emit('busy', { busy: true });
+        let nonce: string;
+        try {
+            nonce = await verifyThreeDSecure(this.context, {
+                authorization: config.clientToken,
+                nonce: payload.nonce,
+                bin: payload.details.bin ?? '',
+                storedCard: false,
+                savingCard: vaultEnabled && this._saveCard,
+            });
+        } finally {
+            this._emit('busy', { busy: false });
+        }
+        const deviceData = await getDeviceData(this.context, config.clientToken);
 
         return {
             payment_method_nonce: nonce,
@@ -361,7 +412,7 @@ export class PaymentBraintreeCard extends LitElement {
     private _explainTokenizeError(err: BraintreeError): string {
         console.error('[hyperion-checkout] Braintree tokenization failed', err);
         const code = err?.code ?? '';
-        const useCvv = getBraintreeCardConfig()?.useCvv ?? false;
+        const useCvv = this._config()?.useCvv ?? false;
         const names: HostedFieldName[] = useCvv
             ? ['number', 'expirationDate', 'cvv']
             : ['number', 'expirationDate'];
@@ -374,33 +425,14 @@ export class PaymentBraintreeCard extends LitElement {
                 if (invalid.includes(name)) this._patchField(name, { showError: true });
             }
         }
-        return t(TOKENIZE_ERRORS[code] ?? 'Hyperion_Checkout::braintree_tokenize_failed');
+        return this.context.t(TOKENIZE_ERRORS[code] ?? TOKENIZE_FAILED);
     }
 }
 
-if (!customElements.get('payment-braintree-card')) {
-    customElements.define('payment-braintree-card', PaymentBraintreeCard);
+if (!customElements.get('hc-payment-braintree-card')) {
+    customElements.define('hc-payment-braintree-card', PaymentBraintreeCard);
 }
-
-export function registerBraintreeCardRenderer(): void {
-    registerPaymentRenderer({
-        code: BRAINTREE_CODE,
-        component: 'payment-braintree-card',
-        isAvailable: () => {
-            const config = getBraintreeCardConfig();
-            return Boolean(config?.isActive && config.clientToken);
-        },
-        beforePlaceOrder: async () => {
-            if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
-            return activeElement.collectPaymentData();
-        },
-        // Core checks a card order against the Braintree reCAPTCHA form when one is configured.
-        recaptchaAction: () => (getCheckoutConfig().hyperion?.recaptcha?.braintree ? 'braintree' : 'place_order'),
-    });
-}
-
-registerBraintreeCardRenderer();
 
 declare global {
-    interface HTMLElementTagNameMap { 'payment-braintree-card': PaymentBraintreeCard; }
+    interface HTMLElementTagNameMap { 'hc-payment-braintree-card': PaymentBraintreeCard; }
 }

@@ -15,6 +15,9 @@ use Magentofullstackdev\HyperionCore\Model\Purchase\Availability;
  * reorder, mini-cart, PayPal buttons) asks this view model through the
  * registry: `$viewModels->require(Purchase::class)->canPurchase()`.
  * Modules add rules on Magentofullstackdev\HyperionCore\Model\Purchase\Availability.
+ *
+ * @api
+ * @since 0.9.0
  */
 class Purchase implements ArgumentInterface
 {

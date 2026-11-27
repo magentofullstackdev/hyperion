@@ -40,6 +40,7 @@ export const FOLD_COMMON: string[] = [
     `${THEME}/Magento_Theme/templates/root.phtml`,
     `${THEME}/Magento_Theme/templates/messages.phtml`,
     `${THEME}/Magento_Theme/templates/html/header.phtml`,
+    `${THEME}/Magento_Theme/templates/html/header/*.phtml`,
     `${THEME}/Magento_Theme/templates/html/topmenu.phtml`,
     `${THEME}/Magento_Theme/templates/html/breadcrumbs.phtml`,
     `${THEME}/Magento_Theme/templates/html/title.phtml`,
@@ -104,7 +105,7 @@ export const FOLD_CATEGORY: string[] = [
     `${SRC}/js/components/hyperion-swatches.js`,
 ];
 
-/** Product page: gallery skeleton, title, price, swatches, add to cart, PayPal, tabs strip. */
+/** Product page: gallery skeleton, title, price, swatches, add to cart, express buttons, PayPal, tabs strip. */
 export const FOLD_PRODUCT: string[] = [
     `${THEME}/Magento_Catalog/templates/product/view.phtml`,
     `${THEME}/Magento_Catalog/templates/product/view/**/*.phtml`,
@@ -117,6 +118,7 @@ export const FOLD_PRODUCT: string[] = [
     `${THEME}/Magento_Review/templates/helper/summary.phtml`,
     `${THEME}/Magento_Msrp/**/*.phtml`,
     `${THEME}/Magento_Paypal/templates/hyperion/**/*.phtml`,
+    `${MODULES}/HyperionCheckout/view/frontend/templates/express/**/*.phtml`,
     `${THEME}/Magento_Paypal/templates/paylater/**/*.phtml`,
     `${THEME}/Magento_Wishlist/templates/item/configure/**/*.phtml`,
     ...PRICING_PHP,

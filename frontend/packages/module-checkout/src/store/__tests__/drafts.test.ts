@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Address } from '../../types/address.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import {
     buildDraft,
+    CHECKOUT_STORAGE_PREFIX,
     clearDraft,
     consumeHandoff,
     copyDraftToHandoff,
@@ -20,6 +23,7 @@ import {
     giftDrafts,
     HANDOFF_TTL_MS,
     handoffKey,
+    OVERRIDE_KEY_PREFIX,
     readDraft,
     restoreDraft,
     saveDraftNow,
@@ -28,6 +32,9 @@ import {
     type CheckoutDraft,
 } from '../drafts.js';
 import { createStore, type Store } from '../index.js';
+import { handleSessionExpired } from '../recovery.js';
+import { setCheckoutConfig } from '../../bootstrap-config.js';
+import { selectVaultToken } from '../../components/payment-host/payment-rows.js';
 
 const STORE_CODE = 'en_us';
 const QUOTE = 'masked-1';
@@ -57,6 +64,16 @@ function guestStore(): Store {
     const store = createStore();
     store.isGuest.set(true);
     store.maskedQuoteId.set(QUOTE);
+    return store;
+}
+
+/** The checkout of a signed-in customer, as `hydrateStore()` leaves it. */
+function customerStore(id: string, email: string, quoteId = '465'): Store {
+    const store = createStore();
+    store.isGuest.set(false);
+    store.quoteId.set(quoteId);
+    store.customer.set({ id, email, firstname: 'Veronica', addresses: {} } as never);
+    store.email.set(email);
     return store;
 }
 
@@ -91,6 +108,14 @@ describe('drafts', () => {
         it('uses one key per store and quote, and one handoff key per store', () => {
             expect(draftKey('en_us', 'abc')).toBe('hyperion.checkout.draft.v1:en_us:abc');
             expect(handoffKey('en_us')).toBe('hyperion.checkout.draft.v1:handoff:en_us');
+        });
+
+        it('every key starts with the prefix the theme removes at a sign-out', () => {
+            const theme = readFileSync(resolve(__dirname, '../../../../theme-default/src/js/lib/checkout-drafts.js'), 'utf8');
+            expect(/export const CHECKOUT_STORAGE_PREFIX = '([^']+)';/.exec(theme)?.[1]).toBe(CHECKOUT_STORAGE_PREFIX);
+            for (const key of [draftKey('en_us', 'abc'), handoffKey('en_us'), `${OVERRIDE_KEY_PREFIX}:en_us:abc`]) {
+                expect(key.startsWith(CHECKOUT_STORAGE_PREFIX)).toBe(true);
+            }
         });
 
         it('holds exactly the documented fields', () => {
@@ -175,16 +200,8 @@ describe('drafts', () => {
                 extension_attributes: { token: 'SENTINEL-EXTENSION-ATTRIBUTE' } as never,
             });
             store.selectedPaymentMethod.set('braintree');
-            store.paymentMethodData.set({
-                braintree: {
-                    payment_method_nonce: 'SENTINEL-NONCE',
-                    device_data: 'SENTINEL-DEVICE-DATA',
-                    cc_number: 'SENTINEL-CARD-NUMBER',
-                    account_number: 'SENTINEL-BANK-ACCOUNT',
-                },
-                braintree_cc_vault: { public_hash: 'SENTINEL-VAULT-HASH' },
-                purchaseorder: { po_number: 'SENTINEL-PO-NUMBER' },
-            });
+            // Payment data lives in the payment elements; the stored token picked for a vault method is client state.
+            selectVaultToken('braintree_cc_vault', 'SENTINEL-VAULT-HASH');
             store.acceptedAgreements.set([987654321]);
             store.captcha.set({
                 user_login: { isRequired: true, isCaseSensitive: false, imageHeight: 50, imageWidth: 200, value: 'SENTINEL-CAPTCHA-ANSWER' },
@@ -248,7 +265,7 @@ describe('drafts', () => {
             writeDraft('it_it', draftOf(store, { quoteKey: 'third-quote' }));
             window.sessionStorage.setItem(`${DRAFT_KEY_PREFIX}:${STORE_CODE}:broken`, '{not json');
             window.sessionStorage.setItem('unrelated', 'kept');
-            copyToHandoff(STORE_CODE, QUOTE);
+            copyToHandoff(STORE_CODE, QUOTE, '');
 
             expect(readDraft(STORE_CODE, QUOTE)).not.toBeNull();
 
@@ -263,7 +280,7 @@ describe('drafts', () => {
             const store = guestStore();
             store.email.set('veronica@example.com');
             writeDraft(STORE_CODE, draftOf(store));
-            copyToHandoff(STORE_CODE, QUOTE);
+            copyToHandoff(STORE_CODE, QUOTE, '');
 
             expect(consumeHandoff(STORE_CODE)?.email).toBe('veronica@example.com');
             expect(consumeHandoff(STORE_CODE)).toBeNull();
@@ -272,7 +289,7 @@ describe('drafts', () => {
         it('the handoff entry lives 10 minutes', () => {
             const store = guestStore();
             writeDraft(STORE_CODE, draftOf(store));
-            copyToHandoff(STORE_CODE, QUOTE);
+            copyToHandoff(STORE_CODE, QUOTE, '');
 
             vi.advanceTimersByTime(HANDOFF_TTL_MS + 1000);
 
@@ -298,7 +315,7 @@ describe('drafts', () => {
             expect(() => writeDraft(STORE_CODE, draftOf(store))).not.toThrow();
             expect(readDraft(STORE_CODE, QUOTE)).toBeNull();
             expect(() => clearDraft(STORE_CODE, QUOTE)).not.toThrow();
-            expect(() => copyToHandoff(STORE_CODE, QUOTE)).not.toThrow();
+            expect(() => copyToHandoff(STORE_CODE, QUOTE, '')).not.toThrow();
             expect(consumeHandoff(STORE_CODE)).toBeNull();
             expect(() => restoreDraft(store, config())).not.toThrow();
             stop = startDraftPersistence(store, config());
@@ -353,7 +370,7 @@ describe('drafts', () => {
         it('writes nothing when the store switched drafts off, and removes what an earlier setting left', () => {
             const store = guestStore();
             writeDraft(STORE_CODE, draftOf(store));
-            copyToHandoff(STORE_CODE, QUOTE);
+            copyToHandoff(STORE_CODE, QUOTE, '');
 
             restoreDraft(store, config({ persistDrafts: false }));
             stop = startDraftPersistence(store, config({ persistDrafts: false }));
@@ -528,17 +545,15 @@ describe('drafts', () => {
             copyDraftToHandoff();
             stop();
 
-            const customer = createStore();
-            customer.isGuest.set(false);
-            customer.quoteId.set('465');
-            customer.email.set('account@example.com');
+            // The account the guest signed in to: the email typed, as the account spells it.
+            const customer = customerStore('4', 'Veronica@Example.com');
             customer.savedAddresses.set([saved]);
             customer.shippingAddress.set(saved);
             customer.selectedShippingAddressId.set('12');
             customer.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
             restoreDraft(customer, config());
 
-            expect(customer.email.get()).toBe('account@example.com');
+            expect(customer.email.get()).toBe('Veronica@Example.com');
             expect(customer.shippingAddress.get()?.city).toBe('Calder');
             expect(customer.selectedShippingAddressId.get()).toBeNull();
             expect(customer.shippingDirty.get()).toBe(true);
@@ -566,9 +581,7 @@ describe('drafts', () => {
             copyDraftToHandoff();
             stop();
 
-            const customer = createStore();
-            customer.isGuest.set(false);
-            customer.quoteId.set('465');
+            const customer = customerStore('4', 'veronica@example.com');
             customer.savedAddresses.set([saved]);
             customer.shippingAddress.set(saved);
             customer.selectedShippingAddressId.set('12');
@@ -585,10 +598,12 @@ describe('drafts', () => {
 
         it('a stored card or account is not kept as the payment method: its token is not in the draft', () => {
             const before = guestStore();
+            setCheckoutConfig({ vault: { braintree_cc_vault: { is_enabled: true } } } as unknown as CheckoutConfig);
             before.selectedPaymentMethod.set('braintree_cc_vault');
-            before.paymentMethodData.set({ braintree_cc_vault: { public_hash: 'hash-of-a-stored-card' } });
+            selectVaultToken('braintree_cc_vault', 'hash-of-a-stored-card');
 
             const draft = buildDraft(before, QUOTE);
+            setCheckoutConfig(null as unknown as CheckoutConfig);
 
             expect(draft.paymentMethodCode).toBeNull();
             expect(JSON.stringify(draft)).not.toContain('hash-of-a-stored-card');
@@ -639,6 +654,109 @@ describe('drafts', () => {
             expect(store.billingSameAsShipping.get()).toBe(true);
             expect(store.selectedShippingMethod.get()).toBeNull();
             expect(store.selectedPaymentMethod.get()).toBeNull();
+        });
+    });
+
+    describe('the handoff entry belongs to who wrote it', () => {
+        /** The open checkout of `writer` hands over what was typed in it. */
+        function handOver(writer: Store): void {
+            stop = startDraftPersistence(writer, config());
+            writer.shippingAddress.set(typed);
+            writer.shippingDirty.set(true);
+            couponDraft.set('SAVE10');
+            copyDraftToHandoff();
+            stop();
+            couponDraft.set('');
+        }
+
+        /** Nothing of the entry reached the store, and the entry is gone. */
+        function expectRefused(store: Store): void {
+            expect(store.shippingAddress.get()).toBeNull();
+            expect(store.shippingDirty.get()).toBe(false);
+            expect(couponDraft.get()).toBe('');
+            expect(window.sessionStorage.getItem(handoffKey(STORE_CODE))).toBeNull();
+        }
+
+        it('an expired session of a signed-in customer hands the draft over, marked with the customer id', () => {
+            const customer = customerStore('4', 'veronica@example.com');
+            stop = startDraftPersistence(customer, config());
+            customer.shippingAddress.set(typed);
+            customer.shippingDirty.set(true);
+
+            handleSessionExpired({ store: customer, queue: { close: vi.fn() } });
+
+            const entry = stored(handoffKey(STORE_CODE));
+            expect(entry?.writer).toBe('4');
+            expect(entry?.shipping.address?.street).toEqual(['6146 Honey Bluff Parkway', 'Apt 2']);
+        });
+
+        it('the same customer, signed in again, gets the typed address back', () => {
+            handOver(customerStore('4', 'veronica@example.com'));
+
+            const again = customerStore('4', 'veronica@example.com', '466');
+            restoreDraft(again, config());
+
+            expect(again.shippingAddress.get()?.city).toBe('Calder');
+            expect(again.shippingDirty.get()).toBe(true);
+            expect(couponDraft.get()).toBe('SAVE10');
+        });
+
+        it('a visitor who is not signed in (a remembered persistent cart, a guest) gets nothing, and the entry is removed', () => {
+            handOver(customerStore('4', 'veronica@example.com'));
+
+            const visitor = guestStore();
+            restoreDraft(visitor, config());
+
+            expectRefused(visitor);
+            // The customer's own entry belongs to another quote: gone too.
+            expect(window.sessionStorage.length).toBe(0);
+        });
+
+        it('another customer gets nothing, and the entry is removed', () => {
+            handOver(customerStore('4', 'veronica@example.com'));
+
+            const other = customerStore('5', 'veronica@example.com', '470');
+            restoreDraft(other, config());
+
+            expectRefused(other);
+        });
+
+        it('an entry written while nobody was signed in fills a checkout where nobody is signed in', () => {
+            handOver(guestStore());
+            // The draft of the quote itself is gone (a new cart), the handoff entry is not.
+            clearDraft(STORE_CODE, QUOTE);
+
+            const guest = guestStore();
+            guest.maskedQuoteId.set('masked-2');
+            restoreDraft(guest, config());
+
+            expect(guest.shippingAddress.get()?.city).toBe('Calder');
+            expect(stored(handoffKey(STORE_CODE))).toBeNull();
+        });
+
+        it('an entry written while nobody was signed in is refused to a customer whose account has another email', () => {
+            const guest = guestStore();
+            guest.email.set('veronica@example.com');
+            handOver(guest);
+
+            const customer = customerStore('9', 'someone.else@example.com');
+            restoreDraft(customer, config());
+
+            expectRefused(customer);
+        });
+
+        it('an entry without a writer, the shape of an earlier release, is removed and never put back', () => {
+            const before = customerStore('4', 'veronica@example.com');
+            before.shippingAddress.set(typed);
+            before.shippingDirty.set(true);
+            const earlier = buildDraft(before, '465');
+            expect('writer' in earlier).toBe(false);
+            window.sessionStorage.setItem(handoffKey(STORE_CODE), JSON.stringify(earlier));
+
+            const customer = customerStore('4', 'veronica@example.com');
+            restoreDraft(customer, config());
+
+            expectRefused(customer);
         });
     });
 });

@@ -47,8 +47,8 @@ export interface PaymentMethodConfig {
  *
  * Places the order. `additional_data` is where gateway-specific
  * tokens / nonces land (Stripe payment_method_id, Braintree nonce,
- * PayPal order id, etc.) -- populated by each payment renderer's
- * `beforePlaceOrder()` hook.
+ * PayPal order id, etc.), from the payment element's `getPaymentData()`
+ * (`PaymentData` of `extension-api.d.ts`).
  *
  * `email` is required on guest carts (server-side validation). Logged-in
  * carts infer email from the customer session.

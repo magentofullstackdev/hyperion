@@ -9,11 +9,18 @@
         <!-- Reference the core block (never re-declare it): its button_lock_manager argument and the
              form.additional.info child (reCAPTCHA) stay in place; only the template changes. -->
         <referenceBlock name="customer_form_login" template="Magento_Customer::form/login.phtml"/>
-        <!-- The theme template renders the "new customer" panel itself, so the Luma wrapper and its
-             second block go once the form is out of it; require-cookie needs jQuery. -->
-        <move element="customer_form_login" destination="content"/>
+        <!-- The theme template renders the "new customer" panel itself, so the form leaves core's
+             wrapper and the wrapper's second block goes; require-cookie needs jQuery. -->
+        <move element="customer_form_login" destination="content" before="customer.login.container"/>
         <referenceBlock name="customer.new" remove="true"/>
-        <referenceContainer name="customer.login.container" remove="true"/>
+        <!-- Extension point: core's `customer.login.container` stays and follows the form (social
+             login buttons, notices). A container with an htmlTag and no output renders nothing, so
+             the page is unchanged without a child. The sign in page is edge cached: a child must be
+             session agnostic. The container stays where core declares it (in `content`) and the
+             form moves before it: the sibling of a move is resolved when that move runs, and a move
+             of the container after the form can run while the form is still the container's child
+             (the container then ends up above the form). -->
+        <referenceContainer name="customer.login.container" htmlClass="login-container mt-6"/>
         <referenceBlock name="require-cookie" remove="true"/>
         <referenceBlock name="page.main.title" remove="true"/>
     </body>

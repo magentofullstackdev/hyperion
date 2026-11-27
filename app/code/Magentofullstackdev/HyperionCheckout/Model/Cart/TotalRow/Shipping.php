@@ -9,12 +9,13 @@ use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Model\Quote\Address\Total;
 use Magento\Tax\Model\Config as TaxConfig;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
  * Shipping cost excluding tax, including tax or both, only once a method is
  * applied to the quote.
  */
-class Shipping implements RendererInterface
+class Shipping implements TotalRowRendererInterface
 {
     /**
      * @param RowBuilder $rowBuilder

@@ -14,8 +14,13 @@ use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
  * Session-specific fragments (cart count, mini-cart, add-to-cart response) must
  * never be stored by shared caches such as Varnish or a CDN. A stale, shared
  * mini-cart would leak another customer's data.
+ *
+ * Type-hint CacheHeadersInterface, the public contract.
+ *
+ * @api
+ * @since 0.9.0
  */
-class CacheHeaders
+class CacheHeaders implements CacheHeadersInterface
 {
     public function __construct(
         private readonly DegradedResponse $degradedResponse
@@ -27,6 +32,9 @@ class CacheHeaders
      *
      * Used for anything that depends on the current session: cart count,
      * mini-cart contents, customer dashboard fragments, etc.
+     *
+     * @param Raw $result
+     * @return Raw
      */
     public function applyPrivate(Raw $result): Raw
     {
@@ -48,6 +56,10 @@ class CacheHeaders
      * and asserts the final Cache-Control so Magento session middleware
      * cannot override us. The marker is stripped before the response hits
      * the wire.
+     *
+     * @param Raw $result
+     * @param int $ttlSeconds
+     * @return Raw
      */
     public function applyPublic(Raw $result, int $ttlSeconds): Raw
     {

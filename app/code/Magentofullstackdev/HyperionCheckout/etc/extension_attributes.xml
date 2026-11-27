@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Order comment and newsletter opt-in of the checkout, sent with the
+    payment information (`paymentMethod.extension_attributes`). Read by
+    Plugin\Checkout\CaptureOrderExtras; nothing is stored on the quote.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Api/etc/extension_attributes.xsd">
+    <extension_attributes for="Magento\Quote\Api\Data\PaymentInterface">
+        <attribute code="hyperion_order_comment" type="string"/>
+        <attribute code="hyperion_newsletter_subscribe" type="boolean"/>
+    </extension_attributes>
+</config>

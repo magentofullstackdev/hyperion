@@ -9,7 +9,7 @@ vi.mock('../../api/cart.js', () => ({
 vi.mock('../../api/captcha.js', () => ({
     loadCaptchaState: vi.fn().mockResolvedValue(true),
 }));
-vi.mock('../../components/hyperion-recaptcha.js', () => ({
+vi.mock('../../components/recaptcha-client.js', () => ({
     executeRecaptcha: vi.fn().mockResolvedValue('rc-token'),
 }));
 vi.mock('../drafts.js', () => ({
@@ -19,7 +19,7 @@ vi.mock('../drafts.js', () => ({
 import * as cartApi from '../../api/cart.js';
 import { loadCaptchaState } from '../../api/captcha.js';
 import { MagentoApiError } from '../../api/client.js';
-import { executeRecaptcha } from '../../components/hyperion-recaptcha.js';
+import { executeRecaptcha } from '../../components/recaptcha-client.js';
 import { t } from '../../utils/i18n.js';
 import {
     attachCaptchaField,

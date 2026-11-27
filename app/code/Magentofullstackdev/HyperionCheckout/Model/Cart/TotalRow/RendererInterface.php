@@ -5,22 +5,18 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow;
 
-use Magento\Quote\Model\Quote;
-use Magento\Quote\Model\Quote\Address\Total;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
- * Turns one collected total of the quote into the rows the cart summary
- * prints for it. Registered by total code on
- * Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool.
+ * Former name of the cart total row renderer contract, kept for one release.
+ *
+ * It extends the public interface and adds nothing, so a renderer written
+ * against this name is still accepted by TotalRowPool. Implement
+ * TotalRowRendererInterface instead.
+ *
+ * @deprecated 0.9.0 Use \Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface.
+ * @see TotalRowRendererInterface
  */
-interface RendererInterface
+interface RendererInterface extends TotalRowRendererInterface
 {
-    /**
-     * The rows of this total, none when the total has nothing to show.
-     *
-     * @param Total $total
-     * @param Quote $quote
-     * @return array<int, array{code: string, label: string, note: string, value: string, kind: string}>
-     */
-    public function render(Total $total, Quote $quote): array;
 }

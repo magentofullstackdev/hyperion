@@ -46,6 +46,9 @@ $plainName = static fn ($selection): string => html_entity_decode(
                          data-base-price="<?= $escaper->escapeHtmlAttr((string) $basePrice) ?>"
                          data-currency="<?= $escaper->escapeHtmlAttr($vm->getCurrencyCode()) ?>"
                          data-locale="<?= $escaper->escapeHtmlAttr($vm->getLocale()) ?>">
+    <?php /* Core's `product.info.bundle.options.top` container (catalog_product_view_type_bundle.xml):
+             blocks other modules print above the options; nothing without one. */ ?>
+    <?= $block->getChildHtml('product_info_bundle_options_top') ?>
     <?php foreach ($options as $option): ?>
         <?php
         /** @var \Magento\Bundle\Model\Option $option */

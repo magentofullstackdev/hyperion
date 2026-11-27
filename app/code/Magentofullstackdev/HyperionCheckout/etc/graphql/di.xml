@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    A visitor the persistent cookie remembers, but who is not signed in, is a
+    guest for GraphQL: the session user context answers no customer id unless
+    the session is signed in. Customer tokens are another user context and
+    keep working. This area exists only when Magento_GraphQl is installed.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Customer\Model\Authorization\CustomerSessionUserContext">
+        <plugin name="hyperion_checkout_session_user_context_privacy"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Customer\SessionUserContextPrivacy"/>
+    </type>
+</config>

@@ -6,14 +6,22 @@
  *
  * Physical cart: shows "billing same as shipping" checkbox (default
  * checked). Unchecking reveals an <address-form mode="billing"> below.
+ * While a shipping extension's address that asks for a billing address of
+ * its own replaces the shipping one (a pickup point), the checkbox is gone
+ * and the billing editor is shown; the shopper's choice is kept for when
+ * the override goes.
  *
  * Virtual cart: no toggle; always renders the billing form at the top,
  * expanded, since there is no shipping step.
+ *
+ * The `before-payment-methods` slot of the extension API sits under the
+ * heading of the method list (hidden while no element is registered).
  */
 import { LitElement, html, nothing } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
 
 import type { Address } from '../types/address.js';
+import { billingFollowsShipping } from '../extension/address-override.js';
 import { getStore } from '../store/index.js';
 import { flowActions } from '../store/flow-actions.js';
 import { t } from '../utils/i18n.js';
@@ -21,6 +29,7 @@ import './address-form.js';
 import './address-selector.js';
 import './payment-method-list.js';
 import './ui/checkbox.js';
+import '../extension/slot-outlet.js';
 
 export class CheckoutPayment extends SignalWatcher(LitElement) {
     public override createRenderRoot(): HTMLElement { return this; }
@@ -28,7 +37,8 @@ export class CheckoutPayment extends SignalWatcher(LitElement) {
     public override render(): unknown {
         const store = getStore();
         const isVirtual = store.isVirtual.get();
-        const same = store.billingSameAsShipping.get();
+        const same = billingFollowsShipping(store);
+        const separate = store.shippingAddressOverride.get()?.separateBilling === true;
         const billing = store.billingAddress.get();
         const isCustomer = store.customer.get() !== null;
 
@@ -57,12 +67,14 @@ export class CheckoutPayment extends SignalWatcher(LitElement) {
                           </div>
                       `
                     : html`
-                          <hc-checkbox
-                              name="billing_same_as_shipping"
-                              label=${t('Hyperion_Checkout::billing_same_as_shipping')}
-                              .checked=${same}
-                              @value-change=${this._onToggle}
-                          ></hc-checkbox>
+                          ${separate
+                              ? nothing
+                              : html`<hc-checkbox
+                                    name="billing_same_as_shipping"
+                                    label=${t('Hyperion_Checkout::billing_same_as_shipping')}
+                                    .checked=${same}
+                                    @value-change=${this._onToggle}
+                                ></hc-checkbox>`}
                           ${same
                               ? nothing
                               : html`
@@ -79,6 +91,7 @@ export class CheckoutPayment extends SignalWatcher(LitElement) {
                     <h3 class="text-base font-semibold text-heading mb-2">
                         ${t('Hyperion_Checkout::payment_method_heading')}
                     </h3>
+                    <hc-slot-outlet name="before-payment-methods"></hc-slot-outlet>
                     <payment-method-list></payment-method-list>
                     <hc-section-status section="payment"></hc-section-status>
                 </div>

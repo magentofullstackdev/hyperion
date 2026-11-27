@@ -11,13 +11,39 @@ vi.mock('../../store/flow-actions.js', () => ({
 import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type: 'json' };
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
 import { setCheckoutConfig } from '../../bootstrap-config.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import { createStore, setStoreForTests, type Store } from '../../store/index.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import type { Totals } from '../../types/totals.js';
-import { setActiveCatalogForTests } from '../../utils/i18n.js';
-import { registerPaymentRenderer } from '../payment-renderers/registry.js';
+import { setActiveCatalogForTests, t } from '../../utils/i18n.js';
+import { setPaymentVisibility } from '../../utils/payment-offer.js';
+import { resetHostedForTests } from '../payment-host/element-registry.js';
+import { loadPaymentHost, resetPaymentHostForTests } from '../payment-host/host.js';
+import { resetMountForTests } from '../payment-host/mount.js';
+import { resetPaymentRowsForTests } from '../payment-host/row-state.js';
 import '../payment-method-list.js';
 import type { PaymentMethodList } from '../payment-method-list.js';
+
+/** A third-party entry whose element mounts live fields. */
+const FAKE_CARD_ENTRY = {
+    ...paymentRenderers[0],
+    id: 'fake_card',
+    method: 'fakecard',
+    pattern: null,
+    tag: 'fake-hosted-fields',
+    moduleUrl: `${window.location.origin}/static/Vendor_Fake/js/card.js`,
+    builtin: null,
+    sortOrder: 90,
+};
+
+/** The configuration with the bundle's payment renderer entries, as the server emits them. */
+function withPaymentRenderers(config: CheckoutConfig | null): CheckoutConfig {
+    const base = (config ?? {}) as unknown as { hyperion?: Record<string, unknown> };
+    return {
+        ...base,
+        hyperion: { ...(base.hyperion ?? {}), paymentRenderers: [...paymentRenderers, FAKE_CARD_ENTRY] },
+    } as unknown as CheckoutConfig;
+}
 
 const FLATRATE = { carrier_code: 'flatrate', method_code: 'flatrate' };
 
@@ -25,13 +51,13 @@ const FLATRATE = { carrier_code: 'flatrate', method_code: 'flatrate' };
 let mounted = 0;
 let tornDown = 0;
 class FakeHostedFields extends HTMLElement {
+    public static readonly hyperionApi = '1';
     public connectedCallback(): void { mounted += 1; }
     public disconnectedCallback(): void { tornDown += 1; }
 }
 if (!customElements.get('fake-hosted-fields')) {
     customElements.define('fake-hosted-fields', FakeHostedFields);
 }
-registerPaymentRenderer({ code: 'fakecard', component: 'fake-hosted-fields' });
 
 async function settle(el: PaymentMethodList): Promise<void> {
     for (let i = 0; i < 3; i += 1) {
@@ -50,14 +76,18 @@ describe('<payment-method-list>', () => {
         mounted = 0;
         tornDown = 0;
         setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
-        setCheckoutConfig(guestFixture as unknown as CheckoutConfig);
+        setCheckoutConfig(withPaymentRenderers(guestFixture as unknown as CheckoutConfig));
         store = createStore();
         setStoreForTests(store);
     });
 
     afterEach(() => {
         document.body.innerHTML = '';
-        setStoreForTests(null);
+        resetPaymentRowsForTests();
+        resetHostedForTests();
+        resetMountForTests();
+        resetPaymentHostForTests();
+        vi.restoreAllMocks();
     });
 
     async function mount(): Promise<PaymentMethodList> {
@@ -140,37 +170,133 @@ describe('<payment-method-list>', () => {
     });
 
     describe('a method whose renderer is a module of its own', () => {
-        it('has the row of a usable method while the module is on its way, without the unsupported note', async () => {
-            store.availablePaymentMethods.set([
-                { code: 'payflow_express', title: 'PayPal' },
-                { code: 'some_unknown_gateway', title: 'Other' },
-            ]);
-            const el = document.createElement('payment-method-list') as PaymentMethodList;
-            document.body.appendChild(el);
-            await el.updateComplete;
-            const rows = Array.from(el.querySelectorAll('payment-method-row'));
-            await Promise.all(rows.map((r) => (r as unknown as { updateComplete: Promise<unknown> }).updateComplete));
-
-            expect(rows[0]!.querySelector('[data-payment-unsupported]')).toBeNull();
-            expect(rows[0]!.querySelector('.opacity-60')).toBeNull();
-            expect(rows[1]!.querySelector('[data-payment-unsupported]')).not.toBeNull();
-        });
-
-        it('shows no "not available" notice under such a row when it is the selected one', async () => {
+        it('has the row of a usable method while the module is on its way, not selectable yet', async () => {
             store.availablePaymentMethods.set([{ code: 'payflow_express', title: 'PayPal' }]);
-            store.selectedPaymentMethod.set('payflow_express');
             const el = document.createElement('payment-method-list') as PaymentMethodList;
             document.body.appendChild(el);
             await el.updateComplete;
             const row = el.querySelector('payment-method-row')!;
             await (row as unknown as { updateComplete: Promise<unknown> }).updateComplete;
 
-            expect(row.querySelector('payment-generic')).toBeNull();
+            expect(row.querySelector<HTMLInputElement>('#hc-pay-payflow_express')?.disabled).toBe(true);
+            expect(row.querySelector('[data-payment-unsupported]')).toBeNull();
         });
     });
 
+    describe('a method no renderer serves', () => {
+        const METHODS = [
+            { code: 'checkmo', title: 'Check' },
+            { code: 'some_unknown_gateway', title: 'Other' },
+        ];
+
+        it('is not shown to the shopper', async () => {
+            store.appliedShippingMethod.set(FLATRATE);
+            store.availablePaymentMethods.set(METHODS);
+            const el = await mount();
+            const ids = Array.from(el.querySelectorAll<HTMLInputElement>('input[name="payment_method"]')).map((input) => input.id);
+            expect(ids).toEqual(['hc-pay-checkmo']);
+            expect(el.querySelector('[data-payment-unsupported]')).toBeNull();
+        });
+
+        it('is a disabled diagnostic row when the store asks for them', async () => {
+            setCheckoutConfig(withPaymentRenderers({
+                ...(guestFixture as unknown as CheckoutConfig),
+                hyperion: { ...(guestFixture as unknown as CheckoutConfig).hyperion, debug: { showUnsupportedPayments: true } },
+            } as unknown as CheckoutConfig));
+            store.appliedShippingMethod.set(FLATRATE);
+            store.availablePaymentMethods.set(METHODS);
+            const el = await mount();
+            const diagnostic = el.querySelector('[data-payment-unsupported="some_unknown_gateway"]');
+            expect(diagnostic).not.toBeNull();
+            expect(diagnostic?.querySelector<HTMLInputElement>('input')?.disabled).toBe(true);
+            expect(diagnostic?.textContent).toContain('some_unknown_gateway');
+        });
+
+        describe('seven gateway methods with no entry, the store asking for diagnostics', () => {
+            const SEVEN = [
+                'payment_services_paypal_hosted_fields',
+                'payment_services_paypal_smart_buttons',
+                'payment_services_paypal_apple_pay',
+                'payment_services_paypal_google_pay',
+                'payment_services_paypal_fastlane',
+                'payment_services_paypal_apm',
+                'payment_services_paypal_vault',
+            ];
+
+            beforeEach(() => {
+                setCheckoutConfig(withPaymentRenderers({
+                    ...(guestFixture as unknown as CheckoutConfig),
+                    hyperion: { ...(guestFixture as unknown as CheckoutConfig).hyperion, debug: { showUnsupportedPayments: true } },
+                } as unknown as CheckoutConfig));
+                store.appliedShippingMethod.set(FLATRATE);
+                store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }, ...SEVEN.map((code) => ({ code, title: code }))]);
+            });
+
+            afterEach(() => {
+                setPaymentVisibility(null);
+            });
+
+            it('draws one disabled diagnostic row for each', async () => {
+                const el = await mount();
+                for (const code of SEVEN) {
+                    expect(el.querySelector(`[data-payment-unsupported="${code}"] input`)?.hasAttribute('disabled')).toBe(true);
+                }
+            });
+
+            it('draws them also when their gateway marks them as not presentable', async () => {
+                setPaymentVisibility(Object.fromEntries(SEVEN.map((code) => [code, { isVisible: false }])));
+                const el = await mount();
+                expect(el.querySelectorAll('input[name="payment_method"]:not([disabled])')).toHaveLength(1);
+                for (const code of SEVEN) {
+                    expect(el.querySelector(`[data-payment-unsupported="${code}"]`)).not.toBeNull();
+                }
+            });
+        });
+
+        it('is a diagnostic row when the page URL asks for them', async () => {
+            window.history.replaceState(null, '', '/checkout/?hyperion_debug_payments=1');
+            try {
+                store.appliedShippingMethod.set(FLATRATE);
+                store.availablePaymentMethods.set(METHODS);
+                const el = await mount();
+                expect(el.querySelector('[data-payment-unsupported="some_unknown_gateway"]')).not.toBeNull();
+            } finally {
+                window.history.replaceState(null, '', '/');
+            }
+        });
+
+        it('leaves the list saying no method is available when it was the only one, and names it in the console', async () => {
+            const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+            store.appliedShippingMethod.set(FLATRATE);
+            store.availablePaymentMethods.set([{ code: 'only_unknown_gateway', title: 'Other' }]);
+            const el = await mount();
+            expect(el.querySelector('[data-payment-methods-none]')?.getAttribute('role')).toBe('alert');
+            expect(error.mock.calls.some((call) => String(call[0]).includes('only_unknown_gateway'))).toBe(true);
+        });
+    });
+
+    it('says politely that the payment methods were updated when a change of the list dropped the selection', async () => {
+        store.appliedShippingMethod.set(FLATRATE);
+        store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }, { code: 'banktransfer', title: 'Bank Transfer' }]);
+        store.selectedPaymentMethod.set('banktransfer');
+        const el = await mount();
+        const status = (): string => el.querySelector('[data-payment-methods-status]')?.textContent?.trim() ?? '';
+        expect(el.querySelector('[data-payment-methods-status]')?.getAttribute('aria-live')).toBe('polite');
+        expect(status()).toBe('');
+
+        // A list change that keeps the selection says nothing.
+        store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }, { code: 'banktransfer', title: 'Bank Transfer' }, { code: 'cashondelivery', title: 'COD' }]);
+        await settle(el);
+        expect(status()).toBe('');
+
+        store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
+        store.selectedPaymentMethod.set(null);
+        await settle(el);
+        expect(status()).toBe(t('Hyperion_Checkout::payment_methods_updated'));
+    });
+
     it('a stored token has its row from the first render, before the module of its provider arrived', async () => {
-        setCheckoutConfig({
+        setCheckoutConfig(withPaymentRenderers({
             ...(guestFixture as unknown as CheckoutConfig),
             vault: { payflow_vault_without_module: { is_enabled: true }, braintree_paypal_vault: { is_enabled: true } },
             payment: {
@@ -179,7 +305,7 @@ describe('<payment-method-list>', () => {
                     payflow_vault_without_module_0: { config: { code: 'payflow_vault_without_module', publicHash: 'hash-2', details: {} } },
                 },
             },
-        } as unknown as CheckoutConfig);
+        } as unknown as CheckoutConfig));
         store.availablePaymentMethods.set([
             { code: 'checkmo', title: 'Check' },
             { code: 'braintree_paypal_vault', title: 'Stored PayPal' },
@@ -213,7 +339,9 @@ describe('<payment-method-list>', () => {
             { code: 'fakecard', title: 'Card' },
         ]);
         store.selectedPaymentMethod.set('fakecard');
+        await loadPaymentHost();
         const el = await mount();
+        await vi.waitFor(() => expect(el.querySelector('fake-hosted-fields')).not.toBeNull());
         const fields = el.querySelector('fake-hosted-fields');
         const row = fields?.closest('payment-method-row');
         expect(fields).not.toBeNull();
@@ -232,12 +360,17 @@ describe('<payment-method-list>', () => {
         expect(fields?.closest('payment-method-row')).toBe(row);
         expect(tornDown).toBe(0);
         expect(mounted).toBe(1);
-        const order = Array.from(el.querySelectorAll('payment-method-row')).map((r) => r.method.code);
+        const order = Array.from(el.querySelectorAll('payment-method-row')).map((r) => r.row?.method.code);
         expect(order).toEqual(['banktransfer', 'cashondelivery', 'fakecard', 'checkmo']);
 
         store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }]);
         await settle(el);
         expect(el.querySelector('fake-hosted-fields')).toBeNull();
         expect(tornDown).toBe(1);
+
+        // The method comes back: the same element, with what it held.
+        store.availablePaymentMethods.set([{ code: 'checkmo', title: 'Check' }, { code: 'fakecard', title: 'Card' }]);
+        await settle(el);
+        expect(el.querySelector('fake-hosted-fields')).toBe(fields);
     });
 });

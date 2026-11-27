@@ -13,15 +13,14 @@ use Magento\Framework\Escaper;
  * (`hx-target="#hyperion-notification" hx-swap="outerHTML"`).
  *
  * Tones map 1:1 to the `[data-tone]` rules in the theme's
- * `_components.css`: success, error, warning, info.
+ * `_components.css`: success, error, warning, info (the TONE_* constants of
+ * NotificationRendererInterface, the public contract).
+ *
+ * @api
+ * @since 0.9.0
  */
-class NotificationRenderer
+class NotificationRenderer implements NotificationRendererInterface
 {
-    public const TONE_SUCCESS = 'success';
-    public const TONE_ERROR = 'error';
-    public const TONE_WARNING = 'warning';
-    public const TONE_INFO = 'info';
-
     private const AUTO_CLOSE_MS = 8000;
     private const AUTO_CLOSE_SUCCESS_MS = 3500;
 
@@ -36,6 +35,7 @@ class NotificationRenderer
      * @param bool $oob Emit `hx-swap-oob="outerHTML"` so the toast can ride
      *                  along a response whose main swap targets something
      *                  else (cart body, coupon form, ...).
+     * @return string
      */
     public function render(string $html, string $tone = self::TONE_SUCCESS, bool $oob = false): string
     {
@@ -64,6 +64,9 @@ class NotificationRenderer
     /**
      * Hidden placeholder: keeps the swap target on the page when there is
      * nothing to say, so the next HTMX request can still find it.
+     *
+     * @param bool $oob
+     * @return string
      */
     public function renderPlaceholder(bool $oob = false): string
     {

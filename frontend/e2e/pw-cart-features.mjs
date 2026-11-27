@@ -17,6 +17,11 @@
 // A refused coupon keeps the form open with the code and the message. A virtual cart has no
 // estimator; a grouped child line links to its parent; item options print as label / value pairs.
 // A customer with a default address gets its rates when the estimate panel opens, not before.
+// "After Adding a Product Redirect to Shopping Cart" (`checkout/cart/redirect_to_cart`, on for that
+// part, "Add to Cart from Listing Page" on with it): an add from a listing tile and from a product page
+// lands on the cart page with the success message, guest and customer, while the add of an express
+// button (marked `X-Hyperion-Express: 1`) is answered with the toast; with the setting back as found
+// the add shows the toast again.
 // The estimator answers 429 with Retry-After above its request budget (last check of the run: the
 // budget of this client stays spent for the window).
 // Usage: node e2e/pw-cart-features.mjs <baseUrl> <slotDir> [--with-fpt] [--with-custom-total] [--keep-recaptcha] [--only=<part,...>]
@@ -36,7 +41,8 @@
 //   --keep-recaptcha     leaves `recaptcha_frontend/type_for/coupon_code` as it is (the coupon reCAPTCHA checks then
 //                        follow the setting found).
 //   --only=<part,...>    runs only the named parts (guest, quantity, minimum order, lines, multi-currency, error rate,
-//                        tax display, decimal quantity, customer, custom total, fpt display, rate limit).
+//                        tax display, decimal quantity, customer, custom total, fpt display, redirect to cart,
+//                        rate limit).
 // Clear the customer_login reCAPTCHA type for the run beforehand (see docs/development.md),
 // as for pw-suite.mjs. Exit code 1 on any failure.
 import { createRequire } from 'node:module';
@@ -105,8 +111,21 @@ const previous = Object.fromEntries([
     'shipping/shipping_policy/shipping_policy_content',
     ...(keepRecaptcha ? [] : ['recaptcha_frontend/type_for/coupon_code']),
     ...(withFpt ? FPT_SETTINGS : []),
+    'checkout/cart/redirect_to_cart',
+    'hyperion/catalog/add_to_cart_from_listing',
 ].map((configPath) => [configPath, configSnapshot(configPath)]));
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
+// An interrupted run puts every setting back too (the fixtures of the run are removed by the next run's --remove).
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+        console.error(`\n${signal}: restoring the settings of the run`);
+        for (const [configPath, snapshot] of Object.entries(previous)) {
+            try { restoreConfig(configPath, snapshot); } catch (e) { console.error(`RESTORE FAILED: ${configPath}: ${firstLine(e)}`); }
+        }
+        try { magento('cache:flush'); } catch { /* flushed by the next run */ }
+        process.exit(130);
+    });
+}
 // Runs one part of the script: an error thrown inside is a failed check of that part, the parts after it still run.
 async function block(label, run) {
     if (only.length && !only.includes(label)) return;
@@ -259,7 +278,7 @@ const checkoutState = (page) => page.evaluate(() => {
         bar: link('[data-hyperion-checkout-bar] [data-hyperion-checkout-bar-link]'),
         // Any other live link to the checkout inside the cart (the configure links of the lines are cart URLs).
         liveLinks: [...document.querySelectorAll('#hyperion-cart-items a[href]')].filter((a) => /^\/checkout(\/index(\/index)?)?\/?$/.test(new URL(a.href).pathname)).length,
-        expressButtons: document.querySelectorAll('[data-hyperion-cart-totals] hyperion-paypal-buttons').length,
+        expressButtons: document.querySelectorAll('[data-hyperion-cart-totals] hyperion-express-slot, [data-hyperion-cart-totals] hyperion-paypal-buttons').length,
     };
 });
 // The checkout affordances of the opened mini-cart drawer.
@@ -427,7 +446,8 @@ try {
         }
         // ------------------------------------------------------------ coupon form
         await page.goto(base + '/checkout/cart/', { waitUntil: 'networkidle' });
-        await page.waitForFunction(() => !!document.querySelector('hyperion-coupon-form form'), null, { timeout: 15000 }).catch(() => {});
+        // The form the component renders (the server skeleton is a form too, removed on upgrade).
+        await page.waitForFunction(() => !!document.querySelector('hyperion-coupon-form form[data-hyperion-coupon-form]'), null, { timeout: 15000 }).catch(() => {});
         const couponLabels = await page.evaluate(() => {
             const host = document.querySelector('hyperion-coupon-form');
             const form = host?.querySelector('form[data-hyperion-coupon-form]');
@@ -1373,6 +1393,81 @@ try {
             }
         });
     }
+
+    // ------------------------------------------------------------ guest and customer: "After Adding a Product Redirect to Shopping Cart"
+    await block('redirect to cart', async () => {
+        const PATHS = ['checkout/cart/redirect_to_cart', 'hyperion/catalog/add_to_cart_from_listing'];
+        const set = (values) => { for (const [configPath, value] of Object.entries(values)) setConfig(configPath, value); magento('cache:flush'); };
+        const putBack = () => { for (const configPath of PATHS) restoreConfig(configPath, previous[configPath]); magento('cache:flush'); };
+        const tileButton = '[data-hyperion-tiles] form[hx-post*="checkout/cart/add"] button[type="submit"]';
+        // The success message of the add: queued by the add, printed on the cart page from the messages cookie.
+        const successText = async (page) => {
+            await page.waitForFunction(() => /You added/i.test([...document.querySelectorAll('[data-hyperion-messages], #hyperion-notification')].map((el) => el.textContent).join(' ')), null, { timeout: 10000 }).catch(() => {});
+            return page.evaluate(() => [...document.querySelectorAll('[data-hyperion-messages], #hyperion-notification')]
+                .map((el) => el.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
+        };
+        const onCart = (page) => /\/checkout\/cart\/?$/.test(new URL(page.url()).pathname);
+        // One add from a tile of the bags category and one from a product page; each must end on the cart page.
+        const addAndLand = async (page, who) => {
+            await page.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
+            const tile = page.locator(tileButton).first();
+            const tileName = await tile.evaluate((button) => (button.closest('[data-hyperion-tile]')?.querySelector('a[href] h2, a[href] h3, [data-hyperion-tile-name], a[href]')?.textContent ?? '').replace(/\s+/g, ' ').trim()).catch(() => '');
+            await Promise.all([page.waitForURL(/\/checkout\/cart\/?(\?|$)/, { timeout: 30000 }).catch(() => {}), tile.click()]);
+            await page.waitForLoadState('networkidle').catch(() => {});
+            const tileMessage = await successText(page);
+            check(`redirect to cart (${who}): an add from a listing tile lands on the cart page with the success message`, onCart(page) && /You added/i.test(tileMessage) && (tileName === '' || tileMessage.includes(tileName.slice(0, 12))), JSON.stringify({ url: page.url().replace(base, ''), tileName, message: tileMessage.slice(0, 140) }));
+            await page.goto(base + u('/affirm-water-bottle.html'), { waitUntil: 'networkidle' });
+            await Promise.all([page.waitForURL(/\/checkout\/cart\/?(\?|$)/, { timeout: 30000 }).catch(() => {}), page.click('#product_addtocart_form button[type="submit"]')]);
+            await page.waitForLoadState('networkidle').catch(() => {});
+            const pdpMessage = await successText(page);
+            check(`redirect to cart (${who}): an add from a product page lands on the cart page with the success message`, onCart(page) && /You added/i.test(pdpMessage) && pdpMessage.includes(DECIMAL.name), JSON.stringify({ url: page.url().replace(base, ''), message: pdpMessage.slice(0, 140) }));
+            const names = await page.evaluate(() => [...document.querySelectorAll('[data-hyperion-cart-item]')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()).join(' | '));
+            check(`redirect to cart (${who}): the cart lists the product added from the product page`, names.includes(DECIMAL.name), names.slice(0, 160));
+            // The add of an express button (lib/express-context.js marks it) is answered with the toast, never the redirect.
+            await page.goto(base + u('/affirm-water-bottle.html'), { waitUntil: 'networkidle' });
+            const express = await page.evaluate(async () => {
+                const form = document.querySelector('#product_addtocart_form');
+                if (!(form instanceof HTMLFormElement)) return { error: 'no add to cart form' };
+                const data = new FormData(form);
+                const key = document.cookie.split('; ').find((part) => part.startsWith('form_key='));
+                if (key) data.set('form_key', decodeURIComponent(key.slice('form_key='.length)));
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'HX-Request': 'true', 'X-Hyperion-Express': '1' },
+                    body: data,
+                });
+                const text = await response.text();
+                return { status: response.status, redirect: response.headers.get('HX-Redirect'), toast: text.includes('data-hyperion-notification'), path: new URL(response.url).pathname };
+            }).catch((error) => ({ error: String(error) }));
+            check(`redirect to cart (${who}): an express add (X-Hyperion-Express: 1) is answered with the toast, not the redirect`,
+                express.status === 200 && express.redirect === null && express.toast === true && !/\/checkout\/cart\/?$/.test(express.path ?? ''), JSON.stringify(express));
+        };
+        try {
+            set({ 'checkout/cart/redirect_to_cart': 1, 'hyperion/catalog/add_to_cart_from_listing': 1 });
+            const guest = await newJourney();
+            await addAndLand(guest.page, 'guest');
+            check('redirect to cart (guest): no page errors / HTTP 5xx', guest.problems.length === 0, guest.problems.slice(0, 4).join(' | '));
+            await guest.ctx.close();
+            const customer = await newJourney();
+            check('redirect to cart (customer): login', await login(customer.page), customer.page.url().replace(base, ''));
+            await addAndLand(customer.page, 'customer');
+            check('redirect to cart (customer): no page errors / HTTP 5xx', customer.problems.length === 0, customer.problems.slice(0, 4).join(' | '));
+            await customer.ctx.close();
+        } finally {
+            putBack();
+        }
+        // With the setting back as found (core's default: off) the add stays on its page and shows the toast.
+        if ((previous['checkout/cart/redirect_to_cart'].value ?? '0') === '0') {
+            const j = await newJourney();
+            await j.page.goto(base + u('/affirm-water-bottle.html'), { waitUntil: 'networkidle' });
+            await j.page.click('#product_addtocart_form button[type="submit"]');
+            const shown = await toast(j.page);
+            await j.page.waitForTimeout(500);
+            check('redirect to cart off: the add stays on the product page and shows the toast', !onCart(j.page) && j.page.url().includes('affirm-water-bottle') && /You added/i.test(shown?.text ?? ''), JSON.stringify({ url: j.page.url().replace(base, ''), toast: shown }));
+            await j.ctx.close();
+        }
+    });
 
     // ------------------------------------------------------------ guest: the request budget of the estimator (last: it stays spent for the window)
     await block('rate limit', async () => {

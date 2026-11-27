@@ -5,10 +5,11 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart;
 
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
-use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
-use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
+use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface;
 use Magento\Checkout\Controller\Cart\CouponPost;
 use Magento\Framework\App\ActionFlag;
 use Magento\Framework\App\ActionInterface;
@@ -43,6 +44,11 @@ use Magento\Framework\Controller\Result\RawFactory;
  * under it. The toast carries the same message. Rendering the block again
  * also renders its CAPTCHA child again, which generates a new image: an
  * answer is good for one attempt.
+ *
+ * The body goes through ActionResponse (event `hyperion_htmx_action_response`,
+ * action `coupon`).
+ *
+ * @internal
  */
 class CouponPostPlugin
 {
@@ -52,14 +58,25 @@ class CouponPostPlugin
     private const TOTALS_BLOCK = 'hyperion.cart.totals';
     private const COUPON_CODE_MAX_LENGTH = 255;
 
+    /**
+     * @param HttpRequest $request
+     * @param RawFactory $rawFactory
+     * @param CacheHeadersInterface $cacheHeaders
+     * @param MessageCollector $messageCollector
+     * @param NotificationRendererInterface $notificationRenderer
+     * @param FragmentRendererInterface $fragmentRenderer
+     * @param ActionFlag $actionFlag
+     * @param ActionResponse $actionResponse
+     */
     public function __construct(
         private readonly HttpRequest $request,
         private readonly RawFactory $rawFactory,
-        private readonly CacheHeaders $cacheHeaders,
+        private readonly CacheHeadersInterface $cacheHeaders,
         private readonly MessageCollector $messageCollector,
-        private readonly NotificationRenderer $notificationRenderer,
-        private readonly FragmentRenderer $fragmentRenderer,
-        private readonly ActionFlag $actionFlag
+        private readonly NotificationRendererInterface $notificationRenderer,
+        private readonly FragmentRendererInterface $fragmentRenderer,
+        private readonly ActionFlag $actionFlag,
+        private readonly ActionResponse $actionResponse
     ) {
     }
 
@@ -111,11 +128,15 @@ class CouponPostPlugin
     private function buildResponse(): Raw
     {
         $messages = $this->messageCollector->collect();
-        $tone = $messages['has_error'] ? NotificationRenderer::TONE_ERROR : NotificationRenderer::TONE_SUCCESS;
+        $tone = $messages['has_error']
+            ? NotificationRendererInterface::TONE_ERROR
+            : NotificationRendererInterface::TONE_SUCCESS;
 
         $response = $this->rawFactory->create();
         $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
-        $response->setContents(
+        $response->setContents($this->actionResponse->build(
+            ActionResponse::ACTION_COUPON,
+            $messages,
             $this->fragmentRenderer->render(
                 self::CART_HANDLE,
                 self::COUPON_BLOCK,
@@ -125,7 +146,7 @@ class CouponPostPlugin
             . $this->fragmentRenderer->render(self::CART_HANDLE, self::TOTALS_BLOCK, ['oob' => true])
             . "\n"
             . $this->notificationRenderer->render($messages['html'], $tone, true)
-        );
+        ));
 
         return $this->cacheHeaders->applyPrivate($response);
     }

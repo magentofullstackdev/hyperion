@@ -1,6 +1,6 @@
 # Hyperion
 
-> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.6 (beta). Supported platforms and their tiers: see docs/compatibility.md (Magento Open Source and Mage-OS, PHP 8.3 to 8.5).
+> Magento 2 storefront theme and module suite built with Tailwind CSS 3.4, Lit 3 Web Components and HTMX 2 over Varnish ESI. No RequireJS, jQuery or Knockout. MIT. Version 0.9.0-beta.7 (beta). Supported platforms and their tiers: see docs/compatibility.md (Magento Open Source and Mage-OS, PHP 8.3 to 8.5).
 
 Website: https://hyperionfront.dev
 Live demo: https://demo.hyperionfront.dev
@@ -21,6 +21,7 @@ npm packages: @magentofullstackdev/hyperion-shared, @magentofullstackdev/hyperio
 
 - [Child themes](docs/child-themes.md): the `hyperion create Vendor/Theme` CLI, tokens, Tailwind preset, components
 - [Checkout and payment renderers](docs/checkout.md): the Lit checkout, its REST client, renderers, translations
+- [Extending Hyperion](docs/extensions.md): payment renderers, express buttons, shipping extensions, checkout fields and slots, total rows, storefront containers and events, the testing kit
 - [PageBuilder](docs/pagebuilder.md): how PageBuilder content renders without RequireJS
 - [Varnish and caching](docs/varnish.md): the VCL, ESI, what is cached, invalidation
 - [Architecture](ARCHITECTURE.md): the request path, the header state request, HTMX actions, listings, assets, extension points

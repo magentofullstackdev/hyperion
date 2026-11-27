@@ -16,6 +16,8 @@ import type {
     SectionStatusMap,
     SectionStatusSource,
 } from '../types/section.js';
+import { emitCheckoutEvent } from '../extension/events.js';
+import { publicErrorKind } from '../extension/public-kind.js';
 import { getStore } from './index.js';
 
 export type { SectionId, SectionStatus, SectionStatusMap, SectionStatusSource };
@@ -26,7 +28,11 @@ export interface ReportFailureOptions {
     source: SectionStatusSource;
 }
 
-/** Show `error` in `section`, replacing what the section showed before. */
+/**
+ * Show `error` in `section`, replacing what the section showed before, and
+ * tell the checkout's listeners (`hyperion:checkout:error`, the public kind
+ * and the section only).
+ */
 export function reportFailure(section: SectionId, error: CheckoutError, opts: ReportFailureOptions): void {
     const store = getStore();
     const status: SectionStatus = { kind: error.kind, message: error.message, source: opts.source };
@@ -36,6 +42,7 @@ export function reportFailure(section: SectionId, error: CheckoutError, opts: Re
         status.retryAt = Date.now() + error.retryAfterMs;
     }
     store.sectionStatus.set({ ...store.sectionStatus.get(), [section]: status });
+    emitCheckoutEvent('error', { kind: publicErrorKind(error.kind), section });
 }
 
 /** A request of `section` succeeded: its failure, if any, no longer applies. */

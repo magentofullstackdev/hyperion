@@ -16,7 +16,10 @@
  *      store's wording of the core phrases a failure is recognized by.
  *   5. Start the flow actions, the draft of what the shopper types and
  *      the watch on the connection.
- *   6. Mount `<checkout-app>` into `#checkout-root`.
+ *   6. Mount `<checkout-app>` into `#checkout-root`, then start the
+ *      checkout events of the extension API (`extension/boot.ts`) and,
+ *      only when the store has some, the modules of the generic extension
+ *      pool.
  *
  * Any failure is non-recoverable -- we do NOT render stock checkout
  * as a fallback (the admin flag is the rollback mechanism).
@@ -41,7 +44,7 @@ import { readFormKeyCookie } from './utils/form-key.js';
 import { loadLocale, t } from './utils/i18n.js';
 import { minimumOrderError } from './utils/minimum-order.js';
 import { setCheckoutConfig } from './bootstrap-config.js';
-import { loadOptionalSections } from './components/optional-sections.js';
+import { startExtensions } from './extension/boot.js';
 
 const CONFIG_ELEMENT_ID = 'checkout-config';
 const ROOT_ELEMENT_ID = 'checkout-root';
@@ -109,7 +112,11 @@ export async function bootstrap(): Promise<void> {
         window.addEventListener('pageshow', reloadWhenRestored);
 
         // Mount.
-        await mountCheckoutApp(config);
+        const { el, app } = await mountCheckoutApp(config);
+        startExtensions(config, store, async () => {
+            await el.updateComplete;
+            await flowActions().queue.whenIdle();
+        }, app.loadExtensionRuntime);
     } catch (err) {
         renderBootstrapError(err);
         throw err;
@@ -157,7 +164,10 @@ function assertHyperionEnabled(hyperion: HyperionConfig | undefined): void {
     }
 }
 
-async function mountCheckoutApp(config: CheckoutConfig): Promise<void> {
+async function mountCheckoutApp(config: CheckoutConfig): Promise<{
+    el: HTMLElementTagNameMap['checkout-app'];
+    app: typeof import('./components/checkout-app.js');
+}> {
     const root = document.getElementById(ROOT_ELEMENT_ID);
     if (!root) {
         throw new Error(`#${ROOT_ELEMENT_ID} not found.`);
@@ -166,16 +176,15 @@ async function mountCheckoutApp(config: CheckoutConfig): Promise<void> {
     // island has been accepted. The sections only some stores show are
     // chunks of their own; the ones this store uses are defined before the
     // first render, so they are part of the first frame.
-    await Promise.all([
-        import('./components/checkout-app.js'),
-        loadOptionalSections(config),
-    ]);
+    const app = await import('./components/checkout-app.js');
+    await app.loadOptionalSections(config);
     const el = document.createElement('checkout-app');
     // The sign in prompt of an ended session lives inside the app element,
     // where the checkout stylesheet applies, and outside what the app
     // renders: Lit appends its own content after an existing child.
     el.appendChild(document.createElement('hc-session-expired'));
     root.replaceChildren(el);
+    return { el, app };
 }
 
 function renderBootstrapError(err: unknown): void {
@@ -186,7 +195,7 @@ function renderBootstrapError(err: unknown): void {
     const wrap = document.createElement('div');
     wrap.setAttribute('role', 'alert');
     wrap.className =
-        'max-w-xl mx-auto my-8 p-4 rounded-md bg-danger/10 text-danger border border-danger/30';
+        'max-w-xl mx-auto my-8 p-4 rounded-md bg-danger/10 text-error-strong border border-danger/30';
     const line = document.createElement('p');
     line.className = 'font-semibold';
     line.textContent = t('Hyperion_Checkout::bootstrap_error');

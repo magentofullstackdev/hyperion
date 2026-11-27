@@ -9,6 +9,34 @@
         <plugin name="hyperion_customer_shared_wishlist_not_found"
                 type="Magentofullstackdev\HyperionCustomer\Plugin\Wishlist\Controller\Shared\IndexPlugin"/>
     </type>
+    <!-- Attribute codes the generic user attribute renderer never prints: the
+         fields the theme renders itself. A module that renders its own attribute
+         adds <item name="code" xsi:type="string">code</item> here. -->
+    <type name="Magentofullstackdev\HyperionCustomer\ViewModel\UserAttributes">
+        <arguments>
+            <argument name="excludedAttributes" xsi:type="array">
+                <item name="prefix" xsi:type="string">prefix</item>
+                <item name="firstname" xsi:type="string">firstname</item>
+                <item name="middlename" xsi:type="string">middlename</item>
+                <item name="lastname" xsi:type="string">lastname</item>
+                <item name="suffix" xsi:type="string">suffix</item>
+                <item name="email" xsi:type="string">email</item>
+                <item name="dob" xsi:type="string">dob</item>
+                <item name="gender" xsi:type="string">gender</item>
+                <item name="taxvat" xsi:type="string">taxvat</item>
+                <item name="company" xsi:type="string">company</item>
+                <item name="street" xsi:type="string">street</item>
+                <item name="city" xsi:type="string">city</item>
+                <item name="country_id" xsi:type="string">country_id</item>
+                <item name="region" xsi:type="string">region</item>
+                <item name="region_id" xsi:type="string">region_id</item>
+                <item name="postcode" xsi:type="string">postcode</item>
+                <item name="telephone" xsi:type="string">telephone</item>
+                <item name="fax" xsi:type="string">fax</item>
+                <item name="vat_id" xsi:type="string">vat_id</item>
+            </argument>
+        </arguments>
+    </type>
     <type name="Magentofullstackdev\HyperionCore\Model\Htmx\HeaderStatePool">
         <arguments>
             <argument name="fragments" xsi:type="array">

@@ -10,6 +10,9 @@ declare(strict_types=1);
  *     birth, tax / VAT number and gender through the core widget blocks
  *   * "Change Email" switch: reveals Email + Current Password
  *   * "Change Password" switch: reveals Current + New + Confirm
+ *   * customer_form_user_attributes (a module's custom attributes) or, without
+ *     it, the user-defined attributes of the `customer_account_edit` form
+ *     (HyperionCustomer form/user-attributes.phtml)
  *   * fieldset_edit_info_additional (remote shopping assistance opt-in)
  *   * form_additional_info (reCAPTCHA and anything else modules add)
  *   * Save + Go back action row
@@ -36,6 +39,8 @@ $layout = $block->getLayout();
 $dob = $layout->createBlock(Dob::class);
 $taxvat = $layout->createBlock(Taxvat::class);
 $gender = $layout->createBlock(Gender::class);
+$minimumPasswordLength = (int) $block->getMinimumPasswordLength();
+$passwordMinCharacterSets = (int) $block->getRequiredCharacterClassesNumber();
 
 $inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg bg-surface text-sm '
             . 'text-secondary placeholder:text-muted '
@@ -77,6 +82,30 @@ $required = '<span class="text-error" aria-hidden="true">*</span>';
             </div>
         <?php endif; ?>
 
+        <?php
+        // Custom customer attributes: a block a module schedules under the core aliases wins;
+        // otherwise the generic renderer prints the user-defined attributes of the form, minus
+        // any field the hook children already rendered.
+        $additionalHtml = (string) $block->getChildHtml('fieldset_edit_info_additional');
+        $userAttributesHtml = (string) $block->getChildHtml('customer_form_user_attributes');
+        ?>
+        <?= /* @noEscape */ $userAttributesHtml ?>
+        <?php if (trim($userAttributesHtml) === ''): ?>
+            <?php $userAttributesBlock = $layout->createBlock(Template::class); ?>
+            <?php if ($userAttributesBlock instanceof Template): ?>
+                <?= $userAttributesBlock
+                    ->setTemplate('Magentofullstackdev_HyperionCustomer::form/user-attributes.phtml')
+                    ->setData([
+                        'entity_type' => 'customer',
+                        'form_code' => 'customer_account_edit',
+                        'entity' => $customer,
+                        'id_prefix' => 'customer-attribute-',
+                        'rendered_html' => $additionalHtml,
+                    ])
+                    ->toHtml() ?>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <div class="flex flex-col gap-3">
             <label class="flex items-center gap-3 text-sm text-secondary cursor-pointer select-none">
                 <input type="checkbox"
@@ -103,7 +132,7 @@ $required = '<span class="text-error" aria-hidden="true">*</span>';
                 <?= $escaper->escapeHtml(__('Change Password')) ?>
             </label>
 
-            <?= $block->getChildHtml('fieldset_edit_info_additional') ?>
+            <?= /* @noEscape */ $additionalHtml ?>
         </div>
 
         <div data-hyperion-toggle-section="change-email" hidden>
@@ -146,9 +175,20 @@ $required = '<span class="text-error" aria-hidden="true">*</span>';
                         'field_id' => 'password',
                         'field_name' => 'password',
                         'autocomplete' => 'new-password',
-                        'minlength' => (int) $block->getMinimumPasswordLength(),
+                        'minlength' => $minimumPasswordLength,
+                        'described_by' => 'password-strength-hint',
+                        'attributes' => ['data-password-min-character-sets' => $passwordMinCharacterSets],
                     ])
                     ->toHtml() ?>
+                <p id="password-strength-hint" class="mt-1 text-xs text-muted">
+                    <?= $escaper->escapeHtml(__('Minimum length: %1 characters.', $minimumPasswordLength)) ?>
+                    <?php if ($passwordMinCharacterSets > 0): ?>
+                        <?= $escaper->escapeHtml(__(
+                            'Minimum of different classes of characters in password is %1. Classes of characters: Lower Case, Upper Case, Digits, Special Characters.',
+                            $passwordMinCharacterSets
+                        )) ?>
+                    <?php endif; ?>
+                </p>
             </div>
             <div>
                 <label for="password-confirmation" class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">

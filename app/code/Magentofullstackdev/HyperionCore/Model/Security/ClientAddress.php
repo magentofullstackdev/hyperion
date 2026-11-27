@@ -42,6 +42,8 @@ use Magento\Framework\App\Request\Http as HttpRequest;
  * A private client talking straight to an exposed Varnish looks like a hop
  * and can choose its bucket with a forged prefix. Only the configured list
  * gives a real guarantee: set it in production.
+ *
+ * @internal
  */
 class ClientAddress
 {

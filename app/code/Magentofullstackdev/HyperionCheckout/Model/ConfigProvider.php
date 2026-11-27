@@ -34,6 +34,9 @@ use Magento\Store\Model\ScopeInterface;
  *   client-side checks can assert "I'm compatible with >= 2.x" when a
  *   future gateway SDK depends on a specific payload shape.
  * - `hyperion.enabled` -- mirrors the admin feature flag.
+ * - `hyperion.extensionApi` -- the version of the public extension
+ *   contracts (`EXTENSION_API`); an extension element compares its major
+ *   with it before it is used.
  * - `giftMessage`, `isOrderLevelGiftOptionsEnabled`,
  *   `isItemLevelGiftOptionsEnabled` -- core's gift message checkout config,
  *   relayed through `GiftMessageBridge` when `Magento_GiftMessage` is present
@@ -89,6 +92,13 @@ use Magento\Store\Model\ScopeInterface;
 class ConfigProvider implements ConfigProviderInterface
 {
     public const VERSION = '2.0.0';
+
+    /**
+     * Version of the public extension contracts of the checkout bundle
+     * (`extension-api.d.ts`), emitted as `hyperion.extensionApi`. Kept equal
+     * to `EXTENSION_API` of `frontend/packages/module-checkout/src/extension/version.ts`.
+     */
+    public const EXTENSION_API = '1.0-beta';
 
     public const CONFIG_ENABLED = 'hyperion_checkout/general/enabled';
 
@@ -161,6 +171,7 @@ class ConfigProvider implements ConfigProviderInterface
     {
         $hyperion = [
             'checkoutVersion' => self::VERSION,
+            'extensionApi' => self::EXTENSION_API,
             'enabled' => $this->flag(self::CONFIG_ENABLED),
             'baseUrl' => $this->urlBuilder->getBaseUrl(['_type' => UrlInterface::URL_TYPE_WEB]),
             'locale' => (string)$this->localeResolver->getLocale(),

@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCatalog\ViewModel;
 
 use Magento\Catalog\Model\Product;
+use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Json\EncoderInterface;
 use Magento\Framework\Registry;
 use Magento\Swatches\Block\Product\Renderer\ConfigurableFactory as SwatchesRendererFactory;
@@ -13,6 +14,7 @@ use Magento\Swatches\Model\SwatchAttributesProvider;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
 use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\ObjectManagerInterface;
+use Magento\Store\Model\ScopeInterface;
 use Psr\Log\LoggerInterface;
 
 class SwatchConfig implements ArgumentInterface
@@ -33,6 +35,7 @@ class SwatchConfig implements ArgumentInterface
      * @param ModuleManager $moduleManager
      * @param ObjectManagerInterface $objectManager
      * @param Stock $stock
+     * @param ScopeConfigInterface $scopeConfig
      */
     public function __construct(
         private readonly SwatchesRendererFactory $swatchesBlockFactory,
@@ -42,11 +45,15 @@ class SwatchConfig implements ArgumentInterface
         private readonly LoggerInterface $logger,
         private readonly ModuleManager $moduleManager,
         private readonly ObjectManagerInterface $objectManager,
-        private readonly Stock $stock
+        private readonly Stock $stock,
+        private readonly ScopeConfigInterface $scopeConfig
     ) {
     }
 
     private const MSRP_HELPER_CLASS = 'Magento\Msrp\Helper\Data';
+
+    /** Core's "Swatches per Product" of the listings (Stores > Configuration > Catalog > Storefront). */
+    private const XML_PATH_SWATCHES_PER_PRODUCT = 'catalog/frontend/swatches_per_product';
 
     /**
      * MAP state of the variants whose price must stay hidden: `{childId:
@@ -150,7 +157,9 @@ class SwatchConfig implements ArgumentInterface
                 // symbols, precision): the component rewrites a server-rendered price and must print
                 // it the way PHP did.
                 'priceFormat' => is_array($config['priceFormat'] ?? null) ? $config['priceFormat'] : null,
-                'attributes' => $config['attributes'] ?? [],
+                'attributes' => $compact
+                    ? $this->limitOptions((array) ($config['attributes'] ?? []))
+                    : ($config['attributes'] ?? []),
                 'optionPrices' => $config['optionPrices'] ?? [],
                 'images' => $compact ? $this->mainImagesOnly($config['images'] ?? []) : ($config['images'] ?? []),
                 'index' => $config['index'] ?? [],
@@ -209,6 +218,30 @@ class SwatchConfig implements ArgumentInterface
         }
 
         return $result;
+    }
+
+    /**
+     * The first `catalog/frontend/swatches_per_product` options of every attribute, for the
+     * tiles (core's listing renderer shows the same number). The skeleton rows are built from
+     * this config, so the reserved height of the tile follows the cut. Zero or an empty value
+     * keeps every option, as in core.
+     *
+     * @param array<int|string, mixed> $attributes
+     * @return array<int|string, mixed>
+     */
+    private function limitOptions(array $attributes): array
+    {
+        $limit = (int) $this->scopeConfig->getValue(self::XML_PATH_SWATCHES_PER_PRODUCT, ScopeInterface::SCOPE_STORE);
+        if ($limit <= 0) {
+            return $attributes;
+        }
+        foreach ($attributes as $key => $attribute) {
+            if (is_array($attribute) && is_array($attribute['options'] ?? null)) {
+                $attributes[$key]['options'] = array_slice($attribute['options'], 0, $limit);
+            }
+        }
+
+        return $attributes;
     }
 
     /**

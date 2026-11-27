@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Extension points of the cart summary card (Magento_Checkout::cart/totals.phtml).
+
+    Both the cart page (checkout_cart_index) and the htmx cart fragment that every cart
+    mutation renders (hyperion_checkout_cart_fragment) include this handle, so a module adds
+    its block ONCE, in its own hyperion_cart_extensions.xml, and the block shows on the page
+    and after every quantity change, removal or coupon:
+
+        <referenceContainer name="hyperion.cart.totals.after">
+            <block class="Vendor\Module\Block\Cart\Notice" name="vendor.cart.notice"
+                   template="Vendor_Module::cart/notice.phtml"/>
+        </referenceContainer>
+
+    The containers stand in for core's cart.summary, checkout.cart.totals.container,
+    checkout.cart.order.actions and checkout.cart.methods, which the theme removes with the
+    Knockout cart. No htmlTag: an empty container prints nothing.
+
+    Both handles carry cacheable="false" blocks (the cart is private): a child may read the
+    session and the quote, and must not set response headers. Every child is rendered again
+    for each cart mutation (it is part of the swapped summary card): no markup with an id that
+    something outside the card points at, no inline script (htmx drops it).
+
+    hyperion.cart.totals.before   top of the card, under the "Summary" heading
+    hyperion.cart.totals.after    after the totals rows, before the checkout link
+    hyperion.express.cart         under the checkout link (express checkout buttons); not
+                                  printed while the quote cannot go to the checkout
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="hyperion.cart.totals">
+            <container name="hyperion.cart.totals.before" as="totals_before" label="Cart Summary: Top"/>
+            <container name="hyperion.cart.totals.after" as="totals_after" label="Cart Summary: Before the Checkout Link"/>
+            <container name="hyperion.express.cart" as="express" label="Cart Summary: Express Checkout">
+                <!-- The buttons of ExpressButtonPool (placement cart); prints nothing without one. -->
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.express.cart.slot"
+                       template="Magentofullstackdev_HyperionCheckout::express/slot.phtml">
+                    <arguments>
+                        <argument name="placement" xsi:type="string">cart</argument>
+                    </arguments>
+                </block>
+            </container>
+        </referenceBlock>
+    </body>
+</page>

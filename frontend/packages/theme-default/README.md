@@ -24,9 +24,11 @@ are written into the matching Magento Composer package under
   does not cover yet is listed in
   [`docs/known-limitations.md`](https://github.com/magentofullstackdev/hyperion/blob/main/docs/known-limitations.md).
   Read it before planning a migration.
-- Checkout extensions and payment renderers are integrated through a fork
-  and build of the repository, not through `npm install` in a child theme
-  (see `@magentofullstackdev/hyperion-checkout`).
+- Payment renderers, express buttons and checkout extensions of other
+  modules are DI pool entries plus custom elements in the module's own
+  static files, with no rebuild of the theme or the checkout; storefront
+  blocks go into named layout containers. See
+  [`docs/extensions.md`](https://github.com/magentofullstackdev/hyperion/blob/main/docs/extensions.md).
 
 ## Install
 

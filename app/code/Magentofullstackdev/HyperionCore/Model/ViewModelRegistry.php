@@ -21,6 +21,16 @@ use Psr\Log\LoggerInterface;
  *
  * This is the Hyvä pattern, adopted verbatim so the "one ViewModel per concern"
  * discipline works end-to-end without bloating layout XML.
+ *
+ * Public contract: `require()`, `optional()` and the template variables.
+ * Every template of the Hyperion theme (and of its children) receives the
+ * registry as `$viewModels`; `$hyperionViewModels` holds it in every
+ * template whatever the theme, for module templates that may render under
+ * another theme whose modules use the `$viewModels` name for a registry of
+ * their own.
+ *
+ * @api
+ * @since 0.9.0
  */
 class ViewModelRegistry
 {

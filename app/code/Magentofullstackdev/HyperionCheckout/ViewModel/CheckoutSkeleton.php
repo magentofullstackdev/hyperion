@@ -15,6 +15,8 @@ use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Store\Model\ScopeInterface;
+use Magentofullstackdev\HyperionCheckout\Model\Checkout\CaptchaConfigProvider;
+use Magentofullstackdev\HyperionCheckout\Model\Payment\RendererPool;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -67,13 +69,10 @@ class CheckoutSkeleton implements ArgumentInterface
     private const CLIENT_TOKEN_METHODS = ['braintree', 'braintree_paypal', 'braintree_googlepay'];
 
     /**
-     * Payment method codes the application draws as a usable row. It is the
-     * union of three lists of the checkout bundle
-     * (`frontend/packages/module-checkout/src/components/payment-renderers/`):
-     * the offline renderers of `payment-offline.ts`, the generic fallback of
-     * `registry.ts` and the gateway modules of `lazy-renderers.ts`. Every
-     * other method gets the taller "not supported" row. A test of the bundle
-     * compares the lists.
+     * Payment method codes the first-party renderer entries serve
+     * (`etc/frontend/di.xml`, `Model\Payment\RendererPool`). Used only when
+     * the page carries no `hyperion.paymentRenderers` list (the provider is
+     * missing): every other method then keeps the taller "not supported" row.
      */
     public const SUPPORTED_PAYMENT_METHODS = [
         'checkmo',
@@ -109,6 +108,7 @@ class CheckoutSkeleton implements ArgumentInterface
      * @param ConfigurationPool $configurationPool
      * @param ModuleManager $moduleManager
      * @param LoggerInterface $logger
+     * @param CaptchaConfigProvider $captchaConfigProvider
      */
     public function __construct(
         private readonly CheckoutSession $checkoutSession,
@@ -118,7 +118,8 @@ class CheckoutSkeleton implements ArgumentInterface
         private readonly AddressHelper $addressHelper,
         private readonly ConfigurationPool $configurationPool,
         private readonly ModuleManager $moduleManager,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly CaptchaConfigProvider $captchaConfigProvider
     ) {
     }
 
@@ -263,7 +264,14 @@ class CheckoutSkeleton implements ArgumentInterface
      * one per stored token of the customer, ahead of the other methods, when
      * the bundle has a module for it; a method its gateway module marks as
      * not presentable (`payment.<code>.isVisible` false) has no row.
-     * `supported` false marks the row that carries the "not supported" line.
+     * A method is served when an entry of `hyperion.paymentRenderers` (the
+     * list the application matches with, `RendererPool::matchEmitted()`)
+     * renders it. A method nobody serves has no row, as the application hides
+     * it from shoppers, except when `hyperion.debug.showUnsupportedPayments`
+     * is on: it then keeps the taller row of the diagnostic line, marked
+     * `supported` false. Every served row has the same collapsed height
+     * whatever renders it (a built-in element, a form, a redirect, a third
+     * party element): a row's body exists only once the method is selected.
      *
      * @param array<string, mixed> $config
      * @return array<int, array{title: string, supported: bool}>
@@ -278,6 +286,9 @@ class CheckoutSkeleton implements ArgumentInterface
         if (!is_array($methods)) {
             return [];
         }
+        $renderers = $this->paymentRenderers($config);
+        $showUnsupported = $renderers === null
+            || ($config['hyperion']['debug']['showUnsupportedPayments'] ?? false) === true;
         $vault = $this->vaultTokenCounts($config);
         $tokenRows = [];
         $rows = [];
@@ -287,16 +298,20 @@ class CheckoutSkeleton implements ArgumentInterface
             if ($code === '' || !$this->isPresentable($config, $code)) {
                 continue;
             }
+            $served = $this->isServed($renderers, $code);
             if (isset($vault[$code])) {
-                $tokens = in_array($code, self::SUPPORTED_PAYMENT_METHODS, true) ? $vault[$code] : 0;
+                $tokens = $served ? $vault[$code] : 0;
                 for ($i = 0; $i < $tokens; $i++) {
                     $tokenRows[] = ['title' => (string) ($method['title'] ?? ''), 'supported' => true];
                 }
                 continue;
             }
+            if (!$served && !$showUnsupported) {
+                continue;
+            }
             $row = [
                 'title' => (string) ($method['title'] ?? ''),
-                'supported' => in_array($code, self::SUPPORTED_PAYMENT_METHODS, true),
+                'supported' => $served,
             ];
             if ($code === self::FREE_METHOD) {
                 $free = $row;
@@ -504,9 +519,11 @@ class CheckoutSkeleton implements ArgumentInterface
     /**
      * The optional parts of the application this store shows, by the names
      * `Block\Checkout::getPreloadUrls()` takes: the gift options, the terms
-     * to accept and the image CAPTCHA field of a store that always asks for
-     * it on a form of the checkout. The application loads their chunks on
-     * the same switches; a preload that turns out unused costs one request.
+     * to accept, the image CAPTCHA field of a store that always asks for it
+     * on a form of the checkout, and the reCAPTCHA client of a store that
+     * protects an action of the checkout. The application loads their
+     * chunks on the same switches; a preload that turns out unused costs
+     * one request.
      *
      * @return string[]
      */
@@ -522,7 +539,100 @@ class CheckoutSkeleton implements ArgumentInterface
         if ($this->isCaptchaShownFromTheStart()) {
             $sections[] = 'captcha';
         }
+        if ($this->hasRecaptcha()) {
+            $sections[] = 'recaptcha';
+        }
         return $sections;
+    }
+
+    /**
+     * The parts of the application this page loads before the mount that
+     * only its checkout configuration tells, by the names
+     * `Block\Checkout::getSectionPreloadUrls()` takes:
+     *
+     *   - `payment-host`: the payment host, when the application starts with
+     *     a payment method selected or shows the diagnostic rows of the
+     *     methods it cannot render (`hyperion.debug.showUnsupportedPayments`).
+     *     The application selects a method at boot from the initial state
+     *     of a physical quote (`hyperion.initial.paymentMethods`): `free` at
+     *     a zero grand total, or the only offered method when an offline
+     *     renderer of the bundle serves it. A method put back from the
+     *     shopper's draft of the tab is not known here, and is not preloaded.
+     *   - `address-fields`: the renderer of the address fields the store
+     *     declares (`hyperion.addressFields`).
+     *
+     * @param array<string, mixed> $config the decoded checkout configuration
+     * @return string[]
+     */
+    public function getBodySections(array $config): array
+    {
+        $sections = [];
+        $debug = ($config['hyperion']['debug']['showUnsupportedPayments'] ?? false) === true;
+        if ($debug || $this->preselectsPaymentMethod($config)) {
+            $sections[] = 'payment-host';
+        }
+        $fields = $config['hyperion']['addressFields'] ?? null;
+        if (is_array($fields) && $fields !== []) {
+            $sections[] = 'address-fields';
+        }
+        return $sections;
+    }
+
+    /**
+     * Whether the application selects a payment method at boot (its
+     * `reconcilePaymentSelection()` on the initial state).
+     *
+     * @param array<string, mixed> $config
+     * @return bool
+     */
+    private function preselectsPaymentMethod(array $config): bool
+    {
+        $initial = $config['hyperion']['initial'] ?? null;
+        $methods = is_array($initial) ? ($initial['paymentMethods'] ?? null) : null;
+        if (!is_array($methods) || $this->isVirtual()) {
+            return false;
+        }
+        $offered = [];
+        foreach ($methods as $method) {
+            $code = is_array($method) ? (string) ($method['code'] ?? '') : '';
+            if ($code !== '' && $this->isPresentable($config, $code)) {
+                $offered[] = $code;
+            }
+        }
+        $grandTotal = $config['totalsData']['grand_total'] ?? null;
+        $zeroTotal = is_numeric($grandTotal) && abs((float) $grandTotal) < 0.005;
+        if ($zeroTotal && in_array(self::FREE_METHOD, $offered, true)) {
+            return true;
+        }
+        if (count($offered) !== 1) {
+            return false;
+        }
+        $renderers = $config['hyperion']['paymentRenderers'] ?? null;
+        if (!is_array($renderers)) {
+            return false;
+        }
+        try {
+            $entry = RendererPool::matchEmitted($renderers, $offered[0]);
+        } catch (\Throwable $e) {
+            $this->logger->error('CheckoutSkeleton::preselectsPaymentMethod -- ' . $e->getMessage());
+            return false;
+        }
+        return is_array($entry) && ($entry['builtin'] ?? null) === 'offline';
+    }
+
+    /**
+     * At least one action of the checkout is protected by reCAPTCHA.
+     *
+     * @return bool
+     */
+    private function hasRecaptcha(): bool
+    {
+        try {
+            return $this->captchaConfigProvider->hasRecaptcha();
+        } catch (\Throwable $e) {
+            $this->logger->error('CheckoutSkeleton::hasRecaptcha -- ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -637,6 +747,48 @@ class CheckoutSkeleton implements ArgumentInterface
             return true;
         }
         return !empty($slice['isActive']) && is_string($slice['clientToken'] ?? null) && $slice['clientToken'] !== '';
+    }
+
+    /**
+     * The renderer entries the page carries; null when it carries none (the
+     * provider is missing) or they cannot be read, which keeps the fixed
+     * first-party list.
+     *
+     * @param array<string, mixed> $config
+     * @return array<mixed>|null
+     */
+    private function paymentRenderers(array $config): ?array
+    {
+        $renderers = $config['hyperion']['paymentRenderers'] ?? null;
+        if (is_array($renderers) && array_is_list($renderers)) {
+            return $renderers;
+        }
+        if (isset($config['hyperion']) && is_array($config['hyperion'])) {
+            $this->logger->warning(
+                'CheckoutSkeleton: the page carries no hyperion.paymentRenderers list, the payment rows follow'
+                . ' the first-party renderers.'
+            );
+        }
+        return null;
+    }
+
+    /**
+     * Whether a renderer entry serves the method.
+     *
+     * @param array<mixed>|null $renderers
+     * @param string $code
+     * @return bool
+     */
+    private function isServed(?array $renderers, string $code): bool
+    {
+        if ($renderers !== null) {
+            try {
+                return RendererPool::matchEmitted($renderers, $code) !== null;
+            } catch (\Throwable $e) {
+                $this->logger->error('CheckoutSkeleton::isServed -- ' . $e->getMessage());
+            }
+        }
+        return in_array($code, self::SUPPORTED_PAYMENT_METHODS, true);
     }
 
     /**

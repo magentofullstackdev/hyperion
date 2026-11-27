@@ -1,0 +1,33 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * The fake hosted card field: a standalone document framed by the card
+ * element. Its script posts completeness and the last four digits to the
+ * parent window, never the number.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+?>
+<!doctype html>
+<html lang="<?= $escaper->escapeHtmlAttr((string) $block->getData('lang')) ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title><?= $escaper->escapeHtml(__('Card number')) ?></title>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getViewFileUrl('Magentofullstackdev_HyperionSamplePsp::css/gateway.css')) ?>">
+</head>
+<body class="sample-field">
+<label class="sample-field__label" for="sample-card-number"><?= $escaper->escapeHtml(__('Card number')) ?></label>
+<input class="sample-field__input" id="sample-card-number" name="cardnumber" type="text"
+       inputmode="numeric" autocomplete="cc-number" maxlength="23" spellcheck="false"
+       placeholder="4242 4242 4242 4242">
+<?= /* @noEscape */ $secureRenderer->renderTag('script', [
+    'type' => 'module',
+    'src' => $block->getViewFileUrl('Magentofullstackdev_HyperionSamplePsp::js/gateway/hosted-field.js'),
+], ' ', false) ?>
+</body>
+</html>

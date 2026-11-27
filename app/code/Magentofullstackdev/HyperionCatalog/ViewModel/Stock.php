@@ -28,6 +28,7 @@ use Psr\Log\LoggerInterface;
 class Stock implements ArgumentInterface
 {
     public const XML_PATH_STOCK_THRESHOLD_QTY = 'cataloginventory/options/stock_threshold_qty';
+    public const XML_PATH_DISPLAY_STOCK_STATUS = 'cataloginventory/options/display_product_stock_status';
 
     /**
      * @param StockRegistryInterface $stockRegistry
@@ -43,6 +44,17 @@ class Stock implements ArgumentInterface
         private readonly StoreManagerInterface $storeManager,
         private readonly LoggerInterface $logger
     ) {
+    }
+
+    /**
+     * Whether the product page shows the stock availability ("Display Products Availability in Stock
+     * on Storefront"), like core's stock status block.
+     *
+     * @return bool
+     */
+    public function isStockStatusDisplayed(): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::XML_PATH_DISPLAY_STOCK_STATUS, ScopeInterface::SCOPE_STORE);
     }
 
     /**

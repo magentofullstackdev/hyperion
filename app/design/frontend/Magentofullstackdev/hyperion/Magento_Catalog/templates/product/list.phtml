@@ -84,6 +84,24 @@ if ($gtag->isEnabled() && $products && !$loadFailed) {
 }
 // The appended page's record travels inside the out of band `load_more` block.
 $block->setData('hyperion_view_list_json', $viewListJson);
+// Tile hooks of core's list block (theme layouts remove core's own children by name): the
+// `details.renderers` list (per product type, printed under the price) and the `addto` container
+// (printed at the end of the tile actions). The block is cached: children are session agnostic.
+$templateLogger = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class);
+$detailsHtmlOf = static function ($product) use ($block, $templateLogger): string {
+    if (!method_exists($block, 'getProductDetailsHtml')) {
+        return '';
+    }
+    try {
+        return trim((string) $block->getProductDetailsHtml($product));
+    } catch (\Throwable $e) {
+        // A list block without a `default` renderer throws: the tile goes on without details.
+        $templateLogger->error('product/list.phtml: details renderer', $e);
+        return '';
+    }
+};
+$addToBlock = $block->getChildBlock('addto');
+$addTo = $addToBlock instanceof \Magento\Catalog\Block\Product\ProductList\Item\Container ? $addToBlock : null;
 ?>
 <?php if (!$append): ?>
 <div id="<?= $escaper->escapeHtmlAttr($gridId) ?>"
@@ -93,6 +111,8 @@ $block->setData('hyperion_view_list_json', $viewListJson);
     <?php if ($viewListJson !== ''): ?>
         <span data-hyperion-gtag-event="view_item_list" data-hyperion-gtag-payload="<?= $escaper->escapeHtmlAttr($viewListJson) ?>" hidden></span>
     <?php endif; ?>
+    <?php /* Core's `additional` container of the list block (empty: nothing printed). */ ?>
+    <?= $block->getChildHtml('additional') ?>
 <?php endif; ?>
 
     <?php
@@ -288,6 +308,13 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                 </hyperion-swatches>
                             <?php endif; ?>
 
+                            <?php $detailsHtml = $detailsHtmlOf($_product); ?>
+                            <?php if ($detailsHtml !== ''): ?>
+                                <div data-hyperion-tile-details>
+                                    <?= /* @noEscape -- rendered block */ $detailsHtml ?>
+                                </div>
+                            <?php endif; ?>
+
                             <?php /* -- Action cluster ------------------- */ ?>
                             <?php /* A size container (`_components.css`): the Add to Cart label, its icon and
                                      the wish list / compare labels follow the WIDTH OF THE TILE, wherever
@@ -427,6 +454,11 @@ $block->setData('hyperion_view_list_json', $viewListJson);
                                         <?php endif; ?>
 
                                     </div>
+                                <?php endif; ?>
+
+                                <?php $addToHtml = $addTo !== null ? trim((string) $addTo->setProduct($_product)->getChildHtml()) : ''; ?>
+                                <?php if ($addToHtml !== ''): ?>
+                                    <?= /* @noEscape -- rendered blocks */ $addToHtml ?>
                                 <?php endif; ?>
 
                             </div>

@@ -1,6 +1,6 @@
 {
     "name": "@magentofullstackdev/hyperion-checkout",
-    "version": "0.9.0-beta.6",
+    "version": "0.9.0-beta.7",
     "description": "Hyperion one-step Magento 2 checkout: Lit + Tailwind, signal-based store, REST-driven. Replacement for the Luma Knockout/jQuery checkout.",
     "license": "MIT",
     "author": "Sergiu Ro <sergiu.ro@magentofullstack.dev>",
@@ -26,30 +26,54 @@
     ],
     "type": "module",
     "main": "./src/main.ts",
+    "types": "./extension-api.d.ts",
+    "exports": {
+        ".": "./src/main.ts",
+        "./extension-api": {
+            "types": "./extension-api.d.ts"
+        },
+        "./testing": {
+            "types": "./testing/index.d.ts",
+            "default": "./testing/index.js"
+        },
+        "./testing/harness.html": "./testing/harness.html",
+        "./fixtures/*.json": "./src/fixtures/*.json",
+        "./src/*": "./src/*",
+        "./package.json": "./package.json"
+    },
     "files": [
         "src",
+        "testing",
+        "extension-api.d.ts",
         "tailwind.config.ts",
         "README.md",
         "LICENSE",
         "!src/**/__tests__",
         "!src/**/*.test.*",
         "!src/**/*.spec.*",
-        "!src/fixtures",
-        "!src/styles/dev-harness.css"
+        "!src/fixtures/payment.braintree.json",
+        "!src/styles/dev-harness.css",
+        "!testing/__tests__",
+        "!testing/tsconfig.json",
+        "!testing/vitest.config.js"
     ],
     "publishConfig": {
         "access": "public"
     },
     "scripts": {
         "dev": "vite",
+        "dev:harness": "vite --config testing/vite.config.js",
         "build": "npm run i18n:sync && vite build",
-        "typecheck": "tsc --noEmit",
-        "lint": "eslint 'src/**/*.{ts,js}'",
-        "test": "vitest run",
+        "typecheck": "tsc --noEmit && tsc --noEmit -p testing/tsconfig.json",
+        "lint": "eslint 'src/**/*.{ts,js}' 'testing/**/*.{js,ts}'",
+        "test": "vitest run && vitest run --config testing/vitest.config.js",
+        "test:kit": "vitest run --config testing/vitest.config.js",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "clean": "rm -rf ../../../app/code/Magentofullstackdev/HyperionCheckout/view/frontend/web/assets ../../../app/code/Magentofullstackdev/HyperionCheckout/view/frontend/web/.vite",
         "i18n:sync": "node scripts/sync-i18n.mjs",
+        "budget": "node scripts/bundle-budget.mjs",
+        "pack:check": "node scripts/check-pack.mjs",
         "prepublishOnly": "npm run typecheck && npm run lint && npm run test"
     },
     "dependencies": {

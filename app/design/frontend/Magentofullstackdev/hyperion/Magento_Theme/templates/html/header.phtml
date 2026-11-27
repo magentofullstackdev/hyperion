@@ -25,8 +25,9 @@
  *               one session lock per page view).
  *   * Compare:  <a id="hyperion-compare-count"> -- hidden until the state
  *               response brings a visible count.
- *   * Wishlist: <a id="hyperion-wishlist-count"> -- always visible (guests see
- *               "Sign in" link; logged-in customers see the heart + count).
+ *   * Wishlist: <a id="hyperion-wishlist-count"> -- visible while the wish list
+ *               is enabled for the store (guests see a "Sign in" link;
+ *               logged-in customers see the heart + count).
  *   * Account:  <hyperion-dropdown placement="bottom-end"> whose panel
  *               #hyperion-account-menu receives the welcome fragment
  *               (Magentofullstackdev\HyperionCustomer\Block\Welcome\Fragment).
@@ -48,6 +49,14 @@ $searchUrl = $escaper->escapeUrl($block->getSearchActionUrl());
 $cartUrl = $escaper->escapeUrl($block->getCartUrl());
 // Catalog mode and other purchase restrictions: no mini-cart for visitors who cannot buy.
 $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
+// Store configuration only: the header is part of every edge cached page.
+$storeOptions = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\StoreOptions::class);
+$wishlistEnabled = $storeOptions->isWishlistEnabled();
+// Search fields: two characters at least, like the suggestions (core applies its own minimum on
+// the results page and explains it there); at most the Catalog Search maximum query length.
+$searchMax = $storeOptions->getSearchMaxQueryLength();
+$searchLengthAttributes = ' minlength="2"' . ($searchMax >= 2 ? ' maxlength="' . $searchMax . '"' : '');
+$logoSize = $block->getLogoDimensions();
 ?>
 <?php /* First focusable element of the page: keyboard and screen reader users jump past the header. */ ?>
 <a href="#contentarea"
@@ -78,7 +87,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
             <?php if ($logoUrl !== ''): ?>
                 <img src="<?= $escaper->escapeUrl($logoUrl) ?>"
                      alt="<?= /* @noEscape -- escaped above */ $logoAlt ?>"
-                     width="140" height="40"
+                     width="<?= (int) $logoSize['width'] ?>" height="<?= (int) $logoSize['height'] ?>"
                      class="h-10 w-auto object-contain"
                      loading="eager" fetchpriority="high">
             <?php else: ?>
@@ -142,6 +151,9 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                 </svg>
             </a>
 
+            <?php /* No wish list icon while the wish list is switched off for the store: the header
+                    state request then answers no wish list fragment either. */ ?>
+            <?php if ($wishlistEnabled): ?>
             <a id="hyperion-wishlist-count"
                href="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
                data-hyperion-wishlist-count
@@ -154,8 +166,10 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                           d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                 </svg>
             </a>
+            <?php endif; ?>
 
             <?php /* Account dropdown -- lazy-loads welcome/account fragment */ ?>
+            <?php $headerLinksHtml = trim((string) $block->getChildHtml('header_links', false)); ?>
             <hyperion-dropdown placement="bottom-end"
                                menu-label="<?= $escaper->escapeHtmlAttr(__('Account')) ?>"
                                class="hidden lg:inline-block">
@@ -181,6 +195,13 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                         <?= $escaper->escapeHtml(__('Loading...')) ?>
                     </span>
                 </div>
+                <?php /* Links of other modules (core `top.links`, Magento_Theme::html/header/links.phtml):
+                         nothing at all without one, the panel then holds the account menu only. */ ?>
+                <?php if ($headerLinksHtml !== ''): ?>
+                    <div class="mt-1 min-w-[220px] bg-surface border border-subtle rounded-lg shadow-lg p-1">
+                        <?= /* @noEscape -- rendered block */ $headerLinksHtml ?>
+                    </div>
+                <?php endif; ?>
             </hyperion-dropdown>
 
             <?php /* Mini-cart drawer */ ?>
@@ -258,7 +279,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                                name="q"
                                placeholder="<?= $escaper->escapeHtmlAttr(__('Search')) ?>"
                                autocomplete="off"
-                               minlength="2"
+                               <?= /* @noEscape -- integers */ $searchLengthAttributes ?>
                                class="w-full pl-9 pr-3 py-2 text-sm border border-subtle rounded-lg bg-surface
                                       focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
                                       placeholder:text-muted">
@@ -274,16 +295,19 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                                   hover:bg-primary/10 hover:text-primary transition-colors">
                             <?= $escaper->escapeHtml(__('My account')) ?>
                         </a>
+                        <?php if ($wishlistEnabled): ?>
                         <a href="<?= $escaper->escapeUrl($block->getUrl('wishlist')) ?>"
                            class="block py-2 px-3 rounded-lg text-secondary font-medium
                                   hover:bg-primary/10 hover:text-primary transition-colors">
                             <?= $escaper->escapeHtml(__('My Wish List')) ?>
                         </a>
+                        <?php endif; ?>
                         <a href="<?= $escaper->escapeUrl($block->getUrl('catalog/product_compare')) ?>"
                            class="block py-2 px-3 rounded-lg text-secondary font-medium
                                   hover:bg-primary/10 hover:text-primary transition-colors">
                             <?= $escaper->escapeHtml(__('Compare')) ?>
                         </a>
+                        <?= /* @noEscape -- rendered block */ $headerLinksHtml ?>
                     </div>
                 </nav>
             </hyperion-dropdown>
@@ -308,7 +332,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                        type="search"
                        name="q"
                        placeholder="<?= $escaper->escapeHtmlAttr(__('Search products...')) ?>"
-                       minlength="2"
+                       <?= /* @noEscape -- integers */ $searchLengthAttributes ?>
                        class="w-full min-w-0 px-3 py-2 text-sm border border-subtle rounded-lg bg-surface text-secondary">
                 <button type="submit"
                         class="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-on-primary">
@@ -351,7 +375,7 @@ $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\
                        name="q"
                        placeholder="<?= $escaper->escapeHtmlAttr(__('Search products...')) ?>"
                        autocomplete="off"
-                       minlength="2"
+                       <?= /* @noEscape -- integers */ $searchLengthAttributes ?>
                        class="w-full pl-12 pr-4 py-3 text-base border border-subtle rounded-lg bg-surface
                               focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
                               placeholder:text-muted"

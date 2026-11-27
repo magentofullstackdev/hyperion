@@ -6,12 +6,21 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
 
-    <!-- Expose $viewModels (ViewModelRegistry) in every PHP template.
-         Lets templates request their collaborators without layout XML args. -->
+    <!-- Public interfaces of the htmx response builders and the fragment cache headers. -->
+    <preference for="Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface"
+                type="Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer"/>
+    <preference for="Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface"
+                type="Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer"/>
+    <preference for="Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface"
+                type="Magentofullstackdev\HyperionCore\Model\CacheHeaders"/>
+
+    <!-- Expose $hyperionViewModels, and $viewModels where the Hyperion theme owns it, in every PHP
+         template. sortOrder 1000: runs after the plugins of other modules that set $viewModels, so
+         the theme scope decides which registry the variable holds. -->
     <type name="Magento\Framework\View\TemplateEngine\Php">
         <plugin name="hyperion_core_template_viewmodels"
                 type="Magentofullstackdev\HyperionCore\Plugin\Framework\View\TemplateEngine\PhpPlugin"
-                sortOrder="10"/>
+                sortOrder="1000"/>
     </type>
 
 </config>

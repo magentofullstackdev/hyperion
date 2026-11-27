@@ -39,12 +39,12 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 
 | Tier | Platform | PHP | Varnish | Install | Mode | Release | Date | E2E suite | Feature scripts | PHPUnit | phpstan L5 errors | phpcs errors |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, counts below | 926 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.6` | 2026-11-18 | 86 / 86 | `pw-cls` 51, `pw-a11y` 19, `pw-checkout-flow` 182, `pw-critical` 39, `pw-fallback-pages` 72 | not rerun (see the row above) | not rerun | not rerun |
-| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | all green, counts below | 1410 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.7` | 2026-11-25 | 86 / 86 | all green, the full battery with the counts of the row above | 1383 (PHPUnit 12) | 0 | 0 |
+| 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | all green, see the note on counts below | 1410 (PHPUnit 12) | 0 | 0 |
 | 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.6` | 2026-11-20 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
-| 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 10) | 0 | not in the smoke battery |
-| 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.6` | 2026-11-19 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 51, `pw-listing-state` 26 | 926 (PHPUnit 12) | 0 | not in the smoke battery |
+| 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 65, `pw-listing-state` 26 | 1410 (PHPUnit 10) | 0 | not in the smoke battery |
+| 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 65, `pw-listing-state` 26 | 1410 (PHPUnit 12) | 0 | not in the smoke battery |
 
 The plugin target check passed on every row run for this release (every
 plugin method of the modules targets an existing public method of its
@@ -64,20 +64,39 @@ error, no failed request).
 The shipped VCL, unchanged since `0.9.0-beta.5`, compiled (`varnishd -C`)
 on Varnish 8.0, 7.7, 7.6 and 7.4 at that release.
 
-On the Mage-OS 4.0 row the full battery passed on 2026-11-19. Six scripts
+On the Mage-OS 4.0 row the full battery ran on 2026-11-27. Eight scripts
 count fewer checks there because the install has one store view, one
 currency, no reCAPTCHA v3 keys and no Braintree module
-(`pw-megamenu-admin.mjs` 21, `pw-cart-features.mjs` 89,
-`pw-fallback-pages.mjs` 62, `pw-catalog-completeness.mjs` 38,
+(`pw-megamenu-admin.mjs` 21, `pw-cart-features.mjs` 101,
+`pw-fallback-pages.mjs` 82, `pw-catalog-completeness.mjs` 38,
 `pw-checkout-flow.mjs` 160 without the Braintree card orders,
-`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped). An earlier run of
-that battery failed two checks of `pw-captcha.mjs`: the platform answers a
-refused CAPTCHA word at Place Order with HTTP 429 where Magento answers
-400, and the checkout now shows that refusal at the CAPTCHA field on both.
+`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped,
+`pw-payment-api.mjs` 129, `pw-extension-points.mjs` 209). An earlier run
+on this platform found two defects, both fixed in this release: the
+platform answers the order id as a JSON string, which kept a redirect
+payment method from reaching its hosted page, and the closed discount
+code form of the cart had no reserved height. At `0.9.0-beta.6` the platform's HTTP 429 answer
+to a refused CAPTCHA word at Place Order (Magento answers 400) was found
+the same way; the checkout shows that refusal at the CAPTCHA field on both.
 On that row the Open Graph and JSON-LD checks ran against the platform SEO
 module, see "Mage-OS 4.0 SEO module" below.
 
-One row ran on a build that lacks the last changes of the release: the
+One row was not run again for `0.9.0-beta.7`: the row of the published
+Composer repository (its battery runs after the publication) shows its
+`0.9.0-beta.6` run. The production mode row is a run of 2026-11-25 on a
+build of this release that lacked its last changes (the persistent cart
+rules for SOAP, GraphQL, the gift message and the cart estimator, the
+writer of a handed-over checkout draft, the express add with "redirect
+to cart" on, the admin field of the cart summary limit): they have unit
+tests and are part of the runs of the other four rows, and every template
+passed Magento's HTML minifier on 2026-11-27. The first Magento 2.4.9 row
+and the Mage-OS 4.0 row are one full battery each on the release tree
+(on the first row `pw-shipping-extensions.mjs` ran once more by itself
+after its script got a wait it lacked); the two Tier 2 rows are smoke
+runs on the same tree.
+
+At `0.9.0-beta.6` one row ran on a build that lacked the last changes of
+that release: the
 production mode row predates the HTTP 429 change above, the rule that hides
 a Braintree method without a client token, and the last additions (the void
 of an authorization after a failed order, the Braintree client token cache
@@ -86,39 +105,46 @@ product image default). All of them have unit tests and are part of the
 runs of every other `0.9.0-beta.6` row.
 
 Counts of the first row (Magento 2.4.9, PHP 8.4, developer mode,
-2026-11-19), one line per script, every check passed, with a note under
+2026-11-27), one line per script, every check passed, with a note under
 the table:
 
 | Script | Checks |
 |---|---|
 | `pw-suite.mjs` (guest and customer journeys) | 86 |
 | `pw-a11y.mjs` (accessibility gate) | 19 |
-| `pw-ui-polish.mjs` | 34 |
-| `pw-cls.mjs` (layout shift, CLS 0) | 51 |
+| `pw-ui-polish.mjs` | 63 |
+| `pw-cls.mjs` (layout shift, CLS 0) | 65 |
 | `pw-critical.mjs` | 39 |
 | `pw-search-shield.mjs` | 45 |
-| `pw-catalogmode.mjs` | 35 |
+| `pw-catalogmode.mjs` | 37 |
 | `pw-megamenu.mjs` | 19 |
 | `pw-megamenu-admin.mjs` | 22 |
 | `pw-infinite-scroll.mjs` | 15 |
-| `pw-cart-features.mjs` | 95 |
+| `pw-cart-features.mjs` | 107 |
 | `pw-agreements.mjs` | 15 |
 | `pw-orders-widgets-ga4.mjs` | 49 |
-| `pw-fallback-pages.mjs` | 72 |
+| `pw-fallback-pages.mjs` | 92 |
 | `pw-catalog-completeness.mjs` | 39 |
 | `pw-checkout-login.mjs` | 13 |
-| `pw-sidebars.mjs` | 12 |
+| `pw-sidebars.mjs` | 16 |
+| `pw-custom-attributes.mjs` (customer and address attributes) | 15 |
 | `pw-cart-edit.mjs` | 20 |
 | `pw-variant-stock.mjs` | 7 |
 | `pw-listing-state.mjs` | 26 |
 | `pw-checkout-flow.mjs --with-braintree` | 182 |
 | `pw-checkout-resilience.mjs` | 93 |
-| `pw-captcha.mjs --with-braintree` | 127 |
+| `pw-captcha.mjs --with-braintree` | 124 |
+| `pw-payment-api.mjs` (payment renderer contract, sample payment module) | 149 |
+| `pw-shipping-extensions.mjs` (sample shipping extension) | 63 |
+| `pw-extension-points.mjs` (storefront containers and hooks) | 211 |
 
 `pw-cart-features.mjs` with `--with-fpt --with-custom-total` ran 115 checks
-on 2026-11-18.
+on 2026-11-18. `pw-captcha.mjs` skipped three checks of the reCAPTCHA v2
+checkbox journey on 2026-11-27, because Google's widget did not confirm
+the tick for the headless browser (127 checks on 2026-11-25).
 
-Frontend unit tests (Vitest) on the release tree: theme 431, checkout 1154.
+Frontend unit tests (Vitest) on the release tree: theme 515, checkout 1477,
+the checkout testing kit 87.
 PHPUnit: all eleven modules have tests; the count in the matrix is what
 the PHPUnit version of the platform reports.
 
@@ -136,12 +162,12 @@ It is a lab number on a developer machine, not a field measurement.
 
 The second row is a run in production mode on Magento 2.4.9 with
 Magento's JS, CSS and HTML minification on (`dev/js/minify_files`,
-`dev/css/minify_files`, `dev/template/minify_html`), on 2026-11-18: 216 of
-216 Hyperion templates were minified and pass `php -l`, every Hyperion asset
-kept its built file name, and the six scripts of that row passed (449
-checks, 15 orders placed, two of them with a Braintree sandbox card). The
-image CAPTCHA template and the date of birth field were not rendered in
-that run (minified and lint clean only). The
+`dev/css/minify_files`, `dev/template/minify_html`), on 2026-11-25: the
+full battery of the first row passed there with the same counts (PHPUnit,
+phpstan, phpcs, every feature script, the suite), the home page is
+minified HTML and every Hyperion asset kept its built file name. In
+production mode `pw-payment-api.mjs` runs the shopper's side of one check
+(a payment method without a renderer is hidden, no diagnostic row). The
 public demo ([demo.hyperionfront.dev](https://demo.hyperionfront.dev),
 Magento 2.4.9, PHP 8.5, Varnish 8) runs in production mode and is the
 standing production-mode install. On every other row the battery ran in

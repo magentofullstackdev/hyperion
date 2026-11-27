@@ -7,7 +7,7 @@
  *
  * Emits the same HTMX-driven anchor markup used in layer/view.phtml so the grid
  * swap behavior is consistent regardless of which rendering path is active.
- * Swatch attributes render as a chip grid (colour / image chips, text pills)
+ * Swatch attributes render as a chip grid (color / image chips, text pills)
  * with the same HTMX contract on every chip, see the view.phtml counterpart.
  *
  * $filter is set on the block by FilterRenderer before toHtml() is called.
@@ -30,6 +30,9 @@ $listBlock = $listing->getListBlock($block->getLayout());
 $fragmentUrl = $listing->getFragmentUrl($listBlock);
 $gridId = $listing->getGridTargetId();
 $swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\LayerFilterSwatches::class);
+// "Display Product Count" of Catalog > Layered Navigation: the number next to each option.
+$showCount = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\StoreOptions::class)
+    ->isLayerProductCountDisplayed();
 ?>
 <?php if ($swatchFilters->isSwatchFilter($filter)): ?>
     <?php
@@ -46,7 +49,7 @@ $swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewM
             if ($swatch === null) {
                 continue;
             }
-            $chipName = $swatch['label'] . ' (' . $swatch['count'] . ')';
+            $chipName = $showCount ? $swatch['label'] . ' (' . $swatch['count'] . ')' : $swatch['label'];
             $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl());
             ?>
             <li>
@@ -108,7 +111,9 @@ $swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewM
                     classes all own their output escaping; render it raw.
                 */ ?>
                 <span><?= /* @noEscape */ $item->getLabel() ?></span>
-                <span class="text-muted text-xs">(<?= (int) $item->getCount() ?>)</span>
+                <?php if ($showCount): ?>
+                    <span class="text-muted text-xs">(<?= (int) $item->getCount() ?>)</span>
+                <?php endif; ?>
             </a>
         </li>
     <?php endforeach; ?>

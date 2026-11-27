@@ -1,0 +1,2 @@
+const r="mt-1 block h-[42px] w-full rounded-md border bg-surface px-3";function l(e){const o=e.designTokens;return{input:{"font-size":o.fontSize||"16px","font-family":o.fontFamily||"system-ui, sans-serif",color:o.color||"#1f2937"},"::placeholder":{color:o.colorMuted||"#6b7280"},".invalid":{color:o.colorDanger||"#dc2626"}}}export{r as H,l as r};
+//# sourceMappingURL=hosted-field-styles-BsXQymF1.js.map

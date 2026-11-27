@@ -33,6 +33,11 @@ use Magento\PageCache\Model\Config as PageCacheConfig;
  *   element_id      id of the wrapper span
  *   placeholder     HTML shown until HTMX swaps (mode 3 only)
  *   hx_trigger      HTMX trigger for mode 3 (default `load`)
+ *
+ * The layout arguments above are the public contract of the block.
+ *
+ * @api
+ * @since 0.9.0
  */
 class EsiFragment extends Template
 {

@@ -1,0 +1,193 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Generic fields of the user-defined customer / address attributes of a form
+ * (HyperionCustomer\ViewModel\UserAttributes), printed by the theme's register,
+ * account edit and address edit forms when no module filled the core hook.
+ *
+ * Block data: `entity_type` (customer | customer_address), `form_code`,
+ * `entity` (current values), `name_scope` (request scope of the field names:
+ * `address` on the register form, empty elsewhere), `id_prefix`,
+ * `rendered_html` (output of the hook children: an attribute whose field is
+ * already there is skipped) and `iso_dates` (post dates as ISO; otherwise a
+ * date is converted to the store format core's date filter expects).
+ *
+ * Field names follow core's form extraction: `<code>`, `<code>[]` for
+ * multiselect and multiline, inside `<name_scope>[...]` when a scope is set.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$userAttributes = $viewModels->require(\Magentofullstackdev\HyperionCustomer\ViewModel\UserAttributes::class);
+$entity = $block->getData('entity');
+$fields = $userAttributes->getFields(
+    (string) $block->getData('entity_type'),
+    (string) $block->getData('form_code'),
+    $entity instanceof \Magento\Framework\DataObject || $entity instanceof \Magento\Framework\Api\CustomAttributesDataInterface
+        ? $entity
+        : null
+);
+$scope = (string) $block->getData('name_scope');
+$idPrefix = (string) ($block->getData('id_prefix') ?: 'hyperion-attribute-');
+$renderedHtml = (string) $block->getData('rendered_html');
+$dateFormat = $block->getData('iso_dates') ? '' : $userAttributes->getDateFormat();
+
+$visible = [];
+foreach ($fields as $field) {
+    $base = $scope !== '' ? $scope . '[' . $field['code'] . ']' : $field['code'];
+    if (str_contains($renderedHtml, 'name="' . $base . '"') || str_contains($renderedHtml, 'name="' . $base . '[')) {
+        continue;
+    }
+    $field['name'] = in_array($field['input'], ['multiselect', 'multiline'], true) ? $base . '[]' : $base;
+    $field['base_name'] = $base;
+    $field['id'] = $idPrefix . $field['code'];
+    $visible[] = $field;
+}
+if (!$visible) {
+    return;
+}
+$hasDate = false;
+$inputClass = 'w-full px-4 py-2.5 border border-subtle rounded-lg bg-surface '
+    . 'focus:ring-2 focus:ring-primary focus:border-primary outline-none';
+$labelClass = 'block text-sm font-medium text-secondary mb-1';
+$requiredMark = '<span class="text-error" aria-hidden="true">*</span>';
+?>
+<div class="space-y-5"
+     data-hyperion-user-attributes="<?= $escaper->escapeHtmlAttr((string) $block->getData('form_code')) ?>">
+    <?php foreach ($visible as $field): ?>
+        <?php
+        $rules = $field['rules'];
+        $lengthAttributes = '';
+        if (isset($rules['min_text_length']) && (int) $rules['min_text_length'] > 0) {
+            $lengthAttributes .= ' minlength="' . (int) $rules['min_text_length'] . '"';
+        }
+        if (isset($rules['max_text_length']) && (int) $rules['max_text_length'] > 0) {
+            $lengthAttributes .= ' maxlength="' . (int) $rules['max_text_length'] . '"';
+        }
+        $validation = (string) ($rules['input_validation'] ?? '');
+        $required = $field['required'] ? 'required' : '';
+        ?>
+        <div data-hyperion-user-attribute="<?= $escaper->escapeHtmlAttr($field['code']) ?>">
+            <?php if ($field['input'] === 'boolean' || $field['input'] === 'multiline'): ?>
+                <fieldset>
+                    <legend class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                        <?= $escaper->escapeHtml($field['label']) ?>
+                        <?= $field['required'] ? /* @noEscape */ $requiredMark : '' ?>
+                    </legend>
+                    <?php if ($field['input'] === 'boolean'): ?>
+                        <div class="flex items-center gap-6">
+                            <?php foreach (['1' => __('Yes'), '0' => __('No')] as $optionValue => $optionLabel): ?>
+                                <?php $optionId = $field['id'] . '-' . $optionValue; ?>
+                                <label for="<?= $escaper->escapeHtmlAttr($optionId) ?>"
+                                       class="inline-flex items-center gap-2 text-sm text-secondary">
+                                    <input type="radio"
+                                           id="<?= $escaper->escapeHtmlAttr($optionId) ?>"
+                                           name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                                           value="<?= $escaper->escapeHtmlAttr((string) $optionValue) ?>"
+                                           class="w-4 h-4 text-primary border-subtle focus:ring-2 focus:ring-primary"
+                                           <?= $field['value'] === (string) $optionValue ? 'checked' : '' ?>
+                                           <?= /* @noEscape */ $required ?>>
+                                    <?= $escaper->escapeHtml($optionLabel) ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="space-y-2">
+                            <?php for ($line = 0; $line < $field['lines']; $line++): ?>
+                                <?php $lineId = $field['id'] . '-' . ($line + 1); ?>
+                                <label for="<?= $escaper->escapeHtmlAttr($lineId) ?>" class="sr-only">
+                                    <?= $escaper->escapeHtml(__('%1 line %2', $field['label'], $line + 1)) ?>
+                                </label>
+                                <input type="text"
+                                       id="<?= $escaper->escapeHtmlAttr($lineId) ?>"
+                                       name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                                       value="<?= $escaper->escapeHtmlAttr((string) ($field['value'][$line] ?? '')) ?>"
+                                       class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                                       <?= /* @noEscape */ $lengthAttributes ?>
+                                       <?= $line === 0 ? /* @noEscape */ $required : '' ?>>
+                            <?php endfor; ?>
+                        </div>
+                    <?php endif; ?>
+                </fieldset>
+            <?php else: ?>
+                <label for="<?= $escaper->escapeHtmlAttr($field['id']) ?>"
+                       class="<?= $escaper->escapeHtmlAttr($labelClass) ?>">
+                    <?= $escaper->escapeHtml($field['label']) ?>
+                    <?= $field['required'] ? /* @noEscape */ $requiredMark : '' ?>
+                </label>
+                <?php if ($field['input'] === 'textarea'): ?>
+                    <textarea id="<?= $escaper->escapeHtmlAttr($field['id']) ?>"
+                              name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                              rows="3"
+                              class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                              <?= /* @noEscape */ $lengthAttributes ?>
+                              <?= /* @noEscape */ $required ?>><?= $escaper->escapeHtml($field['value']) ?></textarea>
+                <?php elseif ($field['input'] === 'select' || $field['input'] === 'multiselect'): ?>
+                    <?php $isMultiple = $field['input'] === 'multiselect'; ?>
+                    <?php $selected = $isMultiple ? $field['value'] : [$field['value']]; ?>
+                    <?php if ($isMultiple): ?>
+                        <?php /* Posted when no option is selected, so a cleared selection is saved. */ ?>
+                        <input type="hidden" name="<?= $escaper->escapeHtmlAttr($field['base_name']) ?>" value="">
+                    <?php endif; ?>
+                    <select id="<?= $escaper->escapeHtmlAttr($field['id']) ?>"
+                            name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                            class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                            <?= $isMultiple ? 'multiple' : '' ?>
+                            <?= /* @noEscape */ $required ?>>
+                        <?php if (!$isMultiple): ?>
+                            <option value=""><?= $escaper->escapeHtml(__('Please select')) ?></option>
+                        <?php endif; ?>
+                        <?php foreach ($field['options'] as $option): ?>
+                            <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"
+                                <?= in_array($option['value'], $selected, true) ? 'selected' : '' ?>>
+                                <?= $escaper->escapeHtml($option['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php elseif ($field['input'] === 'date'): ?>
+                    <?php $hasDate = $hasDate || $dateFormat !== ''; ?>
+                    <input type="date"
+                           id="<?= $escaper->escapeHtmlAttr($field['id']) ?>"
+                           name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                           value="<?= $escaper->escapeHtmlAttr($field['value']) ?>"
+                           class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                           <?php if (!empty($rules['date_range_min'])): ?>
+                               min="<?= $escaper->escapeHtmlAttr(gmdate('Y-m-d', (int) $rules['date_range_min'])) ?>"
+                           <?php endif; ?>
+                           <?php if (!empty($rules['date_range_max'])): ?>
+                               max="<?= $escaper->escapeHtmlAttr(gmdate('Y-m-d', (int) $rules['date_range_max'])) ?>"
+                           <?php endif; ?>
+                           <?php if ($dateFormat !== ''): ?>
+                               data-hyperion-date-format="<?= $escaper->escapeHtmlAttr($dateFormat) ?>"
+                           <?php endif; ?>
+                           <?= /* @noEscape */ $required ?>>
+                <?php else: ?>
+                    <?php
+                    $type = match ($validation) {
+                        'email' => 'email',
+                        'url' => 'url',
+                        default => 'text',
+                    };
+                    ?>
+                    <input type="<?= $escaper->escapeHtmlAttr($type) ?>"
+                           id="<?= $escaper->escapeHtmlAttr($field['id']) ?>"
+                           name="<?= $escaper->escapeHtmlAttr($field['name']) ?>"
+                           value="<?= $escaper->escapeHtmlAttr($field['value']) ?>"
+                           class="<?= $escaper->escapeHtmlAttr($inputClass) ?>"
+                           <?php if ($validation === 'numeric'): ?>inputmode="numeric" pattern="[0-9]*"<?php endif; ?>
+                           <?= /* @noEscape */ $lengthAttributes ?>
+                           <?= /* @noEscape */ $required ?>>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php if ($hasDate): ?>
+    <?php $dateFormatJs = $block->getLayout()->createBlock(\Magento\Framework\View\Element\Template::class); ?>
+    <?php if ($dateFormatJs instanceof \Magento\Framework\View\Element\Template): ?>
+        <?= $dateFormatJs->setTemplate('Magentofullstackdev_HyperionCustomer::form/date-format-js.phtml')->toHtml() ?>
+    <?php endif; ?>
+<?php endif; ?>

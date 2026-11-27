@@ -7,7 +7,10 @@
 // it, 3columns splits them, 1column prints the additional sidebar under the
 // inline filter bar above the product grid (category/view.phtml), the account
 // pages print it under the account menu, and a disabled wishlist (feature or
-// sidebar setting) renders no wishlist sidebar at all. Logs in as the sample
+// sidebar setting) renders no wishlist sidebar at all. Recently Ordered: the
+// account sidebar of a customer with orders lists their items and its form
+// adds the ticked one to the cart (the line is removed again at the end); a
+// guest never sees it and no category page renders it. Logs in as the sample
 // customer (the caller clears the customer_login reCAPTCHA type for the
 // run, see docs/development.md),
 // adds one wishlist item and two compare items from the category tiles,
@@ -44,6 +47,16 @@ const categoryPath = u('/men/tops-men.html');
 const attrId = sql("SELECT attribute_id FROM eav_attribute WHERE attribute_code='page_layout' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')").trim();
 const catId = sql("SELECT entity_id FROM catalog_category_entity WHERE entity_id IN (SELECT entity_id FROM catalog_category_entity_varchar WHERE attribute_id=(SELECT attribute_id FROM eav_attribute WHERE attribute_code='url_key' AND entity_type_id=(SELECT entity_type_id FROM eav_entity_type WHERE entity_type_code='catalog_category')) AND value='tops-men') LIMIT 1").trim();
 const setLayout = (layout) => { sql(`DELETE FROM catalog_category_entity_varchar WHERE attribute_id=${attrId} AND entity_id=${catId}`); if (layout) sql(`INSERT INTO catalog_category_entity_varchar (attribute_id, store_id, entity_id, value) VALUES (${attrId}, 0, ${catId}, '${layout}')`); flush(); };
+// An interrupted run puts the layout, the wish list settings and the cart lines back too.
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+        console.error(`\n${signal}: restoring the install`);
+        try { setLayout(''); } catch { /* reported by the next run */ }
+        for (const [configPath, snapshot] of previousWishlist) { try { restoreConfig(configPath, snapshot); } catch { /* idem */ } }
+        try { removeReorderLines(); flush(); } catch { /* idem */ }
+        process.exit(130);
+    });
+}
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 900 } });
 const page = await ctx.newPage();
@@ -57,6 +70,15 @@ const geometry = () => page.evaluate(() => {
     return { columns: box('.page-columns'), main: box('.column.main'), filters: box('.sidebar-main'), inlineFilters: box('[data-hyperion-inline-filters]'), inlineSidebar: box('[data-hyperion-inline-sidebar]'), additional: box('#maincontent > div > .sidebar-additional'), wishlist: box('[data-hyperion-wishlist-sidebar]'), compare: box('[data-hyperion-compare-sidebar]'), accountNav: box('hyperion-account-nav'), accountSidebar: box('[data-hyperion-account-shell] .sidebar-additional'), grid: box('#hyperion-product-grid, [data-hyperion-list-mode]') };
 });
 // The tile controls toggle: start from empty lists so the clicks add (the sample customer's lists are test data).
+// The Recently Ordered block of the account sidebar, and the cart lines it added (removed at the end).
+const REORDER = '[data-hyperion-reorder-sidebar]';
+const reorderAdded = [];
+const removeReorderLines = () => {
+    if (!reorderAdded.length) return;
+    const ids = reorderAdded.map(Number).filter(Boolean).join(',');
+    sql(`UPDATE quote SET trigger_recollect = 1 WHERE entity_id IN (SELECT quote_id FROM quote_item WHERE item_id IN (${ids})); DELETE FROM quote_item WHERE item_id IN (${ids}) OR parent_item_id IN (${ids})`);
+    reorderAdded.length = 0;
+};
 const clearLists = () => sql("DELETE FROM wishlist_item WHERE wishlist_id IN (SELECT wishlist_id FROM wishlist WHERE customer_id = (SELECT entity_id FROM customer_entity WHERE email = 'roni_cost@example.com')); DELETE FROM catalog_compare_item WHERE customer_id = (SELECT entity_id FROM customer_entity WHERE email = 'roni_cost@example.com')");
 try {
     setLayout('');
@@ -105,6 +127,45 @@ try {
     check('account: sidebars in the left column under the account menu', g.accountNav && g.accountSidebar && g.wishlist?.visible && g.accountSidebar.x === g.accountNav.x && g.accountSidebar.y >= g.accountNav.y + g.accountNav.h - 1 && !g.additional, JSON.stringify({ nav: g.accountNav, sidebar: g.accountSidebar, pageLayoutWrapper: g.additional }));
     check('account: no right-hand sidebar wrapper anywhere', (await page.locator('#maincontent > div > .sidebar-additional:visible').count()) === 0);
     check('account: the content starts at the container edge (no empty rail)', g.columns && g.main && g.main.x - g.columns.x <= 24 && g.main.w >= g.columns.w - 48, JSON.stringify({ columns: g.columns, main: g.main }));
+    // Recently Ordered: the sample customer has orders, so the account sidebar lists their items.
+    const reorder = await page.evaluate((sel) => {
+        const root = document.querySelector(sel);
+        const form = root?.querySelector('form[action*="checkout/cart/addgroup"]');
+        const boxes = [...(form?.querySelectorAll('input[type="checkbox"][name="order_items[]"]') ?? [])];
+        return {
+            count: document.querySelectorAll(sel).length,
+            inAccountSidebar: !!root?.closest('[data-hyperion-account-shell] .sidebar-additional, [data-hyperion-account-shell] aside'),
+            visible: !!root && root.getBoundingClientRect().height > 0,
+            method: form?.getAttribute('method') ?? '',
+            formKey: !!form?.querySelector('input[name="form_key"]'),
+            items: boxes.length,
+            enabled: boxes.filter((b) => !b.disabled).length,
+            deadInit: root?.querySelectorAll('[data-mage-init], script[type="text/x-magento-init"]').length ?? -1,
+        };
+    }, REORDER);
+    check('account: Recently Ordered is in the account sidebar with a POST form, the form key and at most five items', reorder.count === 1 && reorder.visible && reorder.inAccountSidebar && reorder.method.toLowerCase() === 'post' && reorder.formKey && reorder.items > 0 && reorder.items <= 5 && reorder.deadInit === 0, JSON.stringify(reorder));
+    if (reorder.enabled > 0) {
+        const quoteItems = () => sql(`SELECT GROUP_CONCAT(i.item_id) FROM quote_item i JOIN quote q ON q.entity_id = i.quote_id WHERE q.is_active = 1 AND q.customer_id = (SELECT entity_id FROM customer_entity WHERE email = 'roni_cost@example.com') AND i.parent_item_id IS NULL`).trim().replace(/^NULL$/, '');
+        const before = new Set(quoteItems().split(',').filter(Boolean));
+        const ticked = await page.evaluate((sel) => {
+            const box = [...document.querySelectorAll(`${sel} input[type="checkbox"][name="order_items[]"]`)].find((b) => !b.disabled);
+            const label = box ? document.querySelector(`label[for="${box.id}"]`) : null;
+            return { id: box?.id ?? '', name: (label?.textContent ?? '').replace(/\s+/g, ' ').trim() };
+        }, REORDER);
+        await page.check(`#${ticked.id}`);
+        // Core's addgroup goes back to the page of the form (or to the cart with "redirect to cart" on).
+        await Promise.all([page.waitForNavigation({ timeout: 30000 }).catch(() => {}), page.click(`${REORDER} form button[type="submit"]`)]);
+        await page.waitForLoadState('networkidle').catch(() => {});
+        const added = quoteItems().split(',').filter((id) => id && !before.has(id));
+        reorderAdded.push(...added);
+        await open(page, base + '/checkout/cart/', { waitUntil: 'networkidle' });
+        const cartNames = await page.evaluate(() => [...document.querySelectorAll('[data-hyperion-cart-item]')].map((li) => li.textContent.replace(/\s+/g, ' ').trim()));
+        check('account: Recently Ordered adds the ticked item to the cart', ticked.name !== '' && cartNames.some((text) => text.includes(ticked.name)) && added.length >= 1, JSON.stringify({ ticked: ticked.name, added: added.length }));
+    } else {
+        check('account: Recently Ordered offers at least one item that can be added (every item is out of stock)', false, JSON.stringify(reorder));
+    }
+    await open(page, base + categoryPath, { waitUntil: 'networkidle' });
+    check('category page as a customer with orders: no Recently Ordered block', (await page.locator(REORDER).count()) === 0 && (await page.locator('form[action*="checkout/cart/addgroup"]').count()) === 0);
     // a guest on 3columns: the wishlist / compare rail is empty, the page keeps two columns
     const guest = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 900 } });
     const guestPage = await guest.newPage();
@@ -112,6 +173,14 @@ try {
     await open(guestPage, base + categoryPath, { waitUntil: 'networkidle' });
     const guestGrid = await guestPage.evaluate(() => { const c = document.querySelector('.page-columns'); const m = document.querySelector('.column.main'); return { columns: getComputedStyle(c).gridTemplateColumns.split(' ').length, mainRight: Math.round(m.getBoundingClientRect().right), columnsRight: Math.round(c.getBoundingClientRect().right) }; });
     check('3columns as a guest: the empty right rail goes, the content reaches the container edge', guestGrid.columns === 2 && guestGrid.columnsRight - guestGrid.mainRight <= 24, JSON.stringify(guestGrid));
+    // A guest never gets Recently Ordered: not on a category, not on the home page, not on the sign in page.
+    const guestReorder = [];
+    for (const target of [categoryPath, '/', '/customer/account/login/', '/customer/account/']) {
+        await open(guestPage, base + target, { waitUntil: 'networkidle' });
+        const found = (await guestPage.locator(REORDER).count()) + (await guestPage.locator('form[action*="checkout/cart/addgroup"]').count());
+        if (found) guestReorder.push(`${target}: ${found}`);
+    }
+    check('guest: no Recently Ordered block on the category, home, sign in and account pages', guestReorder.length === 0, guestReorder.join(' | '));
     await guest.close();
     setLayout('');
     // wishlist feature off: no wishlist sidebar element at all
@@ -126,6 +195,7 @@ try {
     setLayout('');
     for (const [configPath, snapshot] of previousWishlist) restoreConfig(configPath, snapshot);
     clearLists();
+    removeReorderLines();
     flush();
     await browser.close();
 }

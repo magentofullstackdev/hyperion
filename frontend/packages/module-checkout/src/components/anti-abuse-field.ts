@@ -47,7 +47,7 @@ import type { CaptchaFormId, RecaptchaAction } from '../types/captcha.js';
 import { t } from '../utils/i18n.js';
 import { orderRecaptchaAction } from '../store/anti-abuse.js';
 import type { CaptchaChangeDetail, CaptchaField } from './captcha-field.js';
-import { mountRecaptchaCheckbox, unmountRecaptchaCheckbox } from './hyperion-recaptcha.js';
+import { mountRecaptchaCheckbox, unmountRecaptchaCheckbox } from './recaptcha-client.js';
 
 /** Set once the chunk of `<hc-captcha>` arrived, so the fields that wait for it render again. */
 const captchaFieldLoaded = new Signal.State(false);

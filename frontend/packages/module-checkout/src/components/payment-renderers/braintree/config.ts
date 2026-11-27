@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Typed readers for the Braintree slices of `checkoutConfig`.
+ * Typed readers for the Braintree slices of `checkoutConfig` (the page's
+ * configuration, handed in by the caller: `context.firstParty.config()`).
  *
  * Shapes follow the PHP providers of PayPal_Braintree 4.8:
  *   - `payment.braintree`          Model/Ui/ConfigProvider.php
@@ -12,7 +13,7 @@
  *   - `payment.braintree_cc_vault` Model/Ui/Vault/ConfigProvider.php
  *   - `vault.<code>.is_enabled`    Magento_Vault Model/Ui/VaultConfigProvider.php
  */
-import { getCheckoutConfig } from '../../../bootstrap-config.js';
+import type { CheckoutConfig } from '../../../types/config.js';
 
 export const BRAINTREE_CODE = 'braintree';
 export const BRAINTREE_CC_VAULT_CODE = 'braintree_cc_vault';
@@ -84,8 +85,11 @@ export interface PayPalFundingConfig {
 
 type Slice = Readonly<Record<string, unknown>>;
 
-function paymentSlice(code: string): Slice | null {
-    const slice = getCheckoutConfig().payment?.[code];
+/** The part of the checkout configuration the readers use. */
+export type BraintreeSource = Pick<CheckoutConfig, 'payment'> & { readonly vault?: unknown };
+
+function paymentSlice(config: BraintreeSource, code: string): Slice | null {
+    const slice = config.payment?.[code];
     return slice && typeof slice === 'object' ? slice : null;
 }
 
@@ -112,8 +116,8 @@ function buttonStyle(value: unknown): PayPalButtonStyle {
     return style;
 }
 
-export function getBraintreeCardConfig(): BraintreeCardConfig | null {
-    const slice = paymentSlice(BRAINTREE_CODE);
+export function getBraintreeCardConfig(config: BraintreeSource): BraintreeCardConfig | null {
+    const slice = paymentSlice(config, BRAINTREE_CODE);
     if (!slice) return null;
     const countrySpecific: Record<string, readonly string[]> = {};
     const rawCountry = slice['countrySpecificCardTypes'];
@@ -141,8 +145,8 @@ export function getBraintreeCardConfig(): BraintreeCardConfig | null {
     };
 }
 
-export function getThreeDSecureConfig(): ThreeDSecureConfig | null {
-    const slice = paymentSlice(THREE_D_SECURE_CODE);
+export function getThreeDSecureConfig(config: BraintreeSource): ThreeDSecureConfig | null {
+    const slice = paymentSlice(config, THREE_D_SECURE_CODE);
     if (!slice) return null;
     const threshold = parseFloat(String(slice['thresholdAmount'] ?? 0));
     return {
@@ -155,8 +159,8 @@ export function getThreeDSecureConfig(): ThreeDSecureConfig | null {
     };
 }
 
-export function getBraintreePayPalConfig(): BraintreePayPalConfig | null {
-    const slice = paymentSlice(BRAINTREE_PAYPAL_CODE);
+export function getBraintreePayPalConfig(config: BraintreeSource): BraintreePayPalConfig | null {
+    const slice = paymentSlice(config, BRAINTREE_PAYPAL_CODE);
     if (!slice) return null;
     const merchantCountry = str(slice['merchantCountry']);
     return {
@@ -176,8 +180,8 @@ export function getBraintreePayPalConfig(): BraintreePayPalConfig | null {
     };
 }
 
-export function getBraintreeGooglePayConfig(): BraintreeGooglePayConfig | null {
-    const slice = paymentSlice(BRAINTREE_GOOGLEPAY_CODE);
+export function getBraintreeGooglePayConfig(config: BraintreeSource): BraintreeGooglePayConfig | null {
+    const slice = paymentSlice(config, BRAINTREE_GOOGLEPAY_CODE);
     if (!slice) return null;
     return {
         isActive: flag(slice['isActive']),
@@ -193,22 +197,22 @@ export function getBraintreeGooglePayConfig(): BraintreeGooglePayConfig | null {
 }
 
 /** `braintree_paypal_credit` / `braintree_paypal_paylater`: extra buttons of the PayPal method. */
-export function getPayPalFundingConfig(funding: 'credit' | 'paylater'): PayPalFundingConfig | null {
-    const slice = paymentSlice(`${BRAINTREE_PAYPAL_CODE}_${funding}`);
+export function getPayPalFundingConfig(config: BraintreeSource, funding: 'credit' | 'paylater'): PayPalFundingConfig | null {
+    const slice = paymentSlice(config, `${BRAINTREE_PAYPAL_CODE}_${funding}`);
     if (!slice) return null;
     return { isActive: flag(slice['isActive']), style: buttonStyle(slice['style']) };
 }
 
-export function isCcVaultCvvVerifyEnabled(): boolean {
-    return flag(paymentSlice(BRAINTREE_CC_VAULT_CODE)?.['cvvVerify']);
+export function isCcVaultCvvVerifyEnabled(config: BraintreeSource): boolean {
+    return flag(paymentSlice(config, BRAINTREE_CC_VAULT_CODE)?.['cvvVerify']);
 }
 
 /**
  * Mirror of Magento_Vault `vault-enabler.js::isVaultEnabled()`: the "save for
  * later" choice only exists for logged-in customers of an active vault method.
  */
-export function isVaultEnabledFor(vaultCode: string): boolean {
-    const vault = getCheckoutConfig()['vault'];
+export function isVaultEnabledFor(config: BraintreeSource, vaultCode: string): boolean {
+    const vault = config.vault;
     if (!vault || typeof vault !== 'object') return false;
     const entry = (vault as Record<string, unknown>)[vaultCode];
     if (!entry || typeof entry !== 'object') return false;

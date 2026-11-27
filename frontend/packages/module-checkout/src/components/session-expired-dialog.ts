@@ -14,17 +14,9 @@
 import { LitElement, html, nothing } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
 
-import { peekCheckoutConfig } from '../bootstrap-config.js';
 import { getStore } from '../store/index.js';
 import { t } from '../utils/i18n.js';
-
-/** The sign in page that returns to the checkout; core's plain one when the config names none. */
-function loginUrl(): string {
-    const hyperion = peekCheckoutConfig()?.hyperion;
-    if (hyperion?.loginUrl) return hyperion.loginUrl;
-    const base = hyperion?.baseUrl ?? '/';
-    return `${base.endsWith('/') ? base : `${base}/`}customer/account/login/`;
-}
+import { loginUrl } from '../utils/login-url.js';
 
 export class SessionExpiredDialog extends SignalWatcher(LitElement) {
     public override createRenderRoot(): HTMLElement { return this; }

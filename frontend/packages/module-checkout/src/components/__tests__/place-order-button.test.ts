@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const prepareOrder = vi.fn();
 const submitOrder = vi.fn().mockResolvedValue(null);
@@ -14,6 +14,7 @@ vi.mock('../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
 import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type: 'json' };
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
 import { setCheckoutConfig } from '../../bootstrap-config.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import { resetFlowSelectorsForTests } from '../../store/flow-selectors.js';
 import { createStore, setStoreForTests, type Store } from '../../store/index.js';
 import { expectedAgreements } from '../../store/selectors.js';
@@ -22,15 +23,26 @@ import type { Address } from '../../types/address.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import { setActiveCatalogForTests, t } from '../../utils/i18n.js';
 import { navigateTo } from '../../utils/navigate.js';
-import { getCheckoutBlocker, prepareCheckout } from '../payment-renderers/checkout-gate.js';
-import { getPaymentRenderer, registerPaymentRenderer } from '../payment-renderers/registry.js';
+import { checkoutSnapshots } from '../../extension/context.js';
+import { requestCheckoutValidation } from '../payment-host/pipeline.js';
 import '../payment-renderers/payment-offline.js';
 import '../address-form.js';
+import type { PaymentElement } from '../../../extension-api.js';
+import { registerHosted, resetHostedForTests } from '../payment-host/element-registry.js';
+import { matchEntry, type PaymentEntry } from '../payment-host/entries.js';
+import { loadPaymentHost } from '../payment-host/host.js';
+import { patchRow, resetPaymentRowsForTests } from '../payment-host/row-state.js';
 import '../place-order-button.js';
 import type { AddressForm } from '../address-form.js';
 import { placeOrderHint, type PlaceOrderButton } from '../place-order-button.js';
 import { initFlowSelectors } from '../../store/flow-selectors.js';
 import { placeOrderBlocker } from '../../store/place-order-hint.js';
+
+/** The configuration with the bundle's payment renderer entries, as the server emits them. */
+function withPaymentRenderers(config: CheckoutConfig | null): CheckoutConfig {
+    const base = (config ?? {}) as unknown as { hyperion?: Record<string, unknown> };
+    return { ...base, hyperion: { ...(base.hyperion ?? {}), paymentRenderers } } as unknown as CheckoutConfig;
+}
 
 const FLATRATE = {
     carrier_code: 'flatrate',
@@ -79,6 +91,11 @@ function openGate(store: Store): void {
 }
 
 describe('<place-order-button> while the order cannot be placed', () => {
+    beforeAll(async () => {
+        // The order pipeline lives in the payment host chunk; a page has it before the first press.
+        await loadPaymentHost();
+    });
+
     let store: Store;
     let wrapper: HTMLElement;
 
@@ -94,7 +111,7 @@ describe('<place-order-button> while the order cannot be placed', () => {
         });
         vi.mocked(navigateTo).mockClear();
         setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
-        setCheckoutConfig(guestFixture as unknown as CheckoutConfig);
+        setCheckoutConfig(withPaymentRenderers(guestFixture as unknown as CheckoutConfig));
         resetFlowSelectorsForTests();
         resetValidationRequestsForTests();
         expectedAgreements.set([]);
@@ -108,6 +125,22 @@ describe('<place-order-button> while the order cannot be placed', () => {
         document.body.innerHTML = '';
         setStoreForTests(null);
         resetFlowSelectorsForTests();
+    });
+
+    beforeEach(() => {
+        resetPaymentRowsForTests();
+        // The element of the selected offline row, as the payment list creates it.
+        registerHosted({
+            rowKey: 'checkmo',
+            code: 'checkmo',
+            entry: matchEntry('checkmo') as PaymentEntry,
+            element: document.createElement('div') as unknown as PaymentElement,
+            beats: new Set(),
+        });
+    });
+
+    afterEach(() => {
+        resetHostedForTests();
     });
 
     async function mountAll(formValue: Address | null = null): Promise<PlaceOrderButton> {
@@ -144,6 +177,26 @@ describe('<place-order-button> while the order cannot be placed', () => {
         expect(firstname.getAttribute('aria-invalid')).toBe('true');
         expect(firstname.nextElementSibling?.textContent?.trim()).toBe(t('Hyperion_Checkout::validation_required'));
         expect(document.activeElement).toBe(firstname);
+    });
+
+    it('lists every invalid field under the hint as a link that focuses it', async () => {
+        const el = await mountAll();
+
+        el.querySelector<HTMLButtonElement>('button')!.click();
+        await settle(wrapper);
+
+        const summary = el.querySelector('[data-place-order-errors]');
+        const links = Array.from(summary?.querySelectorAll('a') ?? []);
+        expect(links.length).toBeGreaterThan(1);
+        const firstname = wrapper.querySelector<HTMLInputElement>('input[name="firstname"]')!;
+        const link = links.find((candidate) => candidate.getAttribute('href') === `#${firstname.id}`);
+        expect(link?.textContent?.trim()).toBe(firstname.labels?.[0]?.textContent?.replace('*', '').trim());
+        expect(link?.textContent).not.toContain('*');
+
+        (document.activeElement as HTMLElement | null)?.blur();
+        const lastname = wrapper.querySelector<HTMLInputElement>('input[name="lastname"]')!;
+        links.find((candidate) => candidate.getAttribute('href') === `#${lastname.id}`)?.click();
+        expect(document.activeElement).toBe(lastname);
     });
 
     it('names the shipping method when the address is fine and the rates were never confirmed', async () => {
@@ -282,74 +335,6 @@ describe('<place-order-button> while the order cannot be placed', () => {
         expect(el.querySelector<HTMLButtonElement>('button')!.disabled).toBe(true);
     });
 
-    it('the step of the payment renderer runs after the pending edits were saved and before the order is sent', async () => {
-        openGate(store);
-        const calls: string[] = [];
-        prepareOrder.mockImplementation(async () => { calls.push('prepare'); return { status: 'ready' }; });
-        submitOrder.mockImplementation(async () => { calls.push('submit'); return 15; });
-        registerPaymentRenderer({
-            code: 'hooked',
-            component: 'payment-offline',
-            beforePlaceOrder: async () => { calls.push('hook'); return { nonce: 'n-1' }; },
-        });
-        store.availablePaymentMethods.set([{ code: 'hooked', title: 'Hooked' }]);
-        store.selectedPaymentMethod.set('hooked');
-        const el = await mountAll(ADDRESS);
-
-        el.querySelector<HTMLButtonElement>('button')!.click();
-        await settle(wrapper);
-
-        expect(calls).toEqual(['prepare', 'hook', 'submit']);
-        expect(store.paymentMethodData.get()['hooked']).toEqual({ nonce: 'n-1' });
-        expect(cancelOrder).not.toHaveBeenCalled();
-        expect(navigateTo).toHaveBeenCalledTimes(1);
-    });
-
-    it('a payment step that fails gives the latch back, shows its message and sends no order', async () => {
-        openGate(store);
-        registerPaymentRenderer({
-            code: 'hooked',
-            component: 'payment-offline',
-            beforePlaceOrder: () => Promise.reject(new Error('The card was declined.')),
-        });
-        store.availablePaymentMethods.set([{ code: 'hooked', title: 'Hooked' }]);
-        store.selectedPaymentMethod.set('hooked');
-        const el = await mountAll(ADDRESS);
-
-        el.querySelector<HTMLButtonElement>('button')!.click();
-        await settle(wrapper);
-
-        expect(cancelOrder).toHaveBeenCalledTimes(1);
-        expect(submitOrder).not.toHaveBeenCalled();
-        expect(store.globalError.get()).toBe('The card was declined.');
-    });
-
-    it('a redirect gateway places under the latch and gives it back when it could not start', async () => {
-        openGate(store);
-        const afterPlaceOrderFailed = vi.fn();
-        const placeOrder = vi.fn().mockResolvedValue(null);
-        registerPaymentRenderer({ code: 'hooked', component: 'payment-offline', placeOrder, afterPlaceOrderFailed });
-        store.availablePaymentMethods.set([{ code: 'hooked', title: 'Hooked' }]);
-        store.selectedPaymentMethod.set('hooked');
-        const el = await mountAll(ADDRESS);
-
-        el.querySelector<HTMLButtonElement>('button')!.click();
-        await settle(wrapper);
-
-        expect(prepareOrder).toHaveBeenCalledTimes(1);
-        expect(placeOrder).toHaveBeenCalledTimes(1);
-        expect(submitOrder).not.toHaveBeenCalled();
-        expect(cancelOrder).toHaveBeenCalledTimes(1);
-        expect(afterPlaceOrderFailed).toHaveBeenCalledTimes(1);
-
-        placeOrder.mockResolvedValue(`${window.location.origin}/paypal/express/start/`);
-        cancelOrder.mockReset();
-        el.querySelector<HTMLButtonElement>('button')!.click();
-        await settle(wrapper);
-        expect(navigateTo).toHaveBeenCalledTimes(1);
-        expect(cancelOrder).not.toHaveBeenCalled();
-    });
-
     it('an order confirmed by the quote after its answer was lost continues on the success page like any other', async () => {
         openGate(store);
         submitOrder.mockResolvedValue('placed-unconfirmed');
@@ -374,19 +359,16 @@ describe('<place-order-button> while the order cannot be placed', () => {
         expect(navigateTo).not.toHaveBeenCalled();
     });
 
-    it('once the order exists the button stays in its loading state and a click does nothing', async () => {
+    it('once the order exists the button gives way to the placed status and nothing can be pressed', async () => {
         openGate(store);
         const el = await mountAll(ADDRESS);
         store.isPlacingOrder.set(true);
         store.orderPlaced.set(true);
         store.orderOutcome.set('placed');
-        prepareOrder.mockResolvedValue({ status: 'blocked', reason: 'busy' });
         await settle(wrapper);
 
-        const native = el.querySelector<HTMLButtonElement>('button')!;
-        expect(native.disabled).toBe(true);
-        native.click();
-        await settle(wrapper);
+        expect(el.querySelector('[data-hyperion-place-order]')).toBeNull();
+        expect(el.querySelector('[data-order-placed]')).not.toBeNull();
         expect(submitOrder).not.toHaveBeenCalled();
     });
 
@@ -460,17 +442,21 @@ describe('<place-order-button> while the order cannot be placed', () => {
             store.selectedPaymentMethod.set('purchaseorder');
             const selectors = initFlowSelectors();
 
+            // What the form element of the method reported.
+            patchRow('purchaseorder', { valid: false, message: 'Enter the purchase order number.' });
             expect(selectors.canPlaceOrder.get()).toBe(false);
             expect(placeOrderHint(store, selectors)).toBe('Enter the purchase order number.');
 
-            store.paymentMethodData.set({ purchaseorder: { po_number: 'HYP-PO-1' } });
+            patchRow('purchaseorder', { valid: true, message: null });
             expect(selectors.canPlaceOrder.get()).toBe(true);
             expect(placeOrderHint(store, selectors)).toBeNull();
-            expect(getPaymentRenderer('purchaseorder')?.isReady?.()).toBe(true);
         });
     });
 
     describe('the gate of a renderer that owns Place Order', () => {
+        /** What the element reads before its wallet opens. */
+        const getCheckoutBlocker = (): string | null => checkoutSnapshots().snapshot().blocker;
+
         it('is open when the button would be', () => {
             openGate(store);
             expect(getCheckoutBlocker()).toBeNull();
@@ -497,23 +483,27 @@ describe('<place-order-button> while the order cannot be placed', () => {
             store.availablePaymentMethods.set([{ code: 'purchaseorder', title: 'Purchase Order' }]);
             store.selectedPaymentMethod.set('purchaseorder');
 
-            expect(await prepareCheckout()).toBeNull();
-            expect(prepareOrder).toHaveBeenCalledWith({ skipPaymentReady: true });
+            expect(await requestCheckoutValidation()).toBe(true);
+            // A check of the gate, not an order: no `before-place-order` event.
+            expect(prepareOrder).toHaveBeenCalledWith({ skipPaymentReady: true, announce: false });
             expect(cancelOrder).toHaveBeenCalledTimes(1);
         });
 
         it('the gate a click awaits answers the missing piece, the failure of a save, or an order under way', async () => {
             openGate(store);
             store.selectedShippingMethod.set(null);
-            expect(await prepareCheckout()).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
+            expect(await requestCheckoutValidation()).toBe(false);
+            expect(store.globalError.get()).toBe(t('Hyperion_Checkout::checkout_incomplete_shipping_method'));
             expect(cancelOrder).not.toHaveBeenCalled();
 
             prepareOrder.mockResolvedValue({ status: 'blocked', reason: 'write-failed' });
             store.globalError.set('The store is temporarily unavailable.');
-            expect(await prepareCheckout()).toBe('The store is temporarily unavailable.');
+            expect(await requestCheckoutValidation()).toBe(false);
+            expect(store.globalError.get()).toBe('The store is temporarily unavailable.');
 
             prepareOrder.mockResolvedValue({ status: 'blocked', reason: 'busy' });
-            expect(await prepareCheckout()).toBe(t('Hyperion_Checkout::placing_order'));
+            expect(await requestCheckoutValidation()).toBe(false);
+            expect(store.globalError.get()).toBe(t('Hyperion_Checkout::placing_order'));
         });
 
         it('blocks a selection the server never confirmed and a separate billing address that is not synced', () => {
@@ -531,13 +521,15 @@ describe('<place-order-button> while the order cannot be placed', () => {
             openGate(store);
             store.isPlacingOrder.set(true);
             store.orderPlaced.set(true);
-            expect(getCheckoutBlocker()).not.toBeNull();
+            store.orderOutcome.set('placed');
+            expect(checkoutSnapshots().snapshot().isPlacingOrder).toBe(true);
         });
 
         it('does not wait for the readiness of the renderer that is asking', () => {
             openGate(store);
             store.availablePaymentMethods.set([{ code: 'purchaseorder', title: 'Purchase Order' }]);
             store.selectedPaymentMethod.set('purchaseorder');
+            patchRow('purchaseorder', { valid: false, message: 'Enter the purchase order number.' });
 
             expect(placeOrderHint(store, initFlowSelectors())).not.toBeNull();
             expect(getCheckoutBlocker()).toBeNull();

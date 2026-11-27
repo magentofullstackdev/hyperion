@@ -22,6 +22,8 @@ import { installListingFilters } from './lib/listing-filters.js';
 import { installCollapsibleNav } from './lib/collapsible-nav.js';
 import { installCartQty } from './lib/cart-qty.js';
 import { installCheckoutLinkBusy } from './lib/checkout-link-busy.js';
+import { installPrint } from './lib/print.js';
+import { forgetCheckoutDraftsAfterSignOut } from './lib/checkout-drafts.js';
 import { whenThemeStylesheetReady } from './lib/theme-stylesheet.js';
 // The confirmation dialog answers `hx-confirm` from the first htmx event on,
 // so it is the one component the entry carries itself.
@@ -349,12 +351,14 @@ function bootSendFriend() {
 }
 
 // Components requested only by pages (or swapped fragments, the mini-cart
-// drawer) that contain one of their elements: a store without PayPal, a
-// page without a sidebar or a history widget, a store without GA4 never
-// downloads them. Custom elements upgrade when defined later. Like the
-// components above they wait for the theme stylesheet.
+// drawer) that contain one of their elements: a store without express
+// buttons or PayPal, a page without a sidebar or a history widget, a store
+// without GA4 never downloads them. Custom elements upgrade when defined
+// later. Like the components above they wait for the theme stylesheet. The
+// express buttons themselves (the PayPal smart buttons among them) are
+// loaded by <hyperion-express-slot>, each when its box nears the viewport.
 const LAZY_COMPONENTS = {
-    'hyperion-paypal-buttons': () => import('./components/hyperion-paypal-buttons.js'),
+    'hyperion-express-slot': () => import('./components/hyperion-express-slot.js'),
     'hyperion-paypal-message': () => import('./components/hyperion-paypal-message.js'),
     'hyperion-paypal-review': () => import('./components/hyperion-paypal-review.js'),
     'hyperion-wishlist-sidebar': () => import('./components/hyperion-wishlist-sidebar.js'),
@@ -383,6 +387,8 @@ function bootLazyComponents(event) {
 
 function init() {
     ensureFormKey();
+    // The sign-out page: the checkout's typed data of the tab goes with the session.
+    forgetCheckoutDraftsAfterSignOut(document);
     initCookieNotice();
     autoSubmitForms();
     bootPageBuilder();
@@ -412,6 +418,7 @@ function init() {
     installCollapsibleNav(document);
     installCartQty(document);
     installCheckoutLinkBusy(document);
+    installPrint(document);
     document.body.addEventListener('click', onSearchToggleClick);
     document.addEventListener('click', onSearchPanelOutsideClick);
     document.addEventListener('keydown', onDocumentKeydown);

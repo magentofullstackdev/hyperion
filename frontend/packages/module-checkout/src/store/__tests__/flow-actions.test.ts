@@ -35,7 +35,7 @@ vi.mock('../../api/gift-message.js', () => ({
     saveGuestGiftMessage: vi.fn(),
     saveCustomerGiftMessage: vi.fn(),
 }));
-vi.mock('../../components/hyperion-recaptcha.js', () => ({
+vi.mock('../../components/recaptcha-client.js', () => ({
     executeRecaptcha: vi.fn().mockResolvedValue(null),
 }));
 // The taxonomy has its own tests: here a failure keeps the message it was
@@ -68,6 +68,10 @@ vi.mock('../../api/error-kinds.js', () => {
     };
 });
 vi.mock('../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
+vi.mock('../../components/payment-host/host.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../components/payment-host/host.js')>()),
+    notifyOrderNotPlaced: vi.fn(),
+}));
 vi.mock('../../utils/minimum-order.js', () => ({ minimumOrderError: vi.fn(() => null) }));
 
 import * as shippingApi from '../../api/shipping.js';
@@ -75,10 +79,12 @@ import * as paymentApi from '../../api/payment.js';
 import * as couponApi from '../../api/coupon.js';
 import * as cartApi from '../../api/cart.js';
 import * as giftApi from '../../api/gift-message.js';
-import { executeRecaptcha } from '../../components/hyperion-recaptcha.js';
-import { registerPaymentRenderer } from '../../components/payment-renderers/registry.js';
+import { executeRecaptcha } from '../../components/recaptcha-client.js';
+import { notifyOrderNotPlaced } from '../../components/payment-host/host.js';
+import { patchRow, resetPaymentRowsForTests } from '../../components/payment-host/row-state.js';
 import { MagentoApiError, NetworkError, RequestTimeoutError } from '../../api/client.js';
 import { setCheckoutConfig } from '../../bootstrap-config.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import { navigateTo } from '../../utils/navigate.js';
 import { minimumOrderError } from '../../utils/minimum-order.js';
 import type { CheckoutConfig } from '../../types/config.js';
@@ -92,12 +98,28 @@ import {
     reconcilePaymentSelection,
     totalsWithShippingRate,
     type FlowActions,
+    type PlaceOrderOutcome,
 } from '../flow-actions.js';
 import { startInitialRequests } from '../hydrate.js';
 import { stopOrderRecovery } from '../recovery.js';
 import { captchaAnswer, captchaError, resetCaptchaStateForTests, seedCaptchaState, setCaptchaAnswer } from '../captcha-state.js';
 import { placeOrderBlocker } from '../place-order-hint.js';
 import { createSelectors, expectedAgreements } from '../selectors.js';
+
+/**
+ * Place Order without a payment step in between: the two halves of the
+ * flow actions, as the order pipeline runs them.
+ */
+async function placeOrderThrough(actions: FlowActions): Promise<PlaceOrderOutcome> {
+    const prepared = await actions.prepareOrder({ skipPaymentReady: true });
+    return prepared.status === 'ready' ? actions.submitOrder() : null;
+}
+
+/** The configuration with the bundle's payment renderer entries, as the server emits them. */
+function withPaymentRenderers(config: CheckoutConfig | null): CheckoutConfig {
+    const base = (config ?? {}) as unknown as { hyperion?: Record<string, unknown> };
+    return { ...base, hyperion: { ...(base.hyperion ?? {}), paymentRenderers } } as unknown as CheckoutConfig;
+}
 
 const shippingMocks = vi.mocked(shippingApi);
 const paymentMocks = vi.mocked(paymentApi);
@@ -232,7 +254,7 @@ describe('flow actions', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(executeRecaptcha).mockResolvedValue(null);
-        setCheckoutConfig(null as unknown as CheckoutConfig);
+        setCheckoutConfig(withPaymentRenderers(null as unknown as CheckoutConfig));
         store = createStore();
         setStoreForTests(store);
         store.maskedQuoteId.set('masked-1');
@@ -252,7 +274,7 @@ describe('flow actions', () => {
             store.acceptedAgreements.set([7, 12]);
             paymentMocks.placeGuestOrder.mockResolvedValue(1001);
 
-            const orderId = await flow.placeOrder();
+            const orderId = await placeOrderThrough(flow);
 
             expect(orderId).toBe(1001);
             expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
@@ -331,11 +353,11 @@ describe('flow actions', () => {
         it('customer order: same nesting, no email, gateway data kept beside the agreements', async () => {
             store.isGuest.set(false);
             store.selectedPaymentMethod.set('braintree');
-            store.paymentMethodData.set({ braintree: { payment_method_nonce: 'nonce-1' } });
             store.acceptedAgreements.set([3]);
             paymentMocks.placeCustomerOrder.mockResolvedValue(42);
 
-            await flow.placeOrder();
+            expect(await flow.prepareOrder()).toEqual({ status: 'ready' });
+            await flow.submitOrder({ additional_data: { payment_method_nonce: 'nonce-1' } });
 
             const [request] = paymentMocks.placeCustomerOrder.mock.calls[0]!;
             expect(request.paymentMethod).toEqual({
@@ -373,7 +395,7 @@ describe('flow actions', () => {
         it('omits extension_attributes entirely when no agreement was accepted', async () => {
             paymentMocks.placeGuestOrder.mockResolvedValue(5);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
 
             const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(request.paymentMethod).toEqual({ method: 'checkmo' });
@@ -383,7 +405,7 @@ describe('flow actions', () => {
             vi.mocked(executeRecaptcha).mockResolvedValue('rc-token');
             paymentMocks.placeGuestOrder.mockResolvedValue(6);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
 
             expect(executeRecaptcha).toHaveBeenCalledWith('place_order');
             const [, , headers] = paymentMocks.placeGuestOrder.mock.calls[0]!;
@@ -470,7 +492,7 @@ describe('flow actions', () => {
             expect(selectors.canPlaceOrder.get()).toBe(true);
 
             // Antarctica needs no postcode (`general/country/optional_zip_countries`).
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, optionalZipCountries: ['AQ'] } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, optionalZipCountries: ['AQ'] } as unknown as CheckoutConfig));
             store.shippingAddress.set({ ...address, country_id: 'AQ', postcode: '' });
             shippingMocks.estimateGuestShippingMethods.mockResolvedValueOnce([]);
             await flow.estimateShipping();
@@ -708,7 +730,7 @@ describe('flow actions', () => {
             store.billingSynced.set(true);
             paymentMocks.placeCustomerOrder.mockResolvedValue(7);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
 
             const [request] = paymentMocks.placeCustomerOrder.mock.calls[0]!;
             expect(request.billingAddress).toEqual({
@@ -731,7 +753,7 @@ describe('flow actions', () => {
 
         it('sends save_in_address_book as 1 or 0 for a billing address typed on its own and omits an empty telephone', async () => {
             confirmQuote();
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'opt' } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'opt' } as unknown as CheckoutConfig));
             store.billingSameAsShipping.set(false);
             store.billingAddress.set({ ...address, telephone: '', save_in_address_book: false });
             store.billingSynced.set(true);
@@ -747,7 +769,7 @@ describe('flow actions', () => {
             store.billingSynced.set(true);
             paymentMocks.placeGuestOrder.mockResolvedValue(8);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
 
             const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(request.billingAddress.save_in_address_book).toBe(1);
@@ -770,7 +792,7 @@ describe('flow actions', () => {
             expect(saved.addressInformation.billing_address).not.toHaveProperty('save_in_address_book');
             expect(saved.addressInformation.billing_address!.city).toBe('Austin');
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
             const [order] = paymentMocks.placeCustomerOrder.mock.calls[0]!;
             expect(order.billingAddress).not.toHaveProperty('save_in_address_book');
             expect(order.billingAddress.city).toBe('Austin');
@@ -792,7 +814,7 @@ describe('flow actions', () => {
             expect(saved.addressInformation.billing_address!.save_in_address_book).toBe(1);
             expect(store.billingSynced.get()).toBe(true);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
             const [order] = paymentMocks.placeCustomerOrder.mock.calls[0]!;
             expect(order.billingAddress.save_in_address_book).toBe(1);
         });
@@ -904,7 +926,7 @@ describe('flow actions', () => {
 
     describe('rates before the address is complete', () => {
         it('estimates and saves with an empty telephone when the merchant made it optional', async () => {
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'opt' } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'opt' } as unknown as CheckoutConfig));
             store.shippingAddress.set({ ...address, telephone: '' });
             shippingMocks.estimateGuestShippingMethods.mockResolvedValueOnce([method('flatrate', 'flatrate')]);
             shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('57.00'));
@@ -916,7 +938,7 @@ describe('flow actions', () => {
         });
 
         it('country and postcode are enough for the rates and the preselection; nothing is saved until the address is complete', async () => {
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'req' } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'req' } as unknown as CheckoutConfig));
             store.shippingAddress.set({
                 country_id: 'US', postcode: '49628', city: '', firstname: '', lastname: '', telephone: '', street: [''],
             });
@@ -949,13 +971,13 @@ describe('flow actions', () => {
             expect(store.selectedShippingMethod.get()).toEqual(FLATRATE);
 
             store.selectedShippingMethod.set(null);
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true, shippingPreselect: 'first' } } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true, shippingPreselect: 'first' } } as unknown as CheckoutConfig));
             await flow.estimateShipping();
             expect(store.selectedShippingMethod.get()).toEqual(BESTWAY);
 
             store.selectedShippingMethod.set(null);
             vi.mocked(shippingMocks.saveGuestShippingInformation).mockClear();
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true, shippingPreselect: 'none' } } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true, shippingPreselect: 'none' } } as unknown as CheckoutConfig));
             await flow.estimateShipping();
             expect(store.selectedShippingMethod.get()).toBeNull();
             expect(store.estimateState.get()).toBe('ready');
@@ -972,7 +994,7 @@ describe('flow actions', () => {
         };
 
         function installPatterns(): void {
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'req', postCodes } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true }, telephoneConfig: 'req', postCodes } as unknown as CheckoutConfig));
         }
 
         it('a shipping postcode outside the patterns is estimated, saved and ordered with the value as typed', async () => {
@@ -995,7 +1017,7 @@ describe('flow actions', () => {
 
             store.selectedPaymentMethod.set('checkmo');
             expect(selectors.canPlaceOrder.get()).toBe(true);
-            expect(await flow.placeOrder()).toBe(21);
+            expect(await placeOrderThrough(flow)).toBe(21);
             const [, order] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(order.billingAddress.postcode).toBe('ABCDE');
         });
@@ -1010,7 +1032,7 @@ describe('flow actions', () => {
             store.selectedPaymentMethod.set('checkmo');
             expect(selectors.shippingAddressValid.get()).toBe(false);
             expect(selectors.canPlaceOrder.get()).toBe(false);
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
 
             expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
             expect(shippingMocks.saveGuestShippingInformation).not.toHaveBeenCalled();
@@ -1041,7 +1063,7 @@ describe('flow actions', () => {
             expect(paymentMocks.assignGuestBillingAddress).not.toHaveBeenCalled();
             expect(selectors.billingAddressValid.get()).toBe(true);
             expect(selectors.canPlaceOrder.get()).toBe(true);
-            expect(await flow.placeOrder()).toBe(22);
+            expect(await placeOrderThrough(flow)).toBe(22);
         });
 
         it('a virtual quote follows the same rule for its billing address', async () => {
@@ -1052,7 +1074,7 @@ describe('flow actions', () => {
 
             await flow.syncBillingAddress();
             expect(paymentMocks.assignGuestBillingAddress).not.toHaveBeenCalled();
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
 
             store.billingAddress.set({ ...address, firstname: 'Bill', postcode: 'ABCDE' });
@@ -1063,7 +1085,7 @@ describe('flow actions', () => {
             await flow.syncBillingAddress();
             expect(paymentMocks.assignGuestBillingAddress).toHaveBeenCalledTimes(1);
             expect(selectors.canPlaceOrder.get()).toBe(true);
-            expect(await flow.placeOrder()).toBe(23);
+            expect(await placeOrderThrough(flow)).toBe(23);
             const [, order] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(order.billingAddress.postcode).toBe('ABCDE');
         });
@@ -1255,7 +1277,7 @@ describe('flow actions', () => {
             expect(store.totals.get()?.grand_total).toBe('30.00');
             expect(selectors.canPlaceOrder.get()).toBe(true);
 
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
             expect(paymentMocks.assignGuestBillingAddress).toHaveBeenCalledTimes(1);
             expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
         });
@@ -1267,7 +1289,7 @@ describe('flow actions', () => {
             paymentMocks.assignGuestBillingAddress.mockRejectedValueOnce(new Error('Invalid VAT'));
 
             expect(selectors.canPlaceOrder.get()).toBe(false);
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(store.globalError.get()).toBeNull();
             expect(store.sectionStatus.get().billing?.message).toBe('Invalid VAT');
             expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
@@ -1277,7 +1299,7 @@ describe('flow actions', () => {
             paymentMocks.assignGuestBillingAddress.mockResolvedValueOnce(5);
             paymentMocks.getGuestPaymentInformation.mockResolvedValueOnce(details('30.00'));
             paymentMocks.placeGuestOrder.mockResolvedValue(11);
-            expect(await flow.placeOrder()).toBe(11);
+            expect(await placeOrderThrough(flow)).toBe(11);
             expect(store.billingSynced.get()).toBe(true);
             expect(paymentMocks.assignGuestBillingAddress.mock.invocationCallOrder[1]!)
                 .toBeLessThan(paymentMocks.placeGuestOrder.mock.invocationCallOrder[0]!);
@@ -1441,14 +1463,14 @@ describe('flow actions', () => {
             shippingMocks.saveGuestShippingInformation.mockRejectedValueOnce(new Error('Invalid VAT'));
 
             expect(selectors.canPlaceOrder.get()).toBe(false);
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(store.sectionStatus.get()['shipping-methods']?.message).toBe('Invalid VAT');
             expect(store.globalError.get()).toBeNull();
             expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
 
             shippingMocks.saveGuestShippingInformation.mockResolvedValueOnce(details('57.00'));
             paymentMocks.placeGuestOrder.mockResolvedValue(11);
-            expect(await flow.placeOrder()).toBe(11);
+            expect(await placeOrderThrough(flow)).toBe(11);
             expect(store.billingSynced.get()).toBe(true);
         });
     });
@@ -1683,7 +1705,7 @@ describe('flow actions', () => {
             flow.scheduleShippingEstimate();
             expect(shippingMocks.estimateGuestShippingMethods).not.toHaveBeenCalled();
 
-            expect(await flow.placeOrder()).toBe(77);
+            expect(await placeOrderThrough(flow)).toBe(77);
 
             expect(store.shippingDirty.get()).toBe(false);
             expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(1);
@@ -1734,7 +1756,7 @@ describe('flow actions', () => {
             expect(selectors.canPlaceOrder.get()).toBe(false);
             paymentMocks.placeGuestOrder.mockResolvedValue(91);
 
-            expect(await flow.placeOrder()).toBe(91);
+            expect(await placeOrderThrough(flow)).toBe(91);
 
             expect(shippingMocks.saveGuestShippingInformation).toHaveBeenCalledTimes(2);
             const [, resent] = shippingMocks.saveGuestShippingInformation.mock.calls[1]!;
@@ -1792,7 +1814,7 @@ describe('flow actions', () => {
             expect(prepared).toEqual({ status: 'blocked', reason: 'shipping-method' });
             expect(store.isPlacingOrder.get()).toBe(false);
             expect(selectors.canPlaceOrder.get()).toBe(false);
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(paymentMocks.placeGuestOrder).not.toHaveBeenCalled();
         });
 
@@ -1814,7 +1836,7 @@ describe('flow actions', () => {
             await openGate();
             const order = deferred<number>();
             paymentMocks.placeGuestOrder.mockReturnValue(order.promise);
-            const placing = flow.placeOrder();
+            const placing = placeOrderThrough(flow);
             await vi.advanceTimersByTimeAsync(0);
             expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
 
@@ -1856,7 +1878,7 @@ describe('flow actions', () => {
 
             // The latch is back: the next press saves the edit and orders.
             paymentMocks.placeGuestOrder.mockResolvedValue(93);
-            expect(await flow.placeOrder()).toBe(93);
+            expect(await placeOrderThrough(flow)).toBe(93);
             expect(shippingMocks.estimateGuestShippingMethods).toHaveBeenCalledTimes(1);
             const [, order] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(order.billingAddress.postcode).toBe('78701');
@@ -1892,7 +1914,6 @@ describe('flow actions', () => {
 
         it('one save without the data of the order, then one read of the totals', async () => {
             store.acceptedAgreements.set([7]);
-            store.paymentMethodData.set({ banktransfer: { reference: 'x' } });
             store.selectedPaymentMethod.set('banktransfer');
             flow.savePaymentMethod();
             await vi.advanceTimersByTimeAsync(249);
@@ -1979,7 +2000,7 @@ describe('flow actions', () => {
             await vi.advanceTimersByTimeAsync(250);
             expect(paymentMocks.setGuestPaymentInformation).not.toHaveBeenCalled();
 
-            expect(await flow.placeOrder()).toBe(31);
+            expect(await placeOrderThrough(flow)).toBe(31);
 
             const shippingAt = shippingMocks.saveGuestShippingInformation.mock.invocationCallOrder[0]!;
             const paymentAt = paymentMocks.setGuestPaymentInformation.mock.invocationCallOrder[0]!;
@@ -1990,13 +2011,18 @@ describe('flow actions', () => {
         });
 
         it('is skipped for a method whose renderer declines the save on selection', async () => {
-            registerPaymentRenderer({ code: 'purchaseorder', component: 'payment-offline', savesOnSelection: false });
+            setCheckoutConfig({
+                hyperion: {
+                    paymentRenderers: paymentRenderers.map((entry) => (entry.id === 'purchaseorder'
+                        ? { ...entry, savesOnSelection: false }
+                        : entry)),
+                },
+            } as unknown as CheckoutConfig);
             store.selectedPaymentMethod.set('purchaseorder');
             flow.savePaymentMethod();
             await vi.advanceTimersByTimeAsync(500);
 
             expect(paymentMocks.setGuestPaymentInformation).not.toHaveBeenCalled();
-            registerPaymentRenderer({ code: 'purchaseorder', component: 'payment-offline' });
         });
 
         it('a save that fails in the flush of Place Order does not hold the order back: its request carries the method', async () => {
@@ -2012,7 +2038,7 @@ describe('flow actions', () => {
             store.selectedPaymentMethod.set('banktransfer');
             flow.savePaymentMethod();
 
-            expect(await flow.placeOrder()).toBe(32);
+            expect(await placeOrderThrough(flow)).toBe(32);
 
             expect(paymentMocks.setGuestPaymentInformation).toHaveBeenCalledTimes(1);
             const [, order] = paymentMocks.placeGuestOrder.mock.calls[0]!;
@@ -2033,7 +2059,7 @@ describe('flow actions', () => {
 
             store.email.set('ok@example.com');
             paymentMocks.placeGuestOrder.mockResolvedValue(33);
-            expect(await flow.placeOrder()).toBe(33);
+            expect(await placeOrderThrough(flow)).toBe(33);
             expect(paymentMocks.setGuestPaymentInformation).toHaveBeenCalledTimes(1);
             expect(paymentMocks.setGuestPaymentInformation.mock.invocationCallOrder[0]!)
                 .toBeLessThan(paymentMocks.placeGuestOrder.mock.invocationCallOrder[0]!);
@@ -2098,13 +2124,13 @@ describe('flow actions', () => {
         it('after a successful order the placing state stays, the order is marked placed and a second call sends nothing', async () => {
             paymentMocks.placeGuestOrder.mockResolvedValue(1001);
 
-            expect(await flow.placeOrder()).toBe(1001);
+            expect(await placeOrderThrough(flow)).toBe(1001);
             expect(store.isPlacingOrder.get()).toBe(true);
             expect(store.orderPlaced.get()).toBe(true);
             expect(store.orderOutcome.get()).toBe('placed');
             expect(selectors.canPlaceOrder.get()).toBe(false);
 
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(await flow.prepareOrder()).toEqual({ status: 'blocked', reason: 'busy' });
             expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
         });
@@ -2113,8 +2139,8 @@ describe('flow actions', () => {
             const order = deferred<number>();
             paymentMocks.placeGuestOrder.mockReturnValue(order.promise);
 
-            const first = flow.placeOrder();
-            const second = flow.placeOrder();
+            const first = placeOrderThrough(flow);
+            const second = placeOrderThrough(flow);
             // The latch is taken before anything is awaited.
             expect(store.orderOutcome.get()).toBe('placing');
             expect(store.isPlacingOrder.get()).toBe(true);
@@ -2129,7 +2155,7 @@ describe('flow actions', () => {
         it('an order the server refused releases the latch, reopens the queue and shows the message of the server', async () => {
             paymentMocks.placeGuestOrder.mockRejectedValue(new MagentoApiError(400, '400', 'The payment was declined.'));
 
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(store.isPlacingOrder.get()).toBe(false);
             expect(store.orderPlaced.get()).toBe(false);
             expect(store.orderOutcome.get()).toBe('none');
@@ -2167,13 +2193,14 @@ describe('flow actions', () => {
         });
 
         it('a renderer that owns the order is not asked for its own readiness', async () => {
-            registerPaymentRenderer({ code: 'banktransfer', component: 'payment-offline', isReady: () => false });
+            // What the element of the row reported.
+            patchRow('banktransfer', { valid: false });
             store.selectedPaymentMethod.set('banktransfer');
 
             expect(await flow.prepareOrder()).toEqual({ status: 'blocked', reason: 'payment-not-ready' });
             expect(await flow.prepareOrder({ skipPaymentReady: true })).toEqual({ status: 'ready' });
             flow.cancelOrder();
-            registerPaymentRenderer({ code: 'banktransfer', component: 'payment-offline' });
+            resetPaymentRowsForTests();
         });
 
         it('the gate without the latch equals the absence of a blocker', () => {
@@ -2200,10 +2227,10 @@ describe('flow actions', () => {
 
         beforeEach(() => {
             confirmQuote();
-            setCheckoutConfig({
+            setCheckoutConfig(withPaymentRenderers({
                 hyperion: { checkoutVersion: '2.0.0', enabled: true },
                 defaultSuccessPageUrl: '/checkout/onepage/success/',
-            } as unknown as CheckoutConfig);
+            } as unknown as CheckoutConfig));
             paymentMocks.placeGuestOrder.mockRejectedValue(new NetworkError(new TypeError('Failed to fetch')));
             paymentMocks.placeCustomerOrder.mockRejectedValue(new NetworkError(new TypeError('Failed to fetch')));
         });
@@ -2211,7 +2238,7 @@ describe('flow actions', () => {
         it('guest: a cart answered as inactive means the order exists and the call resolves as placed', async () => {
             cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: false, reserved_order_id: '000000205' });
 
-            expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            expect(await placeOrderThrough(flow)).toBe('placed-unconfirmed');
             expect(cartMocks.getGuestCartState).toHaveBeenCalledWith('masked-1');
             expect(store.orderPlaced.get()).toBe(true);
             expect(store.orderOutcome.get()).toBe('placed');
@@ -2227,14 +2254,14 @@ describe('flow actions', () => {
         it('guest: a cart that is gone (404) continues to the success page, where the server decides', async () => {
             cartMocks.getGuestCartState.mockRejectedValue(new MagentoApiError(404, '404', 'No such entity'));
 
-            expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+            expect(await placeOrderThrough(flow)).toBe('placed-unconfirmed');
             expect(store.orderPlaced.get()).toBe(true);
         });
 
         it('guest: a cart that is still active releases the latch, says so next to Place Order and keeps every input', async () => {
             cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: true });
 
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(store.isPlacingOrder.get()).toBe(false);
             expect(store.orderPlaced.get()).toBe(false);
             expect(store.orderOutcome.get()).toBe('none');
@@ -2246,14 +2273,14 @@ describe('flow actions', () => {
 
             // The queue is open again and the next press sends the order.
             paymentMocks.placeGuestOrder.mockResolvedValueOnce(88);
-            expect(await flow.placeOrder()).toBe(88);
+            expect(await placeOrderThrough(flow)).toBe(88);
             expect(store.sectionStatus.get().order).toBeNull();
         });
 
         it('a cart read that fails too keeps the order latched: nothing is saved, a press neither reads nor sends, "Check again" resolves it', async () => {
             cartMocks.getGuestCartState.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
 
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(store.orderOutcome.get()).toBe('unknown');
             expect(store.orderPlaced.get()).toBe(false);
             expect(store.isPlacingOrder.get()).toBe(false);
@@ -2268,7 +2295,7 @@ describe('flow actions', () => {
 
             // A press on Place Order is not the way out.
             expect(await flow.prepareOrder()).toEqual({ status: 'blocked', reason: 'outcome-unknown' });
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
             expect(cartMocks.getGuestCartState).toHaveBeenCalledTimes(1);
             expect(paymentMocks.placeGuestOrder).toHaveBeenCalledTimes(1);
 
@@ -2285,10 +2312,10 @@ describe('flow actions', () => {
         });
 
         it('after an unknown outcome, a cart found still active tells the payment method and lets the next press send the order', async () => {
-            const afterPlaceOrderFailed = vi.fn();
-            registerPaymentRenderer({ code: 'checkmo', component: 'payment-offline', afterPlaceOrderFailed });
+            const afterPlaceOrderFailed = vi.mocked(notifyOrderNotPlaced);
+            afterPlaceOrderFailed.mockClear();
             cartMocks.getGuestCartState.mockRejectedValueOnce(new NetworkError(new TypeError('Failed to fetch')));
-            await flow.placeOrder();
+            await placeOrderThrough(flow);
             expect(store.orderOutcome.get()).toBe('unknown');
             expect(afterPlaceOrderFailed).not.toHaveBeenCalled();
 
@@ -2299,10 +2326,9 @@ describe('flow actions', () => {
             expect(store.sectionStatus.get().order?.message).toBe(NOT_PLACED);
             expect(afterPlaceOrderFailed).toHaveBeenCalledTimes(1);
             expect(navigateTo).not.toHaveBeenCalled();
-            registerPaymentRenderer({ code: 'checkmo', component: 'payment-offline' });
 
             paymentMocks.placeGuestOrder.mockResolvedValueOnce(88);
-            expect(await flow.placeOrder()).toBe(88);
+            expect(await placeOrderThrough(flow)).toBe(88);
             expect(store.orderOutcome.get()).toBe('placed');
         });
 
@@ -2312,7 +2338,7 @@ describe('flow actions', () => {
                 paymentMocks.placeGuestOrder.mockRejectedValue(new RequestTimeoutError());
                 cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: true });
 
-                const placing = flow.placeOrder();
+                const placing = placeOrderThrough(flow);
                 await vi.advanceTimersByTimeAsync(4 * 3000 - 1);
                 expect(store.orderOutcome.get()).toBe('unknown');
                 expect(store.orderStep.get()).toBe('confirming');
@@ -2335,7 +2361,7 @@ describe('flow actions', () => {
                 ));
                 cartMocks.getGuestCartState.mockResolvedValue({ id: 464, is_active: false });
 
-                const placing = flow.placeOrder();
+                const placing = placeOrderThrough(flow);
                 await vi.advanceTimersByTimeAsync(2999);
                 expect(cartMocks.getGuestCartState).not.toHaveBeenCalled();
                 await vi.advanceTimersByTimeAsync(1);
@@ -2357,7 +2383,7 @@ describe('flow actions', () => {
             it('no active cart (404) means the order exists', async () => {
                 cartMocks.getCustomerCartState.mockRejectedValue(new MagentoApiError(404, '404', 'No such entity'));
 
-                expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+                expect(await placeOrderThrough(flow)).toBe('placed-unconfirmed');
                 expect(store.orderPlaced.get()).toBe(true);
                 expect(cartMocks.getGuestCartState).not.toHaveBeenCalled();
             });
@@ -2365,7 +2391,7 @@ describe('flow actions', () => {
             it('the quote of this checkout, still active, means no order: its id is compared as a number', async () => {
                 cartMocks.getCustomerCartState.mockResolvedValue({ id: 465, is_active: true });
 
-                expect(await flow.placeOrder()).toBeNull();
+                expect(await placeOrderThrough(flow)).toBeNull();
                 expect(store.sectionStatus.get().order?.message).toBe(NOT_PLACED);
                 expect(store.isPlacingOrder.get()).toBe(false);
             });
@@ -2373,13 +2399,13 @@ describe('flow actions', () => {
             it('another active cart means the quote of this checkout was ordered', async () => {
                 cartMocks.getCustomerCartState.mockResolvedValue({ id: 470, is_active: true });
 
-                expect(await flow.placeOrder()).toBe('placed-unconfirmed');
+                expect(await placeOrderThrough(flow)).toBe('placed-unconfirmed');
             });
 
             it('a session that ended (401) leaves the outcome unknown and asks the shopper to sign in again', async () => {
                 cartMocks.getCustomerCartState.mockRejectedValue(new MagentoApiError(401, '401', 'Not authorized'));
 
-                expect(await flow.placeOrder()).toBeNull();
+                expect(await placeOrderThrough(flow)).toBeNull();
                 expect(store.orderOutcome.get()).toBe('unknown');
                 expect(store.sessionExpired.get()).toBe(true);
                 expect(store.isPlacingOrder.get()).toBe(false);
@@ -2459,7 +2485,7 @@ describe('flow actions', () => {
                 { checkoutKind: 'stock' }
             ));
 
-            expect(await flow.placeOrder()).toBeNull();
+            expect(await placeOrderThrough(flow)).toBeNull();
 
             const status = store.sectionStatus.get().order;
             expect(status?.kind).toBe('stock');
@@ -2480,10 +2506,10 @@ describe('flow actions', () => {
 
         beforeEach(() => {
             confirmQuote();
-            setCheckoutConfig({
+            setCheckoutConfig(withPaymentRenderers({
                 hyperion: { checkoutVersion: '2.0.0', enabled: true },
                 defaultSuccessPageUrl: '/checkout/onepage/success/',
-            } as unknown as CheckoutConfig);
+            } as unknown as CheckoutConfig));
         });
 
         it('a session that ended closes the queue and shows no section failure: the sign in prompt is the message', async () => {
@@ -2634,7 +2660,7 @@ describe('flow actions', () => {
 
     describe('minimum order amount', () => {
         it('is evaluated again from every totals answer that is applied', async () => {
-            setCheckoutConfig({ hyperion: { checkoutVersion: '2.0.0', enabled: true } } as unknown as CheckoutConfig);
+            setCheckoutConfig(withPaymentRenderers({ hyperion: { checkoutVersion: '2.0.0', enabled: true } } as unknown as CheckoutConfig));
             confirmQuote();
             vi.mocked(minimumOrderError).mockReturnValueOnce('Minimum order amount is 50.');
             shippingMocks.saveGuestShippingInformation.mockResolvedValue(details('12.00'));
@@ -2756,15 +2782,69 @@ describe('flow actions', () => {
         });
     });
 
+    describe('the payment data of the order request', () => {
+        beforeEach(() => { confirmQuote(); });
+
+        it('sends the selected code alone without data, and an empty additional_data not at all', async () => {
+            store.selectedPaymentMethod.set('checkmo');
+            paymentMocks.placeGuestOrder.mockResolvedValue(12);
+
+            expect(await flow.prepareOrder()).toEqual({ status: 'ready' });
+            await flow.submitOrder({ additional_data: {} });
+
+            const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({ method: 'checkmo' });
+        });
+
+        it('takes the method of the data when it names one', async () => {
+            store.selectedPaymentMethod.set('vendor_wallet');
+            paymentMocks.placeGuestOrder.mockResolvedValue(12);
+            store.availablePaymentMethods.set([...store.availablePaymentMethods.get(), { code: 'vendor_wallet', title: 'Wallet' }]);
+
+            await flow.prepareOrder({ skipPaymentReady: true });
+            await flow.submitOrder({ method: 'vendor_wallet_alias', additional_data: { token: 't-1' } });
+
+            const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({ method: 'vendor_wallet_alias', additional_data: { token: 't-1' } });
+        });
+
+        it('merges extension_attributes next to the accepted agreements and drops agreement ids of its own', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            store.selectedPaymentMethod.set('checkmo');
+            store.acceptedAgreements.set([4]);
+            paymentMocks.placeGuestOrder.mockResolvedValue(12);
+
+            expect(await flow.prepareOrder()).toEqual({ status: 'ready' });
+            await flow.submitOrder({ extension_attributes: { agreement_ids: ['99'], vendor_reference: 'r-1' } });
+
+            const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({
+                method: 'checkmo',
+                extension_attributes: { vendor_reference: 'r-1', agreement_ids: ['4'] },
+            });
+            expect(warn).toHaveBeenCalledTimes(1);
+        });
+
+        it('the save of the payment without an order carries the data it is handed', async () => {
+            store.selectedPaymentMethod.set('checkmo');
+            paymentMocks.setGuestPaymentInformation.mockResolvedValue(true);
+
+            await flow.savePaymentInformation({ method: 'other', additional_data: { a: 1 } });
+
+            const [, request] = paymentMocks.setGuestPaymentInformation.mock.calls[0]!;
+            expect(request.paymentMethod).toEqual({ method: 'other', additional_data: { a: 1 } });
+        });
+    });
+
     describe('purchase order number', () => {
         beforeEach(() => { confirmQuote(); });
 
         it('travels as a top-level field of the payment, trimmed, with no additional_data left', async () => {
             store.selectedPaymentMethod.set('purchaseorder');
-            store.paymentMethodData.set({ purchaseorder: { po_number: '  HYP-PO-1  ' } });
             paymentMocks.placeGuestOrder.mockResolvedValue(12);
 
-            await flow.placeOrder();
+            expect(await flow.prepareOrder()).toEqual({ status: 'ready' });
+            await flow.submitOrder({ po_number: '  HYP-PO-1  ' });
 
             const [, request] = paymentMocks.placeGuestOrder.mock.calls[0]!;
             expect(request.paymentMethod).toEqual({ method: 'purchaseorder', po_number: 'HYP-PO-1' });
@@ -2773,10 +2853,9 @@ describe('flow actions', () => {
 
         it('leaves the other keys of the method data in additional_data', async () => {
             store.selectedPaymentMethod.set('purchaseorder');
-            store.paymentMethodData.set({ purchaseorder: { po_number: 'HYP-PO-2', reference: 'dept-7' } });
             paymentMocks.setGuestPaymentInformation.mockResolvedValue(true);
 
-            await flow.savePaymentInformation();
+            await flow.savePaymentInformation({ po_number: 'HYP-PO-2', additional_data: { reference: 'dept-7' } });
 
             const [, request] = paymentMocks.setGuestPaymentInformation.mock.calls[0]!;
             expect(request.paymentMethod).toEqual({

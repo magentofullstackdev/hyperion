@@ -80,7 +80,7 @@ export class SectionStatusElement extends SignalWatcher(LitElement) {
                  data-section-status
                  data-kind=${status.kind}
                  class="rounded-md border border-danger/40 bg-danger/5 p-3 flex flex-wrap items-start gap-x-3 gap-y-2 outline-none focus-visible:ring-2 focus-visible:ring-danger">
-                <p class="flex-1 text-sm text-danger">${status.message}</p>
+                <p class="flex-1 text-sm text-error-strong">${status.message}</p>
                 ${this._renderAction(status)}
             </div>
         `;
@@ -109,18 +109,18 @@ export class SectionStatusElement extends SignalWatcher(LitElement) {
         if (status.kind === 'quote-gone') {
             return html`<a href=${cartUrl()}
                            data-section-status-action
-                           class="text-sm font-medium text-danger underline"
+                           class="text-sm font-medium text-error-strong underline"
                            @click=${discardDrafts}>${t('Hyperion_Checkout::return_to_cart')}</a>`;
         }
         if (status.kind === 'stock') {
             return html`<a href=${cartUrl()}
                            data-section-status-action
-                           class="text-sm font-medium text-danger underline">${t('Hyperion_Checkout::error_stock_link')}</a>`;
+                           class="text-sm font-medium text-error-strong underline">${t('Hyperion_Checkout::error_stock_link')}</a>`;
         }
         if (status.kind === 'blocked') {
             return html`<button type="button"
                                 data-section-status-action
-                                class="text-sm font-medium text-danger underline"
+                                class="text-sm font-medium text-error-strong underline"
                                 @click=${this._reload}>${t('Hyperion_Checkout::reload_page')}</button>`;
         }
         if (!status.retry) return nothing;
@@ -129,7 +129,7 @@ export class SectionStatusElement extends SignalWatcher(LitElement) {
             : t('Hyperion_Checkout::retry');
         return html`<button type="button"
                             data-section-status-action
-                            class="text-sm font-medium text-danger underline aria-disabled:opacity-50 aria-disabled:no-underline"
+                            class="text-sm font-medium text-error-strong underline aria-disabled:opacity-50 aria-disabled:no-underline"
                             aria-disabled=${this._waiting ? 'true' : 'false'}
                             @click=${this._retry}>${label}</button>`;
     }

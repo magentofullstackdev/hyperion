@@ -11,6 +11,7 @@ use Magentofullstackdev\HyperionNavigation\Model\StoreBrand;
 use Magento\Catalog\Helper\Category as CategoryHelper;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory;
 use Magento\Cms\Api\Data\BlockInterface as CmsBlockInterface;
+use Magento\Customer\Block\Account\AuthorizationLink;
 use Magento\Cms\Api\GetBlockByIdentifierInterface;
 use Magento\Cms\Helper\Page as CmsPageHelper;
 use Magento\Cms\Model\Template\Filter as CmsFilter;
@@ -106,6 +107,16 @@ class FooterTest extends TestCase
         self::assertSame([], $footer->getServiceLinks());
     }
 
+    public function testLabelComputedByTheLinkBlockIsKept(): void
+    {
+        $footer = $this->makeFooter(children: ['gift-card-link' => $this->computedLabelLink()]);
+
+        self::assertSame(
+            [['label' => 'Gift Cards', 'url' => self::BASE_URL . 'giftcard/']],
+            $footer->getServiceLinks()
+        );
+    }
+
     public function testLayoutFailureIsLoggedAndGivesNoLinks(): void
     {
         $layout = $this->createStub(LayoutInterface::class);
@@ -119,6 +130,16 @@ class FooterTest extends TestCase
         $footer = $this->makeFooter(layout: $layout, logger: $logger);
 
         self::assertSame([], $footer->getServiceLinks());
+    }
+
+    public function testContactUrlIsTheContactRouteWhileContactUsIsEnabled(): void
+    {
+        self::assertSame(self::BASE_URL . 'contact/', $this->makeFooter()->getContactUrl());
+    }
+
+    public function testContactUrlIsEmptyWhileContactUsIsDisabled(): void
+    {
+        self::assertSame('', $this->makeFooter(contactEnabled: false)->getContactUrl());
     }
 
     public function testStoreNameIsTheBrandName(): void
@@ -163,6 +184,20 @@ class FooterTest extends TestCase
         return $link;
     }
 
+    /**
+     * A link block whose class computes its label (no `label` argument): the label comes from
+     * getLabel(), the block data holds none.
+     */
+    private function computedLabelLink(): AuthorizationLink
+    {
+        $link = $this->createStub(AuthorizationLink::class);
+        $link->method('getLabel')->willReturn('Gift Cards');
+        $link->method('getData')->willReturn(null);
+        $link->method('getHref')->willReturn(self::BASE_URL . 'giftcard/');
+
+        return $link;
+    }
+
     private function cmsBlock(bool $active): CmsBlockInterface
     {
         $block = $this->createStub(CmsBlockInterface::class);
@@ -180,7 +215,8 @@ class FooterTest extends TestCase
         array $children = [],
         ?LayoutInterface $layout = null,
         ?LoggerInterface $logger = null,
-        ?CmsBlockInterface $aboutBlock = null
+        ?CmsBlockInterface $aboutBlock = null,
+        bool $contactEnabled = true
     ): Footer {
         if ($layout === null) {
             $layout = $this->createStub(LayoutInterface::class);
@@ -203,6 +239,10 @@ class FooterTest extends TestCase
                 'hyperion/footer/privacy_cms_identifier' => 'privacy-policy',
                 default => null,
             });
+        $scopeConfig->method('isSetFlag')
+            ->willReturnCallback(
+                static fn (string $path): bool => $path === 'contact/contact/enabled' && $contactEnabled
+            );
 
         $cmsPageHelper = $this->createStub(CmsPageHelper::class);
         $cmsPageHelper->method('getPageUrl')

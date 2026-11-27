@@ -14,6 +14,7 @@ use Magento\Framework\View\DesignInterface;
 use Magentofullstackdev\HyperionCms\PageBuilder\ContentTypePool;
 use Magentofullstackdev\HyperionCms\PageBuilder\Filter\TemplateFilterPlugin;
 use Magentofullstackdev\HyperionCms\PageBuilder\Renderer\Slider;
+use Magentofullstackdev\HyperionCore\Model\Design\ThemeScope;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -45,15 +46,17 @@ class TemplateFilterPluginTest extends TestCase
         $this->appState = $this->createStub(AppState::class);
     }
 
-    private function plugin(): TemplateFilterPlugin
+    /**
+     * @param string[] $enabledThemes
+     */
+    private function plugin(array $enabledThemes = ['Magentofullstackdev/hyperion']): TemplateFilterPlugin
     {
         $logger = $this->createStub(LoggerInterface::class);
         return new TemplateFilterPlugin(
             new ContentTypePool($logger, [new Slider($logger)]),
             $logger,
-            $this->design,
-            $this->appState,
-            ['Magentofullstackdev/hyperion']
+            new ThemeScope($this->design, $this->appState, $logger),
+            $enabledThemes
         );
     }
 
@@ -125,6 +128,25 @@ class TemplateFilterPluginTest extends TestCase
         $this->activeDesign(Area::AREA_FRONTEND, ['Magento/luma', 'Magento/blank']);
 
         $this->assertSame(self::SLIDER_HTML, $this->plugin()->afterFilter($this->filter, self::SLIDER_HTML));
+    }
+
+    public function testAThemeListedInEnabledThemesIsRewrittenWithoutBeingAHyperionChild(): void
+    {
+        $this->activeDesign(Area::AREA_FRONTEND, ['Acme/standalone']);
+
+        $result = $this->plugin(['Acme/standalone'])->afterFilter($this->filter, self::SLIDER_HTML);
+
+        $this->assertStringContainsString('<hyperion-slider', $result);
+    }
+
+    public function testTheHyperionThemeIsLeftAloneWhenEnabledThemesNoLongerListsIt(): void
+    {
+        $this->activeDesign(Area::AREA_FRONTEND, ['Magentofullstackdev/hyperion']);
+
+        $this->assertSame(
+            self::SLIDER_HTML,
+            $this->plugin(['Acme/standalone'])->afterFilter($this->filter, self::SLIDER_HTML)
+        );
     }
 
     public function testAdminAreaIsLeftAlone(): void

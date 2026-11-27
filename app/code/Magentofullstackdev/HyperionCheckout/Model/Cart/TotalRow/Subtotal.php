@@ -8,11 +8,12 @@ namespace Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address\Total;
 use Magento\Tax\Model\Config as TaxConfig;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
  * Subtotal excluding tax, including tax or both, as the cart tax display asks.
  */
-class Subtotal implements RendererInterface
+class Subtotal implements TotalRowRendererInterface
 {
     /**
      * @param RowBuilder $rowBuilder

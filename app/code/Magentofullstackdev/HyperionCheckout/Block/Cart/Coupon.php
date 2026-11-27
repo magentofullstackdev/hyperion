@@ -6,7 +6,6 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Block\Cart;
 
 use Magentofullstackdev\HyperionCheckout\ViewModel\CartData;
-use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Data\Form\FormKey;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Template;
@@ -75,20 +74,6 @@ class Coupon extends Template
         $error = $this->getData('coupon_error');
 
         return is_string($error) ? $error : '';
-    }
-
-    /**
-     * Whether the block is rendered for an HTMX swap. Scripting is on then,
-     * and htmx parses the answer with scripting off: a `<noscript>` fallback
-     * would become real elements in the page.
-     *
-     * @return bool
-     */
-    public function isHtmxRequest(): bool
-    {
-        $request = $this->getRequest();
-
-        return $request instanceof HttpRequest && (bool) $request->getHeader('HX-Request');
     }
 
     public function getFormKey(): string

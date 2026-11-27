@@ -15,16 +15,32 @@ namespace Magentofullstackdev\HyperionCore\Model\Cache;
  * is read when the output is complete (`DegradedResponsePlugin`), by the
  * fragments (`CacheHeaders::applyPublic()`) and by the blocks that hold a
  * block cache. Shared instance: it lives for the request.
+ *
+ * Public contract: `mark()`, called by any code that prints a fallback
+ * instead of essential data, and `isDegraded()`.
+ *
+ * @api
+ * @since 0.9.0
  */
 class DegradedResponse
 {
     private bool $degraded = false;
 
+    /**
+     * Flag the request: its output is shown once and never stored.
+     *
+     * @return void
+     */
     public function mark(): void
     {
         $this->degraded = true;
     }
 
+    /**
+     * Whether something in this request printed a fallback.
+     *
+     * @return bool
+     */
     public function isDegraded(): bool
     {
         return $this->degraded;

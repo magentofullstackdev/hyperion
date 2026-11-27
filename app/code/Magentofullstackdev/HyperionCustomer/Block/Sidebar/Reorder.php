@@ -5,30 +5,43 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCustomer\Block\Sidebar;
 
+use Magento\Customer\Model\Session as CustomerSession;
+use Magento\Framework\App\Http\Context as HttpContext;
+use Magento\Framework\View\Element\Template\Context;
 use Magento\Sales\Block\Reorder\Sidebar;
 
 /**
- * Hyperion "Recently Ordered" sidebar block.
+ * "Recently Ordered" sidebar of the account pages (`hyperion.reorder.sidebar`).
  *
- * Extends Magento's core Sidebar but drops the HTTP-context auth gate
- * in `_toHtml()`. The core check returns an empty string for anything
- * that isn't an authenticated Luma request -- but Hyperion's Varnish /
- * ESI boundaries don't populate `Context::CONTEXT_AUTH` the same way,
- * so logged-in customers often saw nothing at all.
- *
- * The Hyperion override template (`Magento_Sales::reorder/sidebar.phtml`)
- * already performs its own `isLoggedIn()` guard via the
- * SidebarWidgets view-model and returns empty HTML for guests, so we
- * defer the "should we render?" decision entirely to the template and
- * let the block call `parent::_toHtml()` unconditionally.
+ * Core's block renders for an authenticated HTTP context; this one also
+ * requires a logged-in customer session, because the rows come from that
+ * session. Declare it only on private, uncacheable handles.
  */
 class Reorder extends Sidebar
 {
+    /**
+     * @param Context $context
+     * @param HttpContext $httpContext
+     * @param CustomerSession $customerSession
+     * @param array $data
+     */
+    public function __construct(
+        Context $context,
+        HttpContext $httpContext,
+        private readonly CustomerSession $customerSession,
+        array $data = []
+    ) {
+        parent::__construct($context, $httpContext, $data);
+    }
+
     /**
      * @return string
      */
     protected function _toHtml()
     {
-        return \Magento\Framework\View\Element\Template::_toHtml();
+        if (!$this->customerSession->isLoggedIn()) {
+            return '';
+        }
+        return parent::_toHtml();
     }
 }

@@ -6,9 +6,12 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCore\Plugin\Catalog\Controller\Product\Compare;
 
 use Magento\Catalog\Controller\Product\Compare\Remove;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
 
 /**
  * HTMX response for POST /catalog/product_compare/remove. See AbstractHtmxPlugin.
+ *
+ * @internal
  */
 class RemovePlugin extends AbstractHtmxPlugin
 {
@@ -20,5 +23,13 @@ class RemovePlugin extends AbstractHtmxPlugin
     public function afterExecute(Remove $subject, $result)
     {
         return $this->transform($result);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function actionName(): string
+    {
+        return ActionResponse::ACTION_COMPARE_REMOVE;
     }
 }

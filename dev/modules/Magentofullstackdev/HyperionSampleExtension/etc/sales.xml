@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!-- The sample fee: collected after the tax (450), before the grand total (550). -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Sales:etc/sales.xsd">
+    <section name="quote">
+        <group name="totals">
+            <item name="hyperion_sample_fee"
+                  instance="Magentofullstackdev\HyperionSampleExtension\Model\Total\SampleFee" sort_order="500"/>
+        </group>
+    </section>
+</config>

@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
  * On those pages we respect what core has set and do nothing. On all other
  * pages (CMS, customer account, checkout, wishlist, etc.) core doesn't
  * touch breadcrumbs, so we fill them in here -- always prefixing "Home".
+ *
+ * @internal
  */
 class PopulateBreadcrumbs implements ObserverInterface
 {

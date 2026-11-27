@@ -14,4 +14,7 @@
 .github/ export-ignore
 .gitattributes export-ignore
 frontend/e2e/ export-ignore
+# Development modules (sample payment provider, sample extension): installed by
+# frontend/e2e/install-dev-modules.mjs, never part of a release or a Composer package
+dev/ export-ignore
 app/code/Magentofullstackdev/*/Test/ export-ignore

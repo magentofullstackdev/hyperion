@@ -128,10 +128,10 @@ jobs:
       - name: phpcs (Magento2 standard, errors only)
         working-directory: magento
         # Deprecation notices raised inside legacy sniffs on PHP 8.4 must not fail the gate.
-        run: php -d error_reporting="E_ALL&~E_DEPRECATED" vendor/bin/phpcs --standard=Magento2 --extensions=php,phtml -n --report=summary ../hyperion/app/code/Magentofullstackdev ../hyperion/app/design/frontend/Magentofullstackdev
+        run: php -d error_reporting="E_ALL&~E_DEPRECATED" vendor/bin/phpcs --standard=Magento2 --extensions=php,phtml -n --report=summary ../hyperion/app/code/Magentofullstackdev ../hyperion/app/design/frontend/Magentofullstackdev ../hyperion/dev/modules/Magentofullstackdev
       - name: phpstan level 5
         working-directory: magento
-        run: vendor/bin/phpstan analyse --level=5 --no-progress --error-format=github ../hyperion/app/code/Magentofullstackdev
+        run: vendor/bin/phpstan analyse --level=5 --no-progress --error-format=github ../hyperion/app/code/Magentofullstackdev ../hyperion/dev/modules/Magentofullstackdev
       - name: phpunit
         working-directory: magento
         run: |

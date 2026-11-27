@@ -13,6 +13,11 @@ declare(strict_types=1);
  * <hyperion-paypal-review> keeps Place Order disabled while there is no
  * shipping method or a request is running.
  *
+ * The children of `paypal.additional.actions` print under the address,
+ * shipping and payment cards, without a wrapper when they print nothing.
+ * A cart coupon block is skipped: core places one there, and its template
+ * is the Hyperion cart form.
+ *
  * @var \Magento\Paypal\Block\Express\Review $block
  * @var \Magento\Framework\Escaper $escaper
  */
@@ -28,6 +33,18 @@ $rateLabelOf = static function ($rate) use ($block): string {
     $price = trim(strip_tags((string) $block->renderShippingRateOption($rate, '%2$s%3$s')));
     return trim((string) $rate->getMethodTitle()) . ($price !== '' ? ' - ' . $price : '');
 };
+$layout = $block->getLayout();
+$additionalActions = '';
+$actionsName = $layout->getChildName((string) $block->getNameInLayout(), 'paypal.additional.actions');
+if (is_string($actionsName) && $actionsName !== '') {
+    foreach ($layout->getChildNames($actionsName) as $childName) {
+        if ($layout->getBlock($childName) instanceof \Magento\Checkout\Block\Cart\Coupon) {
+            continue;
+        }
+        $additionalActions .= (string) $layout->renderElement($childName);
+    }
+}
+$additionalActions = trim($additionalActions);
 $editClass = 'mt-3 inline-block text-sm font-medium text-primary hover:underline'
     . ' focus:outline-none focus:ring-2 focus:ring-primary rounded';
 ?>
@@ -143,6 +160,12 @@ $editClass = 'mt-3 inline-block text-sm font-medium text-primary hover:underline
                     <?php endif; ?>
                 </section>
             </div>
+
+            <?php if ($additionalActions !== ''): ?>
+                <div class="min-w-0" data-hyperion-paypal-review-actions>
+                    <?= /* @noEscape */ $additionalActions ?>
+                </div>
+            <?php endif; ?>
 
             <section class="<?= $escaper->escapeHtmlAttr($cardClass) ?>"
                      aria-labelledby="hyperion-review-items-title">

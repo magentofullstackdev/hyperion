@@ -21,6 +21,22 @@ $reorderHelper = $this->helper(\Magento\Sales\Helper\Reorder::class);
 $canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
 $postHelper = $this->helper(\Magento\Framework\Data\Helper\PostHelper::class);
 $backUrl = $block->getUrl('customer/account');
+// Extension slots of core's history block: the `extra.column.header` container and the
+// `extra.container` block (HistoryContainer, which hands the order to its children). The extra
+// column exists only when the header or one order prints something; both grid strings are
+// literal so Tailwind sees them. The page is private: children may read the session.
+$extraHeader = trim((string) $block->getChildHtml('extra.column.header'));
+$extraContainer = $block->getChildBlock('extra.container');
+$extraByOrder = [];
+if ($orders && count($orders) && $extraContainer instanceof \Magento\Sales\Block\Order\History\Container) {
+    foreach ($orders as $extraOrder) {
+        $extraByOrder[(int) $extraOrder->getEntityId()] = trim((string) $extraContainer->setOrder($extraOrder)->getChildHtml());
+    }
+}
+$hasExtra = $extraHeader !== '' || array_filter($extraByOrder, static fn (string $html): bool => $html !== '') !== [];
+$gridClass = $hasExtra
+    ? 'md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_minmax(6rem,1fr)_6rem]'
+    : 'md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_6rem]';
 ?>
 <section class="space-y-4" aria-labelledby="hyperion-orders-heading">
 
@@ -34,7 +50,7 @@ $backUrl = $block->getUrl('customer/account');
         <div class="bg-surface border border-subtle rounded-xl overflow-hidden">
 
             <?php /* -- Desktop header row (md+) ------------------- */ ?>
-            <div class="hidden md:grid md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_6rem]
+            <div class="hidden md:grid <?= /* @noEscape -- literal class string */ $gridClass ?>
                         gap-4 px-5 py-3 border-b border-subtle
                         text-xs font-bold uppercase tracking-wider text-secondary bg-surface-raised">
                 <div><?= $escaper->escapeHtml(__('Order #')) ?></div>
@@ -42,6 +58,9 @@ $backUrl = $block->getUrl('customer/account');
                 <div><?= $escaper->escapeHtml(__('Ship To')) ?></div>
                 <div><?= $escaper->escapeHtml(__('Order Total')) ?></div>
                 <div><?= $escaper->escapeHtml(__('Status')) ?></div>
+                <?php if ($hasExtra): ?>
+                    <div><?= /* @noEscape -- rendered blocks */ $extraHeader ?></div>
+                <?php endif; ?>
                 <div class="text-right"><?= $escaper->escapeHtml(__('View / Reorder')) ?></div>
             </div>
 
@@ -56,7 +75,7 @@ $backUrl = $block->getUrl('customer/account');
                     $reorderUrl = $canReorder ? $block->getReorderUrl($order) : null;
                 ?>
 
-                <div class="md:grid md:grid-cols-[minmax(8rem,1fr)_8rem_minmax(10rem,1.5fr)_8rem_8rem_6rem]
+                <div class="md:grid <?= /* @noEscape -- literal class string */ $gridClass ?>
                             md:gap-4 md:items-center
                             px-5 py-4 border-b border-subtle last:border-b-0
                             flex flex-col gap-2">
@@ -106,6 +125,18 @@ $backUrl = $block->getUrl('customer/account');
                             <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
                         </span>
                     </div>
+
+                    <?php if ($hasExtra): ?>
+                        <?php $orderExtra = $extraByOrder[(int) $order->getEntityId()] ?? ''; ?>
+                        <div class="flex justify-between gap-3 md:block<?= $orderExtra === '' ? ' max-md:hidden' : '' ?>" data-hyperion-order-extra>
+                            <?php if ($extraHeader !== ''): ?>
+                                <span class="md:hidden text-xs uppercase tracking-wider text-muted font-semibold">
+                                    <?= /* @noEscape -- rendered blocks */ $extraHeader ?>
+                                </span>
+                            <?php endif; ?>
+                            <span class="text-sm text-secondary"><?= /* @noEscape -- rendered blocks */ $orderExtra ?></span>
+                        </div>
+                    <?php endif; ?>
 
                     <div class="flex justify-end md:justify-end items-center gap-3">
                         <a href="<?= $escaper->escapeUrl($viewUrl) ?>"

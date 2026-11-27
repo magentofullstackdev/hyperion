@@ -6,9 +6,12 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCore\Plugin\Catalog\Controller\Product\Compare;
 
 use Magento\Catalog\Controller\Product\Compare\Add;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
 
 /**
  * HTMX response for POST /catalog/product_compare/add. See AbstractHtmxPlugin.
+ *
+ * @internal
  */
 class AddPlugin extends AbstractHtmxPlugin
 {
@@ -20,5 +23,13 @@ class AddPlugin extends AbstractHtmxPlugin
     public function afterExecute(Add $subject, $result)
     {
         return $this->transform($result);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function actionName(): string
+    {
+        return ActionResponse::ACTION_COMPARE_ADD;
     }
 }

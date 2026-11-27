@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Braintree vault adapters + <payment-braintree-vault>.
+ * <hc-payment-braintree-vault> -- a stored Braintree token, one element per
+ * token row (`braintree_cc_vault`, `braintree_googlepay_vault`,
+ * `braintree_paypal_vault`).
  *
  * `braintree_cc_vault` follows core `method-renderer/vault.js`:
  *   1. when the merchant enabled "CVV re-verification" for stored cards
@@ -22,59 +24,46 @@
  * goes from the nonce straight to the order, and a wallet card has no CVV
  * the shopper could type.
  *
- * `braintree_paypal_vault` needs no UI: the default vault flow (nonce from
- * `getnonce`) is what core's `paypal-vault.js` does.
+ * `braintree_paypal_vault` needs no UI: a nonce from `getnonce`, as core's
+ * `paypal-vault.js` does.
+ *
+ * Core checks no reCAPTCHA form on an order paid with a stored Braintree
+ * token.
  */
 import { LitElement, html, nothing } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { state } from 'lit/decorators.js';
 
-import { t } from '../../../utils/i18n.js';
-import {
-    fetchVaultNonce,
-    registerVaultAdapter,
-    type VaultToken,
-} from '../vault-tokens.js';
+import type { PaymentContext, PaymentData, PaymentMethodInfo } from '../../../../extension-api.js';
+import { firstPartyOf, type FirstPartyServices } from '../first-party.js';
 import { getBraintreeClient, getDeviceData } from './client.js';
 import {
     BRAINTREE_CC_VAULT_CODE,
-    BRAINTREE_GOOGLEPAY_VAULT_CODE,
     BRAINTREE_PAYPAL_VAULT_CODE,
     getBraintreeCardConfig,
     getBraintreeGooglePayConfig,
     isCcVaultCvvVerifyEnabled,
 } from './config.js';
-import {
-    HOSTED_FIELD_BOX,
-    hostedFieldProbes,
-    resolveHostedFieldStyles,
-} from './hosted-field-styles.js';
+import { HOSTED_FIELD_BOX, resolveHostedFieldStyles } from './hosted-field-styles.js';
 import { loadBraintreeModule } from './sdk.js';
 import { verifyThreeDSecure } from './three-d-secure.js';
 import type { HostedFieldsInstance } from './types.js';
+import { fetchVaultNonce, type StoredToken } from './vault-nonce.js';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
-/** Magento card type codes stored in the token details. */
-const CARD_TYPE_NAMES: Readonly<Record<string, string>> = {
-    VI: 'Visa',
-    MC: 'Mastercard',
-    AE: 'American Express',
-    DI: 'Discover',
-    JCB: 'JCB',
-    DN: 'Diners Club',
-    MI: 'Maestro',
-    UPD: 'UnionPay',
-};
-
-let activeElement: PaymentBraintreeVault | null = null;
-
-function detail(token: VaultToken, key: string): string {
-    const value = token.details[key];
-    return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-}
-
 export class PaymentBraintreeVault extends LitElement {
-    @property({ attribute: false }) public token: VaultToken | null = null;
+    public static readonly hyperionApi = '1';
+
+    /** Core checks no reCAPTCHA form on an order paid with a stored Braintree token. */
+    public static hyperionRecaptchaAction(): null {
+        return null;
+    }
+
+    public context!: PaymentContext;
+    public options: Readonly<Record<string, unknown>> = {};
+    public method!: PaymentMethodInfo;
+    public config: Readonly<Record<string, unknown>> = {};
+    public token: StoredToken | null = null;
 
     @state() private _status: Status = 'idle';
     @state() private _cvvInvalid = false;
@@ -85,33 +74,41 @@ export class PaymentBraintreeVault extends LitElement {
 
     public override createRenderRoot(): HTMLElement { return this; }
 
+    private get _services(): FirstPartyServices {
+        const services = firstPartyOf(this.context);
+        if (services === null) throw new Error('the Braintree vault renderer needs the first-party context');
+        return services;
+    }
+
+    private _cvvVerify(): boolean {
+        return this.method.code === BRAINTREE_CC_VAULT_CODE && isCcVaultCvvVerifyEnabled(this._services.config());
+    }
+
     public override connectedCallback(): void {
         super.connectedCallback();
-        activeElement = this;
+        this.dispatchEvent(new CustomEvent('hyperion-payment:ready', { bubbles: true, composed: true, detail: {} }));
         void this.updateComplete.then(() => this._init());
     }
 
     public override disconnectedCallback(): void {
         super.disconnectedCallback();
-        if (activeElement === this) activeElement = null;
         this._generation++;
         void this._teardown();
     }
 
     public override render(): unknown {
-        if (!isCcVaultCvvVerifyEnabled()) return nothing;
+        if (!this._cvvVerify()) return nothing;
         return html`
             <div class="w-48">
-                ${hostedFieldProbes()}
                 ${this._status === 'error'
                     ? html`<p role="alert" class="text-sm text-danger">
-                          ${t('Hyperion_Checkout::braintree_init_failed')}
+                          ${this.context.t('The secure payment form could not be loaded. Try again or choose another payment method.')}
                       </p>`
                     : nothing}
                 <label id="hc-bt-vault-cvv-label"
                        class="block text-sm font-medium text-brand"
                        @click=${() => this._hostedFields?.focus('cvv')}>
-                    ${t('Hyperion_Checkout::braintree_card_cvv')}
+                    ${this.context.t('Security code (CVV)')}
                     <span aria-hidden="true" class="text-danger">*</span>
                 </label>
                 <div data-hosted-field="cvv"
@@ -120,26 +117,33 @@ export class PaymentBraintreeVault extends LitElement {
                      class="${HOSTED_FIELD_BOX} ${this._cvvInvalid ? 'border-danger' : 'border-subtle'} ${this._cvvFocused ? 'ring-2 ring-accent' : ''}"></div>
                 ${this._cvvInvalid
                     ? html`<p class="mt-1 text-sm text-danger">
-                          ${t('Hyperion_Checkout::braintree_card_cvv_invalid')}
+                          ${this.context.t('Enter a valid security code.')}
                       </p>`
                     : nothing}
             </div>
         `;
     }
 
+    /** The client token for the stored card: the card method's, else Google Pay's. */
+    private _authorization(): string {
+        const config = this._services.config();
+        return getBraintreeCardConfig(config)?.clientToken || getBraintreeGooglePayConfig(config)?.clientToken || '';
+    }
+
     private async _init(): Promise<void> {
         const generation = ++this._generation;
         const stale = (): boolean => generation !== this._generation || !this.isConnected;
-        const authorization = getBraintreeCardConfig()?.clientToken;
+        if (this.method.code === BRAINTREE_PAYPAL_VAULT_CODE) return;
+        const authorization = getBraintreeCardConfig(this._services.config())?.clientToken;
         if (!authorization) return;
-        void getDeviceData(authorization);
-        if (!isCcVaultCvvVerifyEnabled()) return;
+        void getDeviceData(this.context, authorization);
+        if (!this._cvvVerify()) return;
 
         this._status = 'loading';
         try {
             const [client, hostedFields] = await Promise.all([
-                getBraintreeClient(authorization),
-                loadBraintreeModule('hosted-fields'),
+                getBraintreeClient(this.context, authorization),
+                loadBraintreeModule(this.context, 'hosted-fields'),
             ]);
             if (stale()) return;
             const container = this.querySelector<HTMLElement>('[data-hosted-field="cvv"]');
@@ -147,7 +151,7 @@ export class PaymentBraintreeVault extends LitElement {
             const instance = await hostedFields.create({
                 client,
                 fields: { cvv: { container, placeholder: '123' } },
-                styles: resolveHostedFieldStyles(this),
+                styles: resolveHostedFieldStyles(this.context),
             });
             if (stale()) {
                 void instance.teardown().catch(() => undefined);
@@ -180,13 +184,13 @@ export class PaymentBraintreeVault extends LitElement {
     }
 
     /** Tokenize the CVV and let Magento verify the stored card with it. */
-    public async verifyCvv(token: VaultToken): Promise<void> {
+    public async verifyCvv(token: StoredToken): Promise<void> {
         const instance = this._hostedFields;
         const target = token.updatePaymentUrl
             ?? token.nonceUrl?.replace(/\/getnonce/i, '/updatepaymentmethod')
             ?? null;
         if (!instance || this._status !== 'ready' || target === null) {
-            throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
+            throw new Error(this.context.t('The payment form is still loading. Please wait a moment and try again.'));
         }
         let cvvNonce: string;
         try {
@@ -194,9 +198,9 @@ export class PaymentBraintreeVault extends LitElement {
         } catch (err) {
             console.error('[hyperion-checkout] Braintree CVV tokenization failed', err);
             this._cvvInvalid = true;
-            throw new Error(t('Hyperion_Checkout::braintree_card_cvv_invalid'), { cause: err });
+            throw new Error(this.context.t('Enter a valid security code.'), { cause: err });
         }
-        const failure = new Error(t('Hyperion_Checkout::braintree_card_cvv_failed'));
+        const failure = new Error(this.context.t('The security code could not be verified. Check it and try again.'));
         const url = new URL(target, window.location.href);
         if (url.origin !== window.location.origin) throw failure;
         url.searchParams.set('nonce', cvvNonce);
@@ -214,77 +218,39 @@ export class PaymentBraintreeVault extends LitElement {
         }
         if (body?.success !== true) throw failure;
     }
-}
 
-if (!customElements.get('payment-braintree-vault')) {
-    customElements.define('payment-braintree-vault', PaymentBraintreeVault);
-}
-
-/** Nonce, 3D Secure and device data of a stored card: the part both card vaults share. */
-async function storedCardPaymentData(token: VaultToken): Promise<Record<string, unknown>> {
-    // A Google Pay card stored without the card method active still needs a client token for 3D Secure.
-    const authorization = getBraintreeCardConfig()?.clientToken || getBraintreeGooglePayConfig()?.clientToken || '';
-    const { nonce, bin } = await fetchVaultNonce(token);
-    const verifiedNonce = authorization
-        ? await verifyThreeDSecure({ authorization, nonce, bin, storedCard: true, savingCard: false })
-        : nonce;
-    const deviceData = authorization ? await getDeviceData(authorization) : null;
-    return {
-        public_hash: token.publicHash,
-        payment_method_nonce: verifiedNonce,
-        ...(deviceData ? { device_data: deviceData } : {}),
-    };
-}
-
-export async function braintreeCcVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
-    if (isCcVaultCvvVerifyEnabled()) {
-        if (!activeElement) throw new Error(t('Hyperion_Checkout::braintree_not_ready'));
-        await activeElement.verifyCvv(token);
+    /** Nonce, 3D Secure and device data of a stored card: the part both card vaults share. */
+    private async _storedCardPaymentData(token: StoredToken): Promise<Record<string, unknown>> {
+        // A Google Pay card stored without the card method active still needs a client token for 3D Secure.
+        const authorization = this._authorization();
+        const { nonce, bin } = await fetchVaultNonce(this.context, token);
+        const verifiedNonce = authorization
+            ? await verifyThreeDSecure(this.context, { authorization, nonce, bin, storedCard: true, savingCard: false })
+            : nonce;
+        const deviceData = authorization ? await getDeviceData(this.context, authorization) : null;
+        return {
+            public_hash: token.publicHash,
+            payment_method_nonce: verifiedNonce,
+            ...(deviceData ? { device_data: deviceData } : {}),
+        };
     }
-    return storedCardPaymentData(token);
+
+    public async getPaymentData(): Promise<PaymentData> {
+        const token = this.token;
+        if (!token) throw new Error(this.context.t('Select one of your stored payment methods.'));
+        if (this.method.code === BRAINTREE_PAYPAL_VAULT_CODE) {
+            const { nonce } = await fetchVaultNonce(this.context, token);
+            return { additional_data: { public_hash: token.publicHash, payment_method_nonce: nonce } };
+        }
+        if (this._cvvVerify()) await this.verifyCvv(token);
+        return { additional_data: await this._storedCardPaymentData(token) };
+    }
 }
 
-/** A card stored through Google Pay is never re-verified by CVV. */
-export function braintreeGooglePayVaultBeforePlaceOrder(token: VaultToken): Promise<Record<string, unknown>> {
-    return storedCardPaymentData(token);
+if (!customElements.get('hc-payment-braintree-vault')) {
+    customElements.define('hc-payment-braintree-vault', PaymentBraintreeVault);
 }
-
-/** Core checks no reCAPTCHA form on an order paid with a stored Braintree token. */
-const noRecaptcha = (): null => null;
-
-export function registerBraintreeVaultAdapters(): void {
-    registerVaultAdapter({
-        code: BRAINTREE_CC_VAULT_CODE,
-        label: (token) => t('Hyperion_Checkout::vault_card_label', {
-            type: CARD_TYPE_NAMES[detail(token, 'type')] ?? detail(token, 'type'),
-            last4: detail(token, 'maskedCC'),
-            expiry: detail(token, 'expirationDate'),
-        }),
-        renderBody: (token) => html`<payment-braintree-vault .token=${token}></payment-braintree-vault>`,
-        beforePlaceOrder: braintreeCcVaultBeforePlaceOrder,
-        recaptchaAction: noRecaptcha,
-    });
-    registerVaultAdapter({
-        code: BRAINTREE_GOOGLEPAY_VAULT_CODE,
-        label: (token) => t('Hyperion_Checkout::vault_card_label', {
-            type: CARD_TYPE_NAMES[detail(token, 'type')] ?? detail(token, 'type'),
-            last4: detail(token, 'maskedCC'),
-            expiry: detail(token, 'expirationDate'),
-        }),
-        beforePlaceOrder: braintreeGooglePayVaultBeforePlaceOrder,
-        recaptchaAction: noRecaptcha,
-    });
-    registerVaultAdapter({
-        code: BRAINTREE_PAYPAL_VAULT_CODE,
-        label: (token) => t('Hyperion_Checkout::vault_paypal_label', {
-            email: detail(token, 'payerEmail'),
-        }),
-        recaptchaAction: noRecaptcha,
-    });
-}
-
-registerBraintreeVaultAdapters();
 
 declare global {
-    interface HTMLElementTagNameMap { 'payment-braintree-vault': PaymentBraintreeVault; }
+    interface HTMLElementTagNameMap { 'hc-payment-braintree-vault': PaymentBraintreeVault; }
 }

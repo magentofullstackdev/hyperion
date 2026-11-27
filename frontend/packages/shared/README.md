@@ -54,10 +54,11 @@ class MyComponent extends HyperionLightElement {
 | Subpath | Purpose |
 |---|---|
 | `.` | Barrel: `tailwindPreset`, base Lit element, mixins |
-| `./tailwind/preset` | Tailwind 3.x preset (semantic colours, spacing, typography) |
+| `./tailwind/preset` | Tailwind 3.x preset (semantic colors, spacing, typography) |
 | `./tokens/*` | Raw CSS custom properties (`colors.css`, `spacing.css`, `typography.css`, `index.css`) |
 | `./lit` / `./lit/*` | Base Lit element + mixins |
 | `./html` | HTML sanitizer (allowlist) used for cookie and response HTML |
+| `./captcha` | Base class of the image CAPTCHA field (`CaptchaElement`), from which the theme and the checkout define their own tag |
 
 ## Requirements
 

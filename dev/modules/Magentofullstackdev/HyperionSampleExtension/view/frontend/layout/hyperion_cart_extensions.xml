@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Cart totals containers. This one handle is loaded by the cart page and
+    by the fragment every htmx cart update renders, so the markers survive
+    a quantity change. The cart is private: children may read the session.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="hyperion.cart.totals.before">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.cart.totals.before"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.cart.totals.before</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.cart.totals.after">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.cart.totals.after"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.cart.totals.after</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

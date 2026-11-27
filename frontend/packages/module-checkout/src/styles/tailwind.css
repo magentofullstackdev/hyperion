@@ -163,3 +163,129 @@ checkout-app order-summary summary {
         transition: transform var(--hyperion-motion-fast, 120ms) ease-out;
     }
 }
+
+/*
+ * The styling classes of the extension API: what a payment element, a
+ * shipping extension or a slot element of another module uses to look like
+ * the checkout's own controls. Plain rules outside the Tailwind layers, so
+ * they are in the stylesheet whether or not a template of the checkout uses
+ * them, scoped to the application like the rest of the build, and built on
+ * the shared color tokens. A shadow DOM element styles itself; the token
+ * custom properties reach it through inheritance.
+ *
+ *   hc-field   one field block: label, control, message line
+ *   hc-label   the label line
+ *   hc-input   a text control (input, textarea)
+ *   hc-select  a select control
+ *   hc-error   the message line of an invalid field
+ *   hc-hint    the message line of a hint
+ *   hc-button, hc-button--secondary   a button, primary or secondary
+ */
+checkout-app .hc-field {
+    display: block;
+}
+
+checkout-app .hc-label {
+    display: block;
+    min-height: 1.25rem;
+    color: rgb(var(--checkout-color-brand));
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+}
+
+checkout-app .hc-input,
+checkout-app .hc-select {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 2.625rem;
+    margin: 0.375rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(var(--color-subtle));
+    border-radius: var(--radius-control, 0.5rem);
+    background-color: rgb(var(--color-surface));
+    color: rgb(var(--checkout-color-brand));
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+checkout-app textarea.hc-input {
+    height: auto;
+    min-height: 5rem;
+}
+
+checkout-app .hc-input::placeholder {
+    color: rgb(var(--color-muted));
+}
+
+checkout-app .hc-input:focus,
+checkout-app .hc-select:focus {
+    outline: 2px solid rgb(var(--color-accent));
+    outline-offset: 0;
+}
+
+checkout-app .hc-input[aria-invalid="true"],
+checkout-app .hc-select[aria-invalid="true"] {
+    border-color: rgb(var(--checkout-color-danger));
+}
+
+checkout-app .hc-select {
+    appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem 1rem;
+}
+
+checkout-app .hc-error,
+checkout-app .hc-hint {
+    min-height: 1.25rem;
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+checkout-app .hc-error {
+    color: rgb(var(--checkout-color-danger));
+}
+
+checkout-app .hc-hint {
+    color: rgb(var(--color-muted));
+}
+
+checkout-app .hc-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control, 0.5rem);
+    background-color: rgb(var(--color-accent));
+    color: rgb(var(--checkout-color-on-accent));
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    cursor: pointer;
+}
+
+checkout-app .hc-button--secondary {
+    border-color: rgb(var(--color-subtle));
+    background-color: rgb(var(--color-surface-raised));
+    color: rgb(var(--checkout-color-brand));
+}
+
+checkout-app .hc-button:focus-visible {
+    outline: 2px solid rgb(var(--color-accent));
+    outline-offset: 2px;
+}
+
+checkout-app .hc-button:disabled,
+checkout-app .hc-button[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

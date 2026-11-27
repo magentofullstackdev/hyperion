@@ -1,0 +1,35 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Comments visible on the storefront of an invoice, shipment or credit memo
+ * (blocks `invoice_comments`, `shipment_comments`, `creditmemo_comments` of the
+ * customer and guest order pages), styled like the order comments of
+ * order/view.phtml. Core renders this template only on those pages: emails
+ * and print pages do not use it.
+ *
+ * @var \Magento\Sales\Block\Order\Comments $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->hasComments()) {
+    return;
+}
+?>
+<article class="bg-surface border border-subtle rounded-xl p-5 space-y-4" data-hyperion-entity-comments>
+    <h3 class="text-base font-semibold text-secondary">
+        <?= $escaper->escapeHtml((string) $block->getTitle()) ?>
+    </h3>
+    <dl class="space-y-3">
+        <?php foreach ($block->getComments() as $comment): ?>
+            <div class="text-sm">
+                <dt class="text-xs font-medium text-muted">
+                    <?= $escaper->escapeHtml($block->formatDate($comment->getCreatedAt(), \IntlDateFormatter::MEDIUM, true)) ?>
+                </dt>
+                <dd class="text-secondary whitespace-pre-line">
+                    <?= $escaper->escapeHtml((string) $comment->getComment(), ['b', 'br', 'strong', 'i', 'u', 'a']) ?>
+                </dd>
+            </div>
+        <?php endforeach; ?>
+    </dl>
+</article>

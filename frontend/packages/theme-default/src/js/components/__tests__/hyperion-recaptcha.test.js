@@ -219,3 +219,121 @@ describe('hyperion-recaptcha -- reduced motion', () => {
         expect(host.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior });
     });
 });
+
+describe('hyperion-recaptcha -- widget render', () => {
+    afterEach(() => {
+        delete window.grecaptcha;
+        vi.restoreAllMocks();
+    });
+
+    // A checkbox moved into another form while Google's script loads is
+    // observed again and asks for the widget a second time: one render only.
+    test('two requests for the widget made during the script load render it once', async () => {
+        const append = document.head.appendChild.bind(document.head);
+        const scripts = [];
+        vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+            if (node.tagName !== 'SCRIPT') return append(node);
+            scripts.push(node);
+            return node;
+        });
+        const el = document.createElement('form');
+        el.innerHTML = `
+            <hyperion-recaptcha type="v2-checkbox" site-key="key-twice">
+                <input type="hidden" name="g-recaptcha-response" value="" data-hyperion-recaptcha-token>
+                <div data-hyperion-recaptcha-widget></div>
+            </hyperion-recaptcha>
+        `;
+        await mount(el);
+        const recaptcha = el.querySelector('hyperion-recaptcha');
+        const first = recaptcha._renderWidget();
+        const second = recaptcha._renderWidget();
+        window.grecaptcha = { ready: (callback) => callback(), render: vi.fn(() => 7) };
+        scripts[0].onload(new Event('load'));
+        await expect(first).resolves.toBe(7);
+        await expect(second).resolves.toBe(7);
+        expect(window.grecaptcha.render).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('hyperion-recaptcha -- moved into another form while the token is minted', () => {
+    const settle = async () => {
+        for (let i = 0; i < 3; i += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
+    };
+    let scripts;
+
+    afterEach(() => {
+        delete window.grecaptcha;
+        vi.restoreAllMocks();
+        document.body.innerHTML = '';
+    });
+
+    // The cart coupon case: the element upgrades inside the server rendered
+    // skeleton form, the shopper submits it, and the coupon form moves the
+    // element into its own form before Google answers.
+    async function setup(execute, siteKey) {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        scripts = [];
+        const append = document.head.appendChild.bind(document.head);
+        vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+            if (node.tagName !== 'SCRIPT') return append(node);
+            scripts.push(node);
+            return node;
+        });
+        const first = document.createElement('form');
+        first.innerHTML = `
+            <hyperion-recaptcha type="v3" site-key="${siteKey}" action="coupon_code">
+                <input type="hidden" name="g-recaptcha-response" value="" data-hyperion-recaptcha-token>
+            </hyperion-recaptcha>
+            <button type="submit" id="old-button">Apply</button>
+        `;
+        const second = document.createElement('form');
+        second.innerHTML = '<button type="submit" id="new-button">Apply</button>';
+        document.body.append(first, second);
+        const el = first.querySelector('hyperion-recaptcha');
+        await el.updateComplete;
+        const seen = { first: [], second: [] };
+        for (const [name, form] of [['first', first], ['second', second]]) {
+            form.addEventListener('submit', (event) => {
+                seen[name].push({ token: form.querySelector('[data-hyperion-recaptcha-token]')?.value ?? null, submitter: event.submitter?.id || null });
+                event.preventDefault();
+            });
+        }
+        window.grecaptcha = { ready: (callback) => callback(), execute };
+        return { first, second, el, seen };
+    }
+
+    test('the token goes out with the form the element sits in now, without the old button', async () => {
+        const { first, second, el, seen } = await setup(vi.fn(() => Promise.resolve('token-moved')), 'key-moved-ok');
+        first.requestSubmit(first.querySelector('#old-button'));
+        expect(seen.first).toHaveLength(0);
+        second.prepend(el);
+        scripts[0].onload(new Event('load'));
+        await settle();
+        expect(seen.first).toHaveLength(0);
+        expect(seen.second).toEqual([{ token: 'token-moved', submitter: null }]);
+    });
+
+    test('a failed token still submits the new form once and leaves no bypass behind', async () => {
+        const execute = vi.fn(() => Promise.reject(new Error('timeout')));
+        const { first, second, el, seen } = await setup(execute, 'key-moved-failed');
+        first.requestSubmit(first.querySelector('#old-button'));
+        second.prepend(el);
+        scripts[0].onload(new Event('load'));
+        await settle();
+        expect(seen.second).toEqual([{ token: '', submitter: null }]);
+        expect(el._bypassOnce).toBe(false);
+        // The next submission is gated again: it asks Google for a token.
+        second.requestSubmit(second.querySelector('#new-button'));
+        await settle();
+        expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    test('a resubmission that throws does not keep the bypass', async () => {
+        const { first, el } = await setup(vi.fn(() => Promise.reject(new Error('timeout'))), 'key-moved-throw');
+        first.requestSubmit(first.querySelector('#old-button'));
+        vi.spyOn(HTMLFormElement.prototype, 'requestSubmit').mockImplementation(() => { throw new Error('NotFoundError'); });
+        scripts[0].onload(new Event('load'));
+        await settle();
+        expect(el._bypassOnce).toBe(false);
+    });
+});

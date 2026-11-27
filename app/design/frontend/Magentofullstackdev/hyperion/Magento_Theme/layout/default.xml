@@ -169,7 +169,7 @@
             catalogsearch_result_index.xml, in `sidebar.additional`) and the
             account pages (customer_account.xml, under the account menu). The
             home page, CMS pages, sign in, register and contact pages show
-            none. The reorder sidebar has no replacement yet.
+            none. The reorder sidebar lives on the account pages only.
         -->
         <referenceBlock name="sale.reorder.sidebar" remove="true"/>
         <referenceBlock name="wishlist_sidebar" remove="true"/>
@@ -312,11 +312,14 @@
                    template="Magento_Theme::html/footer.phtml"
                    before="-">
 
-                <!-- Newsletter subscribe form (fourth footer column). -->
+                <!-- Newsletter subscribe form (fourth footer column), only while the newsletter
+                     is enabled, like core's `form.subscribe`; footer.phtml drops the column
+                     without it. -->
                 <block class="Magento\Newsletter\Block\Subscribe"
                        name="hyperion.footer.subscribe"
                        as="subscribe"
-                       template="Magento_Newsletter::subscribe.phtml">
+                       template="Magento_Newsletter::subscribe.phtml"
+                       ifconfig="newsletter/general/active">
                     <!-- reCAPTCHA for the newsletter form. Magento_ReCaptchaNewsletter
                          mounts its block in the page-level `footer` container and
                          hooks the form by id from Knockout; Hyperion renders the
@@ -377,6 +380,29 @@
              moves out of core's `footer` container, which would print it as a raw list, under
              hyperion.footer with an alias the template never prints. -->
         <move element="footer_links" destination="hyperion.footer" as="core_links"/>
+
+        <!-- Header links: core's `top.links` list is the extension point for links in the header
+             (Luma's `header.links` does not exist without a parent theme). The move runs before
+             the removal of its old parent `header.panel` above, so the block survives under
+             hyperion.header, which prints it in the account dropdown and in the phone drawer
+             (Magento_Theme::html/header/links.phtml, nothing without a child). Core's own children
+             are removed by name: the header renders the account, wish list and compare entries
+             itself, and the welcome and compare blocks are Knockout widgets. A child must be a
+             session agnostic link block: the header is part of every edge cached page. -->
+        <move element="top.links" destination="hyperion.header" as="header_links"/>
+        <referenceBlock name="top.links" template="Magento_Theme::html/header/links.phtml"/>
+        <referenceBlock name="header" remove="true"/>
+        <referenceBlock name="my-account-link" remove="true"/>
+        <referenceBlock name="register-link" remove="true"/>
+        <referenceBlock name="authorization-link" remove="true"/>
+        <referenceBlock name="wish-list-link" remove="true"/>
+        <referenceBlock name="catalog.compare.link" remove="true"/>
+
+        <!-- The order pages (view, invoice, shipment, credit memo; customer and guest) print the
+             children of core's `sales.order.info.buttons` next to the order actions
+             (Magento_Sales::order/view.phtml). Core's RSS link among them is not part of the
+             storefront: removed here once for every order page handle that declares it. -->
+        <referenceBlock name="sales.order.info.buttons.rss" remove="true"/>
 
         <!-- ===========================================================
              Structural classes for `main`, `columns`, `sidebar.main`,

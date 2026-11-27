@@ -65,10 +65,13 @@ $listBlock = $listing->getListBlock($block->getLayout());
 $fragmentUrl = $listing->getFragmentUrl($listBlock);
 $gridId = $listing->getGridTargetId();
 
-// Swatch attributes (visual: colour / image chips, text: pills) render their
+// Swatch attributes (visual: color / image chips, text: pills) render their
 // items as a chip grid instead of the text list; the view model hands the
 // template the data, the template owns the markup and the classes.
 $swatchFilters = $viewModels->require(\Magentofullstackdev\HyperionCatalog\ViewModel\LayerFilterSwatches::class);
+// "Display Product Count" of Catalog > Layered Navigation: the number next to each option.
+$showCount = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\StoreOptions::class)
+    ->isLayerProductCountDisplayed();
 
 // Detect whether the layered-nav block is rendering in the sidebar
 // column (2col/3col page layouts) or inline above the product grid
@@ -135,9 +138,10 @@ $showSection = !empty($filters) || $hasActiveFilters;
                 <?php /*
                     Swatch filter: one chip per option. A chip is the link itself and
                     carries the SAME HTMX contract as a text item (hx-get, hx-target,
-                    hx-swap, hx-push-url); its accessible name is "Label (count)".
-                    Colour chips paint the validated hex inline (same practice as the
-                    product page swatches), light colours get an inner ring so a white
+                    hx-swap, hx-push-url); its accessible name is "Label (count)", the label
+                    alone while the product count is not displayed.
+                    Color chips paint the validated hex inline (same practice as the
+                    product page swatches), light colors get an inner ring so a white
                     chip stays visible on the white card; image chips use the
                     swatch_thumb as background; text swatches are compact pills.
                 */ ?>
@@ -155,7 +159,7 @@ $showSection = !empty($filters) || $hasActiveFilters;
                         if ($swatch === null) {
                             continue;
                         }
-                        $chipName = $swatch['label'] . ' (' . $swatch['count'] . ')';
+                        $chipName = $showCount ? $swatch['label'] . ' (' . $swatch['count'] . ')' : $swatch['label'];
                         $itemUrl = $listing->toPublicUrl($listBlock, (string) $item->getUrl());
                         ?>
                         <li>
@@ -216,9 +220,11 @@ $showSection = !empty($filters) || $hasActiveFilters;
                                     classes own their escaping.
                                 */ ?>
                                 <span class="truncate"><?= /* @noEscape */ $item->getLabel() ?></span>
-                                <span class="text-xs text-muted shrink-0">
-                                    <?= (int) $item->getCount() ?>
-                                </span>
+                                <?php if ($showCount): ?>
+                                    <span class="text-xs text-muted shrink-0">
+                                        <?= (int) $item->getCount() ?>
+                                    </span>
+                                <?php endif; ?>
                             </a>
                         </li>
                     <?php endforeach; ?>

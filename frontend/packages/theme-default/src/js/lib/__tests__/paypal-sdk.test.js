@@ -7,15 +7,16 @@ import { describe, test, expect, afterEach, beforeEach, vi } from 'vitest';
 import {
     loadPaypalSdk,
     resetPaypalSdk,
+    loadScript,
+    resetScripts,
+    cspNonce,
     whenWanted,
-    whenEngaged,
-    whenPageIdle,
     notify,
     drainMessages,
     readCookie,
 } from '../paypal-sdk.js';
+import { whenWanted as engagementWhenWanted } from '../engagement.js';
 import {
-    installIntersectionObserver,
     interceptSdkScripts,
     sdkScripts,
     finishSdkLoad,
@@ -95,103 +96,68 @@ describe('paypal-sdk loader', () => {
     });
 });
 
-describe('paypal-sdk scheduling', () => {
-    let observers;
-    beforeEach(() => { observers = installIntersectionObserver(); });
-    afterEach(() => { observers.restore(); });
-
-    test('whenWanted waits for the element to come near the viewport', async () => {
-        const el = document.createElement('div');
-        document.body.appendChild(el);
-        let wanted = false;
-        whenWanted(el).then(() => { wanted = true; });
-        await Promise.resolve();
-        expect(wanted).toBe(false);
-        expect(observers.instances).toHaveLength(1);
-        expect(observers.instances[0].options.rootMargin).toBe('200px');
-
-        observers.instances[0].trigger(false);
-        await Promise.resolve();
-        expect(wanted).toBe(false);
-
-        observers.instances[0].trigger(true);
-        await Promise.resolve();
-        expect(wanted).toBe(true);
-        expect(observers.instances[0].disconnected).toBe(true);
+describe('paypal-sdk generic script loader', () => {
+    let appended;
+    let append;
+    beforeEach(() => {
+        resetScripts();
+        appended = [];
+        append = vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+            appended.push(node);
+            return node;
+        });
+    });
+    afterEach(() => {
+        append.mockRestore();
+        resetScripts();
+        document.head.querySelectorAll('script[nonce]').forEach((script) => script.remove());
     });
 
-    test('whenWanted resolves on the first interaction', async () => {
-        const el = document.createElement('div');
-        document.body.appendChild(el);
-        let wanted = false;
-        whenWanted(el).then(() => { wanted = true; });
-        el.dispatchEvent(new Event('pointerdown'));
-        await Promise.resolve();
-        expect(wanted).toBe(true);
+    test('loads a URL once and shares the promise', async () => {
+        const first = loadScript('https://pay.example/sdk.js', { 'data-client': 'x', onload: 'alert(1)', crossorigin: 'anonymous' });
+        const second = loadScript('https://pay.example/sdk.js');
+        expect(first).toBe(second);
+        expect(appended).toHaveLength(1);
+        const [script] = appended;
+        expect(script.getAttribute('src')).toBe('https://pay.example/sdk.js');
+        expect(script.getAttribute('data-client')).toBe('x');
+        expect(script.getAttribute('crossorigin')).toBe('anonymous');
+        expect(script.hasAttribute('onload')).toBe(false);
+        script.onload();
+        await expect(first).resolves.toBeUndefined();
     });
 
-    test('a cancelled wait never resolves', async () => {
-        const el = document.createElement('div');
-        document.body.appendChild(el);
-        let wanted = false;
-        const waiting = whenWanted(el);
-        waiting.then(() => { wanted = true; });
-        waiting.cancel();
-        el.dispatchEvent(new Event('pointerdown'));
-        await Promise.resolve();
-        expect(wanted).toBe(false);
-        expect(observers.instances[0].disconnected).toBe(true);
+    test('forgets a failed load so the next call requests it again', async () => {
+        const failed = loadScript('https://pay.example/sdk.js');
+        appended[0].onerror();
+        await expect(failed).rejects.toThrow('failed to load');
+        const retry = loadScript('https://pay.example/sdk.js');
+        expect(retry).not.toBe(failed);
+        expect(appended).toHaveLength(2);
     });
 
-    test('whenEngaged waits for the first sign of the shopper on the document', async () => {
-        const win = { scrollY: 0 };
-        let engaged = false;
-        whenEngaged(document, win).then(() => { engaged = true; });
-        await Promise.resolve();
-        expect(engaged).toBe(false);
-        document.body.dispatchEvent(new Event('pointermove', { bubbles: true }));
-        await Promise.resolve();
-        expect(engaged).toBe(true);
+    test('rejects without a URL', async () => {
+        await expect(loadScript('')).rejects.toThrow();
+        expect(appended).toHaveLength(0);
     });
 
-    test('whenEngaged resolves at once on a page that is already scrolled', async () => {
-        let engaged = false;
-        whenEngaged(document, { scrollY: 120 }).then(() => { engaged = true; });
-        await Promise.resolve();
-        expect(engaged).toBe(true);
+    test('gives the script the CSP nonce of the page', () => {
+        append.mockRestore();
+        const holder = document.createElement('script');
+        holder.setAttribute('type', 'text/plain');
+        holder.setAttribute('nonce', 'N0NCE');
+        document.head.appendChild(holder);
+        expect(cspNonce()).toBe('N0NCE');
+        append = vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+            appended.push(node);
+            return node;
+        });
+        loadScript('https://pay.example/nonce.js');
+        expect(appended[0].nonce || appended[0].getAttribute('nonce')).toBe('N0NCE');
     });
 
-    test('whenEngaged listens once: a second event finds no listener', async () => {
-        const win = { scrollY: 0 };
-        const add = vi.spyOn(document, 'addEventListener');
-        const remove = vi.spyOn(document, 'removeEventListener');
-        const ready = whenEngaged(document, win);
-        document.dispatchEvent(new Event('scroll'));
-        await ready;
-        expect(add).toHaveBeenCalledTimes(6);
-        expect(remove).toHaveBeenCalledTimes(6);
-        add.mockRestore();
-        remove.mockRestore();
-    });
-
-    test('whenPageIdle waits for the load event, then for an idle slot', async () => {
-        const readyState = vi.spyOn(document, 'readyState', 'get').mockReturnValue('interactive');
-        const idleCallbacks = [];
-        window.requestIdleCallback = (callback) => { idleCallbacks.push(callback); };
-        let idle = false;
-        whenPageIdle().then(() => { idle = true; });
-        await Promise.resolve();
-        expect(idleCallbacks).toHaveLength(0);
-
-        window.dispatchEvent(new Event('load'));
-        expect(idleCallbacks).toHaveLength(1);
-        expect(idle).toBe(false);
-
-        idleCallbacks[0]();
-        await Promise.resolve();
-        expect(idle).toBe(true);
-        readyState.mockRestore();
-        delete window.requestIdleCallback;
+    test('keeps exporting the loading policy for the PayPal components', () => {
+        expect(whenWanted).toBe(engagementWhenWanted);
     });
 });
 

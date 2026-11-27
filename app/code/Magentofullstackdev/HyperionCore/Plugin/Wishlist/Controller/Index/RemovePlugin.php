@@ -7,6 +7,7 @@ namespace Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index;
 
 use Magento\Framework\App\RequestInterface;
 use Magento\Wishlist\Controller\Index\Remove;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
 
 /**
  * HTMX transformer for the Remove-from-Wishlist controller.
@@ -16,6 +17,8 @@ use Magento\Wishlist\Controller\Index\Remove;
  * the response is the notification toast plus the out-of-band header
  * counter (which also carries the new product -> item map the toggles
  * read their state from). See AbstractHtmxPlugin.
+ *
+ * @internal
  */
 class RemovePlugin extends AbstractHtmxPlugin
 {
@@ -28,5 +31,13 @@ class RemovePlugin extends AbstractHtmxPlugin
     public function afterDispatch(Remove $subject, $result, RequestInterface $request)
     {
         return $this->transform($result, $request);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    protected function actionName(): string
+    {
+        return ActionResponse::ACTION_WISHLIST_REMOVE;
     }
 }

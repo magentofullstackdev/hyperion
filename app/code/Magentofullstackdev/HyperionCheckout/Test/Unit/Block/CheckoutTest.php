@@ -7,8 +7,7 @@ namespace Magentofullstackdev\HyperionCheckout\Test\Unit\Block;
 
 use Magento\Checkout\Model\CompositeConfigProvider;
 use Magento\Framework\Component\ComponentRegistrarInterface;
-use Magento\Framework\Filesystem;
-use Magento\Framework\Filesystem\Directory\ReadInterface;
+use Magento\Framework\Exception\RuntimeException;
 use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Locale\ResolverInterface as LocaleResolver;
 use Magento\Framework\Serialize\Serializer\Json as JsonSerializer;
@@ -31,6 +30,7 @@ use Psr\Log\LoggerInterface;
 class CheckoutTest extends TestCase
 {
     private const MODULE_PATH = '/srv/module';
+    private const MODULE_MANIFEST = self::MODULE_PATH . '/view/frontend/web/.vite/manifest.json';
     private const STATIC_URL = 'https://shop.test/static/';
 
     /** The shape of a real build: the entry only has dynamic imports, the application chunk imports the entry back. */
@@ -129,6 +129,62 @@ class CheckoutTest extends TestCase
         );
     }
 
+    public function testTheRecaptchaClientIsPreloadedForAStoreThatProtectsAnAction(): void
+    {
+        $manifest = self::MANIFEST;
+        $manifest['_checkout-app-BBBBBBBB.js']['dynamicImports'][] = 'src/components/hyperion-recaptcha.ts';
+        $manifest['src/components/hyperion-recaptcha.ts'] = [
+            'file' => 'assets/hyperion-recaptcha-LLLLLLLL.js',
+            'isDynamicEntry' => true,
+            'imports' => ['_checkout-app-BBBBBBBB.js', 'src/main.ts'],
+        ];
+        $base = self::STATIC_URL . 'Magentofullstackdev_HyperionCheckout::assets/';
+
+        self::assertSame(
+            [$base . 'checkout-app-BBBBBBBB.js', $base . 'quote-DDDDDDDD.js', $base . 'hyperion-recaptcha-LLLLLLLL.js'],
+            $this->block($manifest)->getPreloadUrls(['recaptcha'])
+        );
+        Checkout::resetManifestCacheForTests();
+        self::assertCount(2, $this->block($manifest)->getPreloadUrls(), 'not for a store without it');
+    }
+
+    public function testTheSectionsOfTheConfigurationArePreloadedWithoutWhatTheHeadAlreadyLists(): void
+    {
+        $manifest = self::MANIFEST;
+        $manifest['_checkout-app-BBBBBBBB.js']['dynamicImports'][] = '_payment-host-MMMMMMMM.js';
+        $manifest['_payment-host-MMMMMMMM.js'] = [
+            'file' => 'assets/payment-host-MMMMMMMM.js',
+            'name' => 'mount',
+            'isDynamicEntry' => true,
+            'imports' => ['src/main.ts', '_checkout-app-BBBBBBBB.js', '_context-NNNNNNNN.js'],
+        ];
+        $manifest['_context-NNNNNNNN.js'] = ['file' => 'assets/context-NNNNNNNN.js', 'imports' => ['src/main.ts']];
+        $manifest['src/components/address-fields.ts'] = [
+            'file' => 'assets/address-fields-OOOOOOOO.js',
+            'isDynamicEntry' => true,
+            'imports' => ['_quote-DDDDDDDD.js'],
+        ];
+        $base = self::STATIC_URL . 'Magentofullstackdev_HyperionCheckout::assets/';
+
+        self::assertSame(
+            [$base . 'payment-host-MMMMMMMM.js', $base . 'context-NNNNNNNN.js', $base . 'address-fields-OOOOOOOO.js'],
+            $this->block($manifest)->getSectionPreloadUrls(['payment-host', 'address-fields', 'unknown-section'])
+        );
+        Checkout::resetManifestCacheForTests();
+        self::assertSame([], $this->block($manifest)->getSectionPreloadUrls([]), 'nothing without a section');
+        Checkout::resetManifestCacheForTests();
+        self::assertSame(
+            [],
+            $this->block(self::MANIFEST)->getSectionPreloadUrls(['payment-host']),
+            'a build without the chunk preloads nothing for it'
+        );
+    }
+
+    public function testAMissingManifestPreloadsNoSection(): void
+    {
+        self::assertSame([], $this->block(null)->getSectionPreloadUrls(['payment-host']));
+    }
+
     public function testStaticImportsOfTheEntryComeFirst(): void
     {
         $manifest = self::MANIFEST;
@@ -222,6 +278,28 @@ class CheckoutTest extends TestCase
         self::assertSame([], $this->block(null)->getPreloadUrls());
     }
 
+    public function testTheEntryAndItsStylesheetAreResolvedFromTheModuleManifest(): void
+    {
+        $block = $this->block(self::MANIFEST);
+
+        self::assertSame(
+            self::STATIC_URL . 'Magentofullstackdev_HyperionCheckout::assets/checkout-AAAAAAAA.js',
+            $block->getBundleUrl()
+        );
+        self::assertSame(
+            self::STATIC_URL . 'Magentofullstackdev_HyperionCheckout::assets/checkout-CCCCCCCC.css',
+            $block->getStylesUrl()
+        );
+    }
+
+    public function testAMissingModuleManifestNamesThePathItLookedAt(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage(self::MODULE_MANIFEST);
+
+        $this->block(null)->getBundleUrl();
+    }
+
     public function testAnInvalidUtf8ByteInAnAddressFieldIsSubstituted(): void
     {
         $block = $this->block(self::MANIFEST, 'en_US', [
@@ -277,7 +355,9 @@ class CheckoutTest extends TestCase
         $registrar->method('getPath')->willReturn(self::MODULE_PATH);
 
         $driver = $this->createStub(FileDriver::class);
-        $driver->method('isExists')->willReturn($manifest !== null);
+        $driver->method('isExists')->willReturnCallback(
+            static fn (string $path): bool => $manifest !== null && $path === self::MODULE_MANIFEST
+        );
         $driver->method('fileGetContents')
             ->willReturn(json_encode($manifest ?? [], JSON_THROW_ON_ERROR));
 
@@ -298,10 +378,6 @@ class CheckoutTest extends TestCase
                 : 'https://shop.test/'
         );
 
-        // Nothing deployed under pub/static: the manifest is read from the module.
-        $filesystem = $this->createStub(Filesystem::class);
-        $filesystem->method('getDirectoryRead')->willReturn($this->createStub(ReadInterface::class));
-
         return new Checkout(
             $this->templateContext([
                 'assetRepo' => $assetRepository,
@@ -310,7 +386,6 @@ class CheckoutTest extends TestCase
             ]),
             new JsonSerializer(),
             $configProvider,
-            $filesystem,
             $registrar,
             $driver,
             $localeResolver

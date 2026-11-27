@@ -34,5 +34,9 @@ jobs:
           # The trailing /* is what makes the pathspec match the files inside the asset directories.
           git status --porcelain -- 'app/**/web/assets/*' 'app/**/web/css/*' 'app/**/web/manifest.json' 'app/**/.vite/manifest.json' 'app/**/web/THIRD_PARTY_LICENSES.txt'
           test -z "$(git status --porcelain -- 'app/**/web/assets/*' 'app/**/web/css/*' 'app/**/web/manifest.json' 'app/**/.vite/manifest.json' 'app/**/web/THIRD_PARTY_LICENSES.txt')"
+      - name: Checkout boot set within its budget
+        run: pnpm --filter @magentofullstackdev/hyperion-checkout budget
+      - name: Checkout package ships its public files
+        run: pnpm --filter @magentofullstackdev/hyperion-checkout pack:check
       - name: Publishable tarballs
         run: pnpm -r exec pnpm pack --pack-destination /tmp/tarballs && ls -la /tmp/tarballs

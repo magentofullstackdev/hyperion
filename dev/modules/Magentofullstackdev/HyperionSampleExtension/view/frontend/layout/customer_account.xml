@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Account sidebar (stand-in for sidebar.main and sidebar.additional on account pages).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="hyperion.account.sidebar">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.account.sidebar"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.account.sidebar</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

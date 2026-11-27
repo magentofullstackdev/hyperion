@@ -7,13 +7,14 @@ namespace Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow;
 
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address\Total;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
  * The discount of the quote. The note names it: the description the price
  * rules gave the address (their labels, or the coupon code when a rule has
  * no label), else the coupon code.
  */
-class Discount implements RendererInterface
+class Discount implements TotalRowRendererInterface
 {
     /**
      * @param RowBuilder $rowBuilder

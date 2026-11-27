@@ -231,9 +231,9 @@ $qtyBlock->setTemplate('Magento_Checkout::cart/item/qty.phtml');
                 </a>
             </div>
 
-            <?php /* PayPal smart buttons (theme Magento_Paypal/layout/hyperion_checkout_minicart.xml) */ ?>
+            <?php /* Express buttons: container hyperion.express.minicart */ ?>
             <?php if ($blocker === null): ?>
-                <?= $block->getChildHtml('paypal_buttons') ?>
+                <?= $block->getChildHtml('express') ?>
             <?php endif; ?>
         </footer>
 

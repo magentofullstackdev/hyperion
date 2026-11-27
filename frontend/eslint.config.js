@@ -46,6 +46,24 @@ export default defineConfig([
         },
     },
     {
+        // The checkout's payment renderers and first-party extensions reach
+        // the checkout only through the public API: the context they are
+        // handed, their properties and their events.
+        files: [
+            'packages/module-checkout/src/components/payment-renderers/**/*.ts',
+            'packages/module-checkout/src/components/extensions/**/*.ts',
+        ],
+        ignores: ['**/__tests__/**'],
+        rules: {
+            'no-restricted-imports': ['error', {
+                patterns: [{
+                    group: ['**/store/**', '**/bootstrap-config*', '**/api/**', '**/utils/i18n*', '**/utils/navigate*'],
+                    message: 'A payment renderer or a checkout extension uses its context (extension-api.d.ts), not the checkout internals.',
+                }],
+            }],
+        },
+    },
+    {
         files: [
             '**/e2e/**',
             '**/__tests__/**',

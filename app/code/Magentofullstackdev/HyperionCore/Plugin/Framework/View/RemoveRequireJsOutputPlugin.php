@@ -12,6 +12,8 @@ use Magento\Framework\View\Layout;
  * while `head.additional` exists: an `x-magento-init` script for a RequireJS
  * module. It is added after the layout is generated, so no layout removal
  * reaches it.
+ *
+ * @internal
  */
 class RemoveRequireJsOutputPlugin
 {

@@ -18,7 +18,7 @@ Built and maintained by [Sergiu Ro](https://magentofullstack.dev).
 
 | | |
 |---|---|
-| Release | 0.9.0-beta.6, public beta |
+| Release | 0.9.0-beta.7, public beta |
 | Website | [hyperionfront.dev](https://hyperionfront.dev) |
 | Live demo | [demo.hyperionfront.dev](https://demo.hyperionfront.dev) |
 | License | [MIT](./LICENSE) |
@@ -47,12 +47,12 @@ candidate; each row shows the release and the date of its run.
 
 | Tier | Platform | PHP | Varnish | Mode | Release | Date | E2E suite |
 |---|---|---|---|---|---|---|---|
-| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
-| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | production | 0.9.0-beta.6 | 2026-11-18 | 86 / 86 |
-| 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
+| 1 | Magento Open Source 2.4.9 (clean install on Luma sample data) | 8.4 | 7.7 | developer | 0.9.0-beta.7 | 2026-11-27 | 86 / 86 |
+| 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | production | 0.9.0-beta.7 | 2026-11-25 | 86 / 86 |
+| 1 | Mage-OS 4.0.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey 8.1, MariaDB 12.3) | 8.5 | 7.7 | developer | 0.9.0-beta.7 | 2026-11-27 | 86 / 86 |
 | 1 | Magento Open Source 2.4.9 (clean install on Luma sample data, OpenSearch 3.9, Valkey 9, MariaDB 12.3) | 8.5 | 8 | developer and production | 0.9.0-beta.6 | 2026-11-20 | 86 / 86 |
-| 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
-| 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.6 | 2026-11-19 | 86 / 86 |
+| 2 | Magento Open Source 2.4.8-p5 (clean install on Luma sample data)| 8.3 | 7.6 | developer | 0.9.0-beta.7 | 2026-11-27 | 86 / 86 |
+| 2 | Mage-OS 3.6.0 (clean install on Luma sample data, OpenSearch 3.9, Valkey)| 8.4 | 7.7 | developer | 0.9.0-beta.7 | 2026-11-27 | 86 / 86 |
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row installs from the published
 Composer repository, so its battery runs after a release is published.
@@ -90,8 +90,8 @@ The verified procedure, run from the Magento root (details and every option in
 composer config repositories.hyperion composer https://magentofullstackdev.github.io/hyperion/
 composer config minimum-stability beta      # beta release; prefer-stable keeps everything else stable
 composer config prefer-stable true
-composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.6
-composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.6   # optional, Luma sample data stores only
+composer require magentofullstackdev/theme-hyperion:^0.9.0-beta.7
+composer require magentofullstackdev/module-hyperion-sample-data:^0.9.0-beta.7   # optional, Luma sample data stores only
 bin/magento setup:upgrade
 bin/magento setup:di:compile
 bin/magento setup:static-content:deploy -f
@@ -162,6 +162,14 @@ and the image CAPTCHA work for sign-in, coupon and Place Order. Cart page and mi
 links and bundle selections, PayPal smart buttons and Pay Later messages on
 the storefront.
 
+**Extension points**: other modules add payment methods, express buttons,
+shipping options (a pickup point picker), checkout fields, gates and
+request filters through DI pools and plain custom elements, without
+rebuilding the checkout, and blocks through named layout containers on the
+product page, the tiles, the cart, the header and the account pages
+(API version `1.0-beta`, [Extending Hyperion](./docs/extensions.md)).
+Optional order comment and newsletter opt-in in the checkout.
+
 **Payment methods in the checkout** (verification status from the test
 reports):
 
@@ -174,11 +182,14 @@ reports):
 | Braintree stored cards (vault) | verified against a Braintree sandbox on Magento 2.4.9 (card stored at an order, then orders with CVV re-verification on and off, 2026-11-18) |
 | Braintree PayPal | verified against the Braintree and PayPal sandboxes on Magento 2.4.9 (guest, customer, a display currency other than the base one, a virtual cart, 2026-11-18); saving the PayPal account (vault) not completed: the PayPal sandbox answered its own error page |
 | Braintree Google Pay (with 3D Secure and stored cards) | the button renders against the Braintree sandbox and opens Google's window (2026-11-18); a payment was not made (it needs a Google account in a real browser) |
-| Everything else | listed as "not supported by this checkout yet" |
+| Everything else | not shown to shoppers until a module registers a renderer ([Extending Hyperion](./docs/extensions.md#payment-renderers)) |
 
 **Customer**: registration (optional address fields), login, password reset,
-account dashboard, address book with region selector, name prefix / suffix,
-orders with invoices, shipments, credit memos, print, reorder, self-service
+account dashboard (with the recently viewed products), address book with
+region selector, name prefix / suffix, custom customer and address
+attributes on the account forms, orders with invoices, shipments, credit
+memos, print, reorder and a Recently Ordered sidebar on the account pages,
+order status and category RSS feeds, self-service
 order cancellation, Login as Customer banner, wishlist (sharing,
 edit with options), newsletter, product alerts, my downloadable products,
 cookie restriction notice, reCAPTCHA on every form.
@@ -219,8 +230,8 @@ The short version; the full list is in [Known limitations](./docs/known-limitati
 - Saving a PayPal account through Braintree, a Google Pay payment and a card
   stored through Google Pay have renderers but no completed sandbox payment.
 - Third-party extensions with Knockout / RequireJS frontends need an adapter.
-- A few rarely used core pages (billing agreements, the RSS and
-  multishipping pages) render core markup without styling.
+- A few rarely used core pages (billing agreements, the multishipping
+  pages) render core markup without styling.
 - Adobe Commerce / B2B were not tested.
 
 ## Documentation
@@ -230,6 +241,7 @@ The short version; the full list is in [Known limitations](./docs/known-limitati
 - [Varnish and caching](./docs/varnish.md)
 - [Child themes](./docs/child-themes.md)
 - [Checkout and payment renderers](./docs/checkout.md)
+- [Extending Hyperion](./docs/extensions.md)
 - [PageBuilder](./docs/pagebuilder.md)
 - [Compatibility](./docs/compatibility.md)
 - [Known limitations](./docs/known-limitations.md)

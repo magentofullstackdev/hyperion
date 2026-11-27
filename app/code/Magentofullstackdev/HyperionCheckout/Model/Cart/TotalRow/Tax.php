@@ -9,12 +9,13 @@ use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Model\Quote\Address\Total;
 use Magento\Tax\Model\Config as TaxConfig;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
  * The tax row, with one detail row per applied rate when the cart shows the
  * full tax summary. A zero tax is printed only when the store asks for it.
  */
-class Tax implements RendererInterface
+class Tax implements TotalRowRendererInterface
 {
     /**
      * @param RowBuilder $rowBuilder

@@ -4,8 +4,7 @@
 /**
  * <address-form> -- country/region/postcode-aware address editor.
  *
- * Reads `checkoutConfig.directoryData` and `checkoutConfig.countryData`
- * to decide whether the region field is a <select> (populated list) or
+ * Reads `checkoutConfig.directoryData` to decide whether the region field is a <select> (populated list) or
  * a free-text input. Postcode required unless the country is in
  * `optionalZipCountries`. Street line count from
  * `customer/address/street_lines` (default 2). Visibility flags for
@@ -21,11 +20,14 @@
  * `hc-billing-city`) and the `autocomplete` tokens its section, so the
  * shipping and the billing form can be on the page together.
  *
- * Emits:
- *   - 'address-change' with the current `Address` (snapshot) whenever
- *     a field edits.
- *   - 'address-valid' with a boolean indicating whether every visible
- *     required field passes the local validators.
+ * The fields the store declares (`hyperion.addressFields`) follow the
+ * built-in ones; their renderer is a chunk of its own
+ * (`address-fields.ts`, loaded before the mount only when the list is not
+ * empty, `optional-sections.ts`), shown once it is installed
+ * (`declaredFields`).
+ *
+ * Emits 'address-change' with the current `Address` (snapshot) whenever a
+ * field edits.
  *
  * Errors show on touched fields only, or on every field once the Place
  * Order button asked for a validation (`validationRequests`, bumped after
@@ -45,8 +47,9 @@ import { validationRequests } from '../store/validation-request.js';
 import { t } from '../utils/i18n.js';
 import { readNameFieldsConfig, type NameFieldKey } from '../utils/name-fields.js';
 import {
-    isAddressComplete,
+    declaredFields,
     isPostcodeRequired,
+    type DeclaredFieldsHost,
     isRegionMissing,
     postcodeWarning,
     readAddressFieldConfig,
@@ -69,12 +72,7 @@ interface DirectoryCountry {
 }
 
 function readCountries(): readonly DirectoryCountry[] {
-    const cfg = getCheckoutConfig() as unknown as Record<string, unknown>;
-    // Hyperion's ConfigProvider populates `directoryData` (server-side,
-    // synchronously). The legacy `countryData` key was an internal
-    // misnaming kept here as a fallback in case the merchant runs
-    // alongside an extension that still feeds it.
-    const raw = cfg['directoryData'] ?? cfg['countryData'];
+    const raw = (getCheckoutConfig() as unknown as Record<string, unknown>)['directoryData'];
     if (!raw || typeof raw !== 'object') return [];
     const out: DirectoryCountry[] = [];
     for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -124,7 +122,6 @@ export class AddressForm extends SignalWatcher(LitElement) {
     @property({ type: String }) public mode: 'shipping' | 'billing' = 'shipping';
     @property({ type: Object }) public value: Address | null = null;
     @property({ type: Boolean }) public showSaveInAddressBook = false;
-    @property({ type: Object }) public serverErrors: Readonly<Record<string, string>> = {};
 
     @state() private accessor _local: Partial<Address> = {};
     @state() private accessor _touched: Readonly<Record<string, boolean>> = {};
@@ -399,6 +396,8 @@ export class AddressForm extends SignalWatcher(LitElement) {
                       `
                     : nothing}
 
+                ${declaredFields.get()?.render(this._declaredFieldsHost()) ?? nothing}
+
                 ${this.showSaveInAddressBook
                     ? html`
                           <hc-checkbox
@@ -530,9 +529,28 @@ export class AddressForm extends SignalWatcher(LitElement) {
         this._onFieldChange(e);
     }
 
+    /** What the renderer of the declared fields reads and calls. */
+    private _declaredFieldsHost(): DeclaredFieldsHost {
+        // The address is read when a control changes, not when it rendered.
+        const form = this;
+        return {
+            mode: this.mode,
+            idPrefix: this._idPrefix,
+            get address(): Partial<Address> {
+                return form._local;
+            },
+            isTouched: (code) => this._revealAll || this._touched[code] === true,
+            touch: (code) => {
+                if (this._touched[code] !== true) this._touched = { ...this._touched, [code]: true };
+            },
+            change: (next) => {
+                this._local = next;
+                this._emit();
+            },
+        };
+    }
+
     private _errorFor(field: string, required = false): string {
-        const serverErr = this.serverErrors[field];
-        if (serverErr) return serverErr;
         const touched = this._revealAll || this._touched[field] === true;
         if (!touched) return '';
         if (field === 'street') {
@@ -559,7 +577,6 @@ export class AddressForm extends SignalWatcher(LitElement) {
      */
     private _warningFor(field: string): string {
         if (field !== 'postcode') return '';
-        if (this.serverErrors[field]) return '';
         const touched = this._revealAll || this._touched[field] === true;
         if (!touched) return '';
         const warning = postcodeWarning(
@@ -592,8 +609,6 @@ export class AddressForm extends SignalWatcher(LitElement) {
      * one predicate: only a country that requires a region can miss one.
      */
     private _regionError(cfg: AddressFieldConfig): string {
-        const serverErr = this.serverErrors['region_id'] || this.serverErrors['region'];
-        if (serverErr) return serverErr;
         const touched = this._revealAll || this._touched['region_id'] === true || this._touched['region'] === true;
         if (!touched) return '';
         return isRegionMissing(this._local, cfg) ? t('Hyperion_Checkout::validation_required') : '';
@@ -669,15 +684,6 @@ export class AddressForm extends SignalWatcher(LitElement) {
             bubbles: true,
             composed: true,
         }));
-        this.dispatchEvent(new CustomEvent('address-valid', {
-            detail: this._isComplete(),
-            bubbles: true,
-            composed: true,
-        }));
-    }
-
-    private _isComplete(): boolean {
-        return isAddressComplete(this._local, readAddressConfig());
     }
 }
 

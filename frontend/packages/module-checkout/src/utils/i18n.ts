@@ -135,6 +135,15 @@ export function t(
 }
 
 /**
+ * The server's translation of an English source string
+ * (`hyperion.translations`), undefined when it has none.
+ */
+export function serverTranslation(source: string): string | undefined {
+    const value = runtimeTranslations[source];
+    return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
  * A phrase that depends on a number: `<key>_<category>` for the plural
  * category of `count` in the active locale, `<key>_other` when the catalog
  * has no text for that category. `{count}` is available to the text next to

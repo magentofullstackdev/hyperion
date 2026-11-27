@@ -312,7 +312,9 @@ try {
             links[a.index].click();
             setTimeout(() => second.click(), 50);
         }, [NAV, pair[0], pair[1]]);
-        await sleep(2500);
+        // A slow install may need more than the held 700 ms: wait for the surviving answer, then for its swap.
+        for (let waited = 0; finished.length === 0 && waited < 15000; waited += 100) await sleep(100);
+        await sleep(1500);
         await page.unroute(FRAGMENT);
         page.off('request', onRequest);
         page.off('requestfinished', onFinished);

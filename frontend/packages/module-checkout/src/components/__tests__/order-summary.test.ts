@@ -102,7 +102,7 @@ describe('<order-summary>', () => {
     it('links to the cart from the header, with the URL of the Hyperion config first', async () => {
         const core = await mount(false);
         expect(core.querySelector<HTMLAnchorElement>('[data-hyperion-edit-cart]')!.getAttribute('href'))
-            .toBe('https://hyperion.local/checkout/cart/');
+            .toBe('https://shop.example/checkout/cart/');
         expect(text(core.querySelector('[data-hyperion-edit-cart]'))).toBe('Edit cart');
         document.body.innerHTML = '';
 

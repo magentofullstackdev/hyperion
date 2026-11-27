@@ -16,9 +16,19 @@
  * (`prepareOrder()`), lets the payment renderer do its step and then sends
  * the order with the queue closed (`submitOrder()`).
  *
+ * The extension API meets the flow here: the bodies of the
+ * shipping-information, billing-address and payment-information requests go
+ * through the request filters (`extension/filters.ts`) when the write
+ * starts; the shipping address the quote receives is the effective one
+ * (`extension/address-override.ts`, the typed address unless a shipping
+ * extension put another in its place); an order starts with the cancelable
+ * `hyperion:checkout:before-place-order` event and waits for the generic
+ * extension modules still loading before its gate is read again.
+ *
  * Components call these through `flowActions()` rather than importing the
  * API modules, so the critical path stays greppable.
  */
+import type { PaymentData } from '../../extension-api.js';
 import type { Address, AddressRequestPayload } from '../types/address.js';
 import type { PaymentInformationRequest, PaymentMethodConfig, PaymentMethodPayload } from '../types/payment.js';
 import type {
@@ -61,7 +71,7 @@ import { discardDrafts } from './drafts.js';
 import { sendWithAntiAbuse } from './anti-abuse.js';
 import { captchaError } from './captcha-state.js';
 import { getStore } from './index.js';
-import { placeOrderBlocker, placeOrderBlockerMessage, checkoutUpdatingMessage, type PlaceOrderBlocker } from './place-order-hint.js';
+import { placeOrderBlocker, checkoutUpdatingMessage, type PlaceOrderBlocker } from './place-order-hint.js';
 import { DEFAULT_RATE_FIELDS, isEstimable, mergeRefreshedRates, pickShippingMethod, rateKey } from './rate-key.js';
 import { handleQuoteGone, handleSessionExpired, recoverFromOrderFailure } from './recovery.js';
 import { clearFailure, reportFailure } from './section-status.js';
@@ -82,7 +92,14 @@ import { navigateTo } from '../utils/navigate.js';
 import { FREE_PAYMENT_METHOD, isZeroAmount, offeredPaymentMethods } from '../utils/payment-offer.js';
 import { decideRedirectTarget } from '../utils/safe-redirect.js';
 import { EMAIL_SHAPE } from '../validation/rules.js';
-import { getPaymentRenderer, isSafeForGeneric } from '../components/payment-renderers/registry.js';
+import { isPreselectable, savesOnSelection as entrySavesOnSelection } from '../components/payment-host/entries.js';
+import { notifyOrderNotPlaced } from '../components/payment-host/host.js';
+import { unsupportedReason } from '../components/payment-host/payment-rows.js';
+import { billingFollowsShipping, effectiveShippingAddress } from '../extension/address-override.js';
+import { emitCheckoutEvent } from '../extension/events.js';
+import { applyFilters } from '../extension/filters.js';
+import { extensionsSettled, refreshGates } from '../extension/gates.js';
+import { configHoldsSave, shippingExtensionView } from '../components/shipping-extension-view.js';
 
 /**
  * The quote address Magento receives, built from the checkout's address
@@ -188,7 +205,7 @@ export const RATE_LIMIT_RETRY_DELAY_MS = 5000;
 const RECONNECT_KINDS: ReadonlySet<string> = new Set(['offline', 'network', 'timeout']);
 
 /**
- * What `submitOrder()` and `placeOrder()` resolve with: the order id,
+ * What `submitOrder()` resolves with: the order id,
  * `'placed-unconfirmed'` when the answer was lost and the quote shows the
  * order exists, or null when no order was placed: a refusal of the server
  * is in `globalError`, a request that got no answer is resolved by reading
@@ -199,6 +216,12 @@ export type PlaceOrderOutcome = number | 'placed-unconfirmed' | null;
 export interface PrepareOrderOptions {
     /** The caller is the selected payment renderer itself: its own readiness is not asked. */
     skipPaymentReady?: boolean;
+    /**
+     * False when the caller only checks the gate before a step of its own
+     * (a wallet about to open its sheet) and gives the latch back at once:
+     * no `before-place-order` event, that one belongs to the order itself.
+     */
+    announce?: boolean;
 }
 
 /**
@@ -223,7 +246,10 @@ interface CouponResult {
 
 /** What a shipping-information request carried. */
 interface ShippingSnapshot {
-    shipping: Address;
+    /** The typed address, by identity (an edit stores a new object); null while an extension's address replaces it. */
+    shipping: Address | null;
+    /** The address the quote receives: `shipping`, or the address an extension put in its place. */
+    effective: Address;
     /** The separate billing address sent with it, null when none was (same as shipping, or incomplete). */
     billing: Address | null;
     sameAsShipping: boolean;
@@ -265,7 +291,7 @@ export interface FlowActions {
      * the quote without placing the order. False when it failed (the
      * message is in `globalError`).
      */
-    savePaymentInformation: () => Promise<boolean>;
+    savePaymentInformation: (data?: PaymentData | null) => Promise<boolean>;
     /**
      * Re-read the payment methods and totals of the quote once no write
      * runs or waits, and reconcile the selected method with the list.
@@ -298,11 +324,15 @@ export interface FlowActions {
      */
     prepareOrder: (options?: PrepareOrderOptions) => Promise<PrepareOrderResult>;
     /** Second half, after `prepareOrder()` answered `ready`: send the order with the queue closed. */
-    submitOrder: () => Promise<PlaceOrderOutcome>;
+    submitOrder: (data?: PaymentData | null) => Promise<PlaceOrderOutcome>;
     /** Give back the latch of a prepared order that will not be sent (the payment step was abandoned). */
     cancelOrder: () => void;
-    /** `prepareOrder()` then `submitOrder()`, for callers with no step between the two. */
-    placeOrder: () => Promise<PlaceOrderOutcome>;
+    /**
+     * A prepared order was created outside the order request of the
+     * checkout (a payment element placed it): close the latch for good, as
+     * after an order the checkout placed itself.
+     */
+    confirmOrderPlaced: () => void;
     /**
      * An order request sent outside these actions (a wallet's own
      * endpoint) got no answer: let the quote say what became of it, exactly
@@ -341,7 +371,6 @@ export function createFlowActions(): FlowActions {
     let prepared = false;
     let submitting = false;
     /** The last `prepareOrder()` gave up because a save failed (the failure is on screen). */
-    let prepareFailed = false;
     /** How many failed requests were shown to the shopper so far. */
     let reportedFailures = 0;
     /** The flush may ask again for rates whose last estimate failed (once per press). */
@@ -364,7 +393,7 @@ export function createFlowActions(): FlowActions {
 
     const rateFields = (): readonly string[] => peekCheckoutConfig()?.hyperion?.rateFields ?? DEFAULT_RATE_FIELDS;
     const preselect = (): ShippingPreselect => peekCheckoutConfig()?.hyperion?.shippingPreselect ?? 'cheapest';
-    const currentRateKey = (): string => rateKey(store.shippingAddress.get(), rateFields());
+    const currentRateKey = (): string => rateKey(effectiveShippingAddress(store), rateFields());
 
     // A list that is already there for the address (put by the hydration)
     // needs no estimate.
@@ -627,23 +656,38 @@ export function createFlowActions(): FlowActions {
         return store.availableShippingMethods.get().some((m) => isUsableRate(m) && isSameMethod(m, selected));
     }
 
+    /**
+     * A required shipping extension of the selected rate that is not complete
+     * yet (no pickup point chosen) holds the save: the carrier would refuse
+     * the rate without its data. Asked for the selection of this very
+     * moment; until the extension chunk arrived, a store with a required
+     * shipping extension holds every save. The chunk asks for the save once
+     * nothing holds it.
+     */
+    function shippingHeld(): boolean {
+        const selected = store.selectedShippingMethod.get();
+        return shippingExtensionView.get()?.holdsSave(selected) ?? configHoldsSave(selected);
+    }
+
     function canSendShipping(): boolean {
-        return !store.isVirtual.get() && isAddressComplete(store.shippingAddress.get()) && selectionIsOffered();
+        return !store.isVirtual.get() && isAddressComplete(effectiveShippingAddress(store), undefined, 'shipping') && selectionIsOffered()
+            && !shippingHeld();
     }
 
     function readShippingSnapshot(): ShippingSnapshot | null {
         const shipping = store.shippingAddress.get();
+        const effective = effectiveShippingAddress(store);
         const method = store.selectedShippingMethod.get();
-        if (store.isVirtual.get() || !isAddressComplete(shipping) || method === null) return null;
-        const sameAsShipping = store.billingSameAsShipping.get();
+        if (store.isVirtual.get() || effective === null || !isAddressComplete(effective, undefined, 'shipping') || method === null) return null;
+        const sameAsShipping = billingFollowsShipping(store);
         const typed = sameAsShipping ? null : store.billingAddress.get();
-        return { shipping, billing: isAddressComplete(typed) ? typed : null, sameAsShipping, method };
+        return { shipping, effective, billing: isAddressComplete(typed, undefined, 'billing') ? typed : null, sameAsShipping, method };
     }
 
     /** The quote misses the billing address of the form, or the "same as shipping" choice. */
     function billingIsOwed(): boolean {
-        if (store.billingSameAsShipping.get()) return store.billingDirty.get();
-        if (!isAddressComplete(store.billingAddress.get())) return false;
+        if (billingFollowsShipping(store)) return store.billingDirty.get();
+        if (!isAddressComplete(store.billingAddress.get(), undefined, 'billing')) return false;
         return !store.billingSynced.get() || store.billingDirty.get();
     }
 
@@ -660,6 +704,7 @@ export function createFlowActions(): FlowActions {
         if (
             runningShipping !== null
             && runningShipping.shipping === now.shipping
+            && runningShipping.effective === now.effective
             && runningShipping.billing === now.billing
             && runningShipping.sameAsShipping === now.sameAsShipping
             && isSameMethod(runningShipping.method, now.method)
@@ -693,16 +738,16 @@ export function createFlowActions(): FlowActions {
                 // left out (core treats it as optional): the shipping
                 // method reaches the quote now, the billing address with
                 // the write its completion asks for.
-                const request: ShippingInformationRequest = {
+                const request = applyFilters<ShippingInformationRequest>('shippingInformation', {
                     addressInformation: {
-                        shipping_address: quoteAddress(snapshot.shipping),
+                        shipping_address: quoteAddress(snapshot.effective),
                         ...(snapshot.sameAsShipping
-                            ? { billing_address: billingCopyOf(snapshot.shipping) }
+                            ? { billing_address: billingCopyOf(snapshot.effective) }
                             : snapshot.billing !== null ? { billing_address: quoteAddress(snapshot.billing) } : {}),
                         shipping_method_code: snapshot.method.method_code,
                         shipping_carrier_code: snapshot.method.carrier_code,
                     },
-                };
+                });
                 sent = snapshot;
                 runningShipping = snapshot;
                 store.isSavingShipping.set(true);
@@ -740,10 +785,10 @@ export function createFlowActions(): FlowActions {
             shippingIdleTimer.cancel();
         }
         if (sent.sameAsShipping) {
-            if (store.billingSameAsShipping.get()) store.billingDirty.set(false);
+            if (billingFollowsShipping(store)) store.billingDirty.set(false);
         } else if (
             sent.billing !== null
-            && !store.billingSameAsShipping.get()
+            && !billingFollowsShipping(store)
             && store.billingAddress.get() === sent.billing
         ) {
             store.billingSynced.set(true);
@@ -786,7 +831,7 @@ export function createFlowActions(): FlowActions {
      * replaced this one, or the address changed its rate key meanwhile.
      */
     async function fetchRates(): Promise<readonly ShippingMethod[] | null> {
-        const addr = store.shippingAddress.get();
+        const addr = effectiveShippingAddress(store);
         if (addr === null || !isEstimable(addr)) return null;
         if (rateController) rateController.abort();
         rateController = new AbortController();
@@ -899,7 +944,7 @@ export function createFlowActions(): FlowActions {
         if (key === estimatedKey) {
             // Back on the address the list on screen belongs to.
             estimateTimer.cancel();
-        } else if (isEstimable(store.shippingAddress.get())) {
+        } else if (isEstimable(effectiveShippingAddress(store))) {
             if (immediate) {
                 estimateTimer.cancel();
                 void startEstimate();
@@ -943,7 +988,7 @@ export function createFlowActions(): FlowActions {
      * goes through the normal path (another rate is selected and saved).
      */
     async function refreshShippingRatesSilently(): Promise<void> {
-        const addr = store.shippingAddress.get();
+        const addr = effectiveShippingAddress(store);
         if (isOrdering() || store.isVirtual.get() || addr === null || !isEstimable(addr)) return;
         if (store.estimateState.get() !== 'ready' || estimateInFlight !== null || estimateTimer.pending()) return;
         const key = currentRateKey();
@@ -991,9 +1036,9 @@ export function createFlowActions(): FlowActions {
             errorContext: { path: cartPath('billing-address'), method: 'POST' },
             run: async () => {
                 const billing = store.billingAddress.get();
-                if (!isAddressComplete(billing)) throw new WriteNotNeeded();
+                if (!isAddressComplete(billing, undefined, 'billing')) throw new WriteNotNeeded();
                 sent = billing;
-                const request = { address: quoteAddress(billing), useForShipping: false };
+                const request = applyFilters('billingAddress', { address: quoteAddress(billing), useForShipping: false });
                 store.isSavingBilling.set(true);
                 try {
                     return isGuest()
@@ -1013,7 +1058,7 @@ export function createFlowActions(): FlowActions {
 
     /** A virtual quote whose billing address is complete and not on the quote as it stands. */
     function virtualBillingIsOwed(): boolean {
-        if (!store.isVirtual.get() || !isAddressComplete(store.billingAddress.get())) return false;
+        if (!store.isVirtual.get() || !isAddressComplete(store.billingAddress.get(), undefined, 'billing')) return false;
         return !store.billingSynced.get() || store.billingDirty.get();
     }
 
@@ -1090,29 +1135,41 @@ export function createFlowActions(): FlowActions {
     /**
      * The payment-information body. `forSelection`: only what tells the
      * quote which method is selected, without the data and the agreements
-     * that belong to the order request.
+     * that belong to the order request. `data` is what the payment method
+     * contributes (`PaymentData` of the extension API): `method` (the
+     * selected code by default), `po_number` at the top level of the
+     * payment (core ignores it inside `additional_data`), `additional_data`
+     * when it has a key, `extension_attributes` next to the accepted
+     * agreement ids, which only the checkout sets.
      */
-    function buildPaymentRequest(forSelection = false): PaymentInformationRequest | null {
-        const method = store.selectedPaymentMethod.get();
-        if (!method) return null;
-        const sameAsShipping = store.billingSameAsShipping.get() && !store.isVirtual.get();
-        const billingSnapshot = sameAsShipping ? store.shippingAddress.get() : store.billingAddress.get();
-        if (!isAddressComplete(billingSnapshot)) return null;
+    function buildPaymentRequest(forSelection = false, data: PaymentData | null = null): PaymentInformationRequest | null {
+        const selected = store.selectedPaymentMethod.get();
+        if (!selected) return null;
+        const sameAsShipping = billingFollowsShipping(store) && !store.isVirtual.get();
+        const billingSnapshot = sameAsShipping ? effectiveShippingAddress(store) : store.billingAddress.get();
+        // The shipping address that doubles as the billing address carries the billing fields too.
+        if (!isAddressComplete(billingSnapshot, undefined, sameAsShipping ? 'shipping' : 'billing')) return null;
 
+        const contributed = data ?? {};
+        const method = !forSelection && typeof contributed.method === 'string' && contributed.method !== ''
+            ? contributed.method
+            : selected;
         const paymentMethod: PaymentMethodPayload = { method };
         if (!forSelection) {
-            const data = store.paymentMethodData.get()[method] ?? {};
             const agreements = store.acceptedAgreements.get();
-            // The purchase order number is a field of the payment itself; core
-            // ignores it inside `additional_data`.
-            const { po_number: poNumber, ...additionalData } = data;
-            if ('po_number' in data) paymentMethod.po_number = String(poNumber ?? '').trim();
-            if (Object.keys(additionalData).length > 0) paymentMethod.additional_data = additionalData;
-            if (agreements.length > 0) {
-                paymentMethod.extension_attributes = {
-                    agreement_ids: agreements.map((id) => String(id)),
-                };
+            if (contributed.po_number !== undefined) paymentMethod.po_number = String(contributed.po_number ?? '').trim();
+            const additionalData = contributed.additional_data;
+            if (additionalData && Object.keys(additionalData).length > 0) paymentMethod.additional_data = { ...additionalData };
+            const extension: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(contributed.extension_attributes ?? {})) {
+                if (key === 'agreement_ids') {
+                    console.warn('[hyperion-checkout] a payment method may not set extension_attributes.agreement_ids; the value was dropped');
+                    continue;
+                }
+                extension[key] = value;
             }
+            if (agreements.length > 0) extension['agreement_ids'] = agreements.map((id) => String(id));
+            if (Object.keys(extension).length > 0) paymentMethod.extension_attributes = extension;
         }
         const request: PaymentInformationRequest = {
             paymentMethod,
@@ -1123,7 +1180,7 @@ export function createFlowActions(): FlowActions {
         return request;
     }
 
-    function enqueuePaymentMethod(forSelection: boolean): Promise<WriteOutcome<boolean>> {
+    function enqueuePaymentMethod(forSelection: boolean, data: PaymentData | null = null): Promise<WriteOutcome<boolean>> {
         const errorContext = { path: cartPath('set-payment-information'), method: 'POST' };
         (forSelection ? selectionSaves : rendererSaves).add(errorContext);
         return queue.enqueue<boolean>({
@@ -1133,8 +1190,9 @@ export function createFlowActions(): FlowActions {
             source: 'action',
             errorContext,
             run: async () => {
-                const request = buildPaymentRequest(forSelection);
-                if (request === null) throw new WriteNotNeeded();
+                const built = buildPaymentRequest(forSelection, data);
+                if (built === null) throw new WriteNotNeeded();
+                const request = applyFilters('paymentInformation', built);
                 return sendWithAntiAbuse(store, 'payment-method', ({ headers }) => (isGuest()
                     ? setGuestPaymentInformation(resolveGuestId() ?? '', request, headers)
                     : setCustomerPaymentInformation(request, headers)));
@@ -1162,7 +1220,7 @@ export function createFlowActions(): FlowActions {
     function attemptPaymentMethodSave(flushing: boolean): void {
         if (!paymentSaveOwed || isOrdering()) return;
         const method = store.selectedPaymentMethod.get();
-        if (method === null || getPaymentRenderer(method)?.savesOnSelection === false) {
+        if (method === null || !savesOnSelection(method)) {
             paymentSaveOwed = false;
             return;
         }
@@ -1177,6 +1235,15 @@ export function createFlowActions(): FlowActions {
         void enqueuePaymentMethod(true);
     }
 
+    /**
+     * Whether the method is written to the quote when it is selected: false
+     * when its renderer entry says so (`savesOnSelection` of
+     * `hyperion.paymentRenderers`).
+     */
+    function savesOnSelection(method: string): boolean {
+        return entrySavesOnSelection(method);
+    }
+
     const paymentTimer = debounce((): void => {
         attemptPaymentMethodSave(false);
     }, PAYMENT_METHOD_SAVE_DELAY_MS);
@@ -1187,12 +1254,12 @@ export function createFlowActions(): FlowActions {
         paymentTimer();
     }
 
-    async function savePaymentInformation(): Promise<boolean> {
-        if (buildPaymentRequest() === null) return false;
+    async function savePaymentInformation(data: PaymentData | null = null): Promise<boolean> {
+        if (buildPaymentRequest(false, data) === null) return false;
         store.globalError.set(null);
         paymentTimer.cancel();
         paymentSaveOwed = false;
-        const outcome = await enqueuePaymentMethod(false);
+        const outcome = await enqueuePaymentMethod(false, data);
         return outcome.status === 'applied';
     }
 
@@ -1248,7 +1315,7 @@ export function createFlowActions(): FlowActions {
         return estimateInFlight === null
             && !store.isVirtual.get()
             && store.estimateState.get() === 'error'
-            && isEstimable(store.shippingAddress.get());
+            && isEstimable(effectiveShippingAddress(store));
     }
 
     /**
@@ -1262,7 +1329,7 @@ export function createFlowActions(): FlowActions {
             && !store.isVirtual.get()
             && estimatedKey !== null
             && estimatedKey !== currentRateKey()
-            && isEstimable(store.shippingAddress.get());
+            && isEstimable(effectiveShippingAddress(store));
     }
 
     /** Something is on its way to the quote, or owed to it. */
@@ -1330,10 +1397,7 @@ export function createFlowActions(): FlowActions {
             store,
             queue,
             navigateToSuccess,
-            onNotPlaced: () => {
-                const method = store.selectedPaymentMethod.get();
-                if (method !== null) getPaymentRenderer(method)?.afterPlaceOrderFailed?.();
-            },
+            onNotPlaced: notifyOrderNotPlaced,
             onSessionExpired: expireSession,
         });
         return verdict === 'placed' || verdict === 'gone' ? 'placed-unconfirmed' : null;
@@ -1359,7 +1423,12 @@ export function createFlowActions(): FlowActions {
         // An earlier attempt may have placed the order and the quote is
         // being asked: nothing is sent, and no press shortens that.
         if (outcome === 'unknown') return { status: 'blocked', reason: 'outcome-unknown' };
-        prepareFailed = false;
+        // The first step of an order: an extension may stop it (and its gate says why).
+        const method = store.selectedPaymentMethod.get() ?? '';
+        if (options.announce !== false && !emitCheckoutEvent('before-place-order', { method }, { cancelable: true })) {
+            return { status: 'blocked', reason: 'extension' };
+        }
+        refreshGates();
         // Nothing to wait for and a piece missing: answer without the latch.
         if (!hasPendingWork()) {
             const missing = placeOrderBlocker(store, selectors, options);
@@ -1388,12 +1457,16 @@ export function createFlowActions(): FlowActions {
                 if (estimateGeneration === estimatesBefore) break;
             }
             await queue.whenIdle();
+            // Modules of the generic extension pool still loading may add a
+            // gate; the gates are read again on the state the flush left.
+            const loading = extensionsSettled();
+            if (loading !== null) await loading;
+            refreshGates();
         } finally {
             retryRatesOnFlush = true;
             preparing = false;
         }
         const saved = reportedFailures === failuresBefore;
-        prepareFailed = !saved;
         const missing = placeOrderBlocker(store, selectors, options);
         if (!saved || missing !== null) {
             releaseOrder();
@@ -1408,7 +1481,7 @@ export function createFlowActions(): FlowActions {
         return { status: 'ready' };
     }
 
-    async function submitOrder(): Promise<PlaceOrderOutcome> {
+    async function submitOrder(data: PaymentData | null = null): Promise<PlaceOrderOutcome> {
         if (!prepared || submitting) return null;
         prepared = false;
         submitting = true;
@@ -1422,9 +1495,17 @@ export function createFlowActions(): FlowActions {
                 store.globalError.set(checkoutUpdatingMessage());
                 return null;
             }
-            const request = buildPaymentRequest();
-            if (request === null) {
+            const built = buildPaymentRequest(false, data);
+            if (built === null) {
                 releaseOrder();
+                return null;
+            }
+            let request: PaymentInformationRequest;
+            try {
+                request = applyFilters('paymentInformation', built);
+            } catch (err) {
+                releaseOrder();
+                store.globalError.set(err instanceof Error ? err.message : t('Hyperion_Checkout::unexpected_error'));
                 return null;
             }
             let orderId: number;
@@ -1448,20 +1529,9 @@ export function createFlowActions(): FlowActions {
         releaseOrder();
     }
 
-    async function placeOrder(): Promise<PlaceOrderOutcome> {
-        if (!prepared) {
-            const result = await prepareOrder({ skipPaymentReady: true });
-            if (result.status === 'blocked') {
-                const { reason } = result;
-                // A save that failed is on screen in its section: what
-                // is missing because of it is not named a second time.
-                if (reason !== 'busy' && reason !== 'write-failed' && reason !== 'outcome-unknown' && !prepareFailed) {
-                    store.globalError.set(placeOrderBlockerMessage(store, reason));
-                }
-                return null;
-            }
-        }
-        return submitOrder();
+    function confirmOrderPlaced(): void {
+        if (store.orderOutcome.get() === 'placed') return;
+        markPlaced();
     }
 
     return {
@@ -1486,7 +1556,7 @@ export function createFlowActions(): FlowActions {
         prepareOrder,
         submitOrder,
         cancelOrder,
-        placeOrder,
+        confirmOrderPlaced,
         resolveLostOrder,
     };
 }
@@ -1495,8 +1565,8 @@ export function createFlowActions(): FlowActions {
  * The payment method to keep selected after the list changed: `free` at a
  * zero grand total (it is the only method offered then, see
  * `offeredPaymentMethods()`), the selection while the
- * list still offers it, the only offered method when the generic renderer
- * can handle it. Otherwise nothing: the shopper chooses, and a gateway is
+ * list still offers it and a renderer serves it, the only offered method
+ * when it is an offline method of the bundle. Otherwise nothing: the shopper chooses, and a gateway is
  * never selected for them (its SDK loads on selection). Exported for the
  * unit tests.
  */
@@ -1509,11 +1579,11 @@ export function reconcilePaymentSelection(
     if (totals !== null && isZeroAmount(totals.grand_total) && offer.length === 1 && offer[0]?.code === FREE_PAYMENT_METHOD) {
         return FREE_PAYMENT_METHOD;
     }
-    if (selected !== null && offer.some((m) => m.code === selected)) {
+    if (selected !== null && offer.some((m) => m.code === selected) && unsupportedReason(selected) === null) {
         return selected;
     }
     const only = offer.length === 1 ? offer[0] : undefined;
-    return only !== undefined && isSafeForGeneric(only.code) ? only.code : null;
+    return only !== undefined && isPreselectable(only.code) ? only.code : null;
 }
 
 function shifted(value: unknown, delta: number): string {

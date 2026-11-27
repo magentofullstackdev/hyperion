@@ -35,27 +35,45 @@ import { LitElement, html, css, nothing } from 'lit';
  * the code where it was typed. The error state ends at the first edit of
  * the field. The toast of the same answer is not touched.
  *
- * Server rendered children. The phtml shell may carry a
- * `<template data-hyperion-coupon-children>` whose content is the HTML of
- * the block's children: the image CAPTCHA of the coupon form
+ * The message line under the field is always rendered, empty without a
+ * message: the open form reserves its height (two text-sm lines on a
+ * phone, where core's refusal with a typical code wraps, one line from
+ * `sm`), so a message that arrives with an answer, or goes at the first
+ * edit, moves nothing around the form. Hidden with the closed disclosure,
+ * it costs the closed form nothing.
+ *
+ * Server rendered skeleton. The phtml shell carries a
+ * `[data-hyperion-coupon-skeleton]` section: the markup this element
+ * renders, in the state the server knows (closed, applied coupon, refused
+ * code), as a working plain form. It gives the element its final geometry
+ * before the chunk arrives, so the upgrade moves nothing. At the upgrade
+ * the element takes over what the shopper did in it meanwhile (the
+ * disclosure opened, a code typed, the focus in the field) and removes it
+ * before its first render.
+ *
+ * Server rendered children. The skeleton's `[data-coupon-extra-slot]` holds
+ * the HTML of the block's children: the image CAPTCHA of the coupon form
  * (`<hyperion-captcha>` with the `captcha[sales_rule_coupon_request]`
  * field) and, from core's `Magento_ReCaptchaCheckoutSalesRule`, the
  * `coupon_code` reCAPTCHA (`<hyperion-recaptcha>` with its hidden
- * `g-recaptcha-response` input and the v3 legal notice). The content is
+ * `g-recaptcha-response` input and the v3 legal notice). The nodes are
  * captured in `connectedCallback` and, once the form exists, moved into
- * `[data-coupon-extra-slot]` INSIDE the `<form>`: `<hyperion-recaptcha>`
- * gates the submit of its closest form, so the token is minted before HTMX
- * sends the request and the hidden input travels with the form body. The
- * HTMX answer is a fresh shell with the children again, so a swap repeats
- * the same path on the new element.
+ * `[data-coupon-extra-slot]` INSIDE the rendered `<form>`:
+ * `<hyperion-recaptcha>` gates the submit of its closest form, so the token
+ * is minted before HTMX sends the request and the hidden input travels with
+ * the form body. The HTMX answer is a fresh shell with the skeleton and the
+ * children again, so a swap repeats the same path on the new element.
  *
  * The `remove` flag is sent ONLY in cancel mode: core's coupon reCAPTCHA
  * observer skips the validation whenever the parameter is present, even
  * as `remove=0`, so an apply request must not carry it.
  *
- * Attributes (all strings):
+ * Attributes (strings unless noted):
  * - `applied-coupon` -- when non-empty, the form renders in "cancel" mode
  *   with a readonly input and a "Cancel Coupon" button.
+ * - `expanded` (boolean) -- renders the form open; the answer to the form's
+ *   own request (apply or cancel) sets it, so the form the shopper just used
+ *   does not collapse and move the page when the answer arrives.
  * - `action-url` -- `checkout/cart/couponPost` URL (store-scoped).
  * - `form-key` -- Magento form_key for CSRF.
  * - `attempted-code`, `error-message` -- the refused code and the reason;
@@ -66,6 +84,7 @@ import { LitElement, html, css, nothing } from 'lit';
 export class HyperionCouponForm extends LitElement {
     static properties = {
         appliedCoupon: { type: String, attribute: 'applied-coupon' },
+        expanded: { type: Boolean },
         actionUrl: { type: String, attribute: 'action-url' },
         formKey: { type: String, attribute: 'form-key' },
         attemptedCode: { type: String, attribute: 'attempted-code' },
@@ -77,6 +96,7 @@ export class HyperionCouponForm extends LitElement {
         inputLabel: { type: String, attribute: 'input-label' },
         _loading: { state: true },
         _edited: { state: true },
+        _open: { state: true },
     };
 
     // Light DOM -- Tailwind utility classes on the template need to resolve
@@ -91,6 +111,7 @@ export class HyperionCouponForm extends LitElement {
     constructor() {
         super();
         this.appliedCoupon = '';
+        this.expanded = false;
         this.actionUrl = '';
         this.formKey = '';
         this.attemptedCode = '';
@@ -102,13 +123,15 @@ export class HyperionCouponForm extends LitElement {
         this.inputLabel = 'Discount code';
         this._loading = false;
         this._edited = false;
+        this._open = false;
         this._extraChildren = null;
+        this._carried = null;
         this._onBefore = this._onBefore.bind(this);
         this._onAfter  = this._onAfter.bind(this);
     }
 
     connectedCallback() {
-        this._captureChildren();
+        this._captureSkeleton();
         super.connectedCallback();
         this.addEventListener('htmx:beforeRequest', this._onBefore);
         this.addEventListener('htmx:afterRequest',  this._onAfter);
@@ -128,16 +151,47 @@ export class HyperionCouponForm extends LitElement {
         this._injectChildren();
         // The form is rendered after HTMX processed the page (the component
         // chunk arrives asynchronously), so ask HTMX to read its attributes.
-        // `process()` is idempotent on an already initialised node.
+        // `process()` is idempotent on an already initialized node.
         const form = this.querySelector('form[data-hyperion-coupon-form]');
         if (form && window.htmx && typeof window.htmx.process === 'function') {
             window.htmx.process(form);
         }
-        // A refused code: the shopper continues in the field. The form sits
-        // below the cart lines, the page must not jump to it.
-        if (this._failedCode() !== '') {
-            form?.querySelector('input[name="coupon_code"]')?.focus({ preventScroll: true });
+        // A refused code, or a field the shopper was typing in before the
+        // upgrade: the shopper continues in the field. The form sits below
+        // the cart lines, the page must not jump to it.
+        const field = form?.querySelector('input[name="coupon_code"]');
+        const carried = this._carried;
+        this._carried = null;
+        if (field && carried && carried.typed !== null && !field.readOnly) {
+            field.value = carried.typed;
         }
+        if (this._failedCode() !== '' || carried?.focused) {
+            field?.focus({ preventScroll: true });
+        }
+    }
+
+    /**
+     * The disclosure has one source of truth, `_open`: seeded before the first
+     * render from what the server says (an answer to the form's own request,
+     * an applied coupon, a refused code) and from the skeleton the shopper may
+     * have opened, then kept in step with the `toggle` events of the
+     * `<details>`. A later change of those properties can only OPEN the form
+     * (a server state that renders open); nothing but the shopper closes it.
+     */
+    willUpdate(changed) {
+        const serverOpen = this.expanded || (this.appliedCoupon || '').trim() !== '' || this._failedCode() !== '';
+        if (!this.hasUpdated) {
+            this._open = this._open || serverOpen;
+            return;
+        }
+        if (serverOpen && !this._open && (changed.has('expanded') || changed.has('appliedCoupon') || changed.has('attemptedCode'))) {
+            this._open = true;
+        }
+    }
+
+    _onToggle(event) {
+        const details = event.currentTarget;
+        if (details && this._open !== details.open) this._open = details.open;
     }
 
     /** The refused code to show, empty while a coupon is applied. */
@@ -158,19 +212,31 @@ export class HyperionCouponForm extends LitElement {
     _onAfter()  { this._loading = false; }
 
     /**
-     * Take the server rendered children out of their inert `<template>`
-     * before Lit's first render. The fragment keeps them until the form
-     * exists; the template itself is dropped so a second connection (a DOM
-     * move) finds nothing to capture again.
+     * Before Lit's first render: take the server rendered children out of
+     * the skeleton (the fragment keeps them until the form exists), read what
+     * the shopper did in the skeleton form before the upgrade and remove it,
+     * so a second connection (a DOM move) finds nothing to capture again. A
+     * typed code that differs from the server value counts as an edit (a
+     * refused code then loses its error state).
      */
-    _captureChildren() {
-        const template = this.querySelector(':scope > template[data-hyperion-coupon-children]');
-        if (!template) return;
-        const content = template.content;
-        if (content && content.childNodes.length > 0) {
-            this._extraChildren = content;
+    _captureSkeleton() {
+        const skeleton = this.querySelector(':scope > [data-hyperion-coupon-skeleton]');
+        if (!skeleton) return;
+        const extra = skeleton.querySelector('[data-coupon-extra-slot]');
+        if (extra && (extra.children.length > 0 || (extra.textContent || '').trim() !== '')) {
+            const fragment = document.createDocumentFragment();
+            fragment.append(...extra.childNodes);
+            this._extraChildren = fragment;
         }
-        template.remove();
+        const field = skeleton.querySelector('input[name="coupon_code"]');
+        const typed = field && !field.readOnly && field.value !== field.defaultValue ? field.value : null;
+        if (typed !== null) this._edited = true;
+        if (skeleton.querySelector('details')?.open) this._open = true;
+        this._carried = {
+            typed,
+            focused: !!field && field === document.activeElement,
+        };
+        skeleton.remove();
     }
 
     /**
@@ -196,9 +262,10 @@ export class HyperionCouponForm extends LitElement {
         const invalid = failedCode !== '' && !this._edited;
         const submitLabel = isCancel ? this.cancelLabel : this.applyLabel;
         // shrink-0 + nowrap: the label never breaks ("Applica sconto" wrapped and pushed the row
-        // 4px past a 375px viewport); the input gives way (min-w-0) instead.
+        // 4px past a 375px viewport); the input gives way (min-w-0) instead. While a request
+        // runs the label turns transparent under the spinner, so the button keeps its width and its name.
         const btnBase =
-            'shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors';
+            'relative shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors';
         const applyBtn =
             btnBase +
             ' bg-primary text-on-primary border border-primary hover:bg-primary-hover';
@@ -208,10 +275,9 @@ export class HyperionCouponForm extends LitElement {
         const btnClass = isCancel ? cancelBtn : applyBtn;
 
         return html`
-            <section id="hyperion-coupon-form"
-                     class="bg-surface rounded-xl border border-subtle p-4"
+            <section class="bg-surface rounded-xl border border-subtle p-4"
                      aria-label=${this.headingLabel}>
-                <details class="group" ?open=${isCancel || failedCode !== ''}>
+                <details class="group" .open=${this._open} @toggle=${this._onToggle}>
                     <summary class="flex cursor-pointer items-center justify-between select-none">
                         <span class="text-sm font-semibold text-primary hover:text-primary-hover transition-colors">
                             ${this.headingLabel}
@@ -247,13 +313,16 @@ export class HyperionCouponForm extends LitElement {
                                    aria-label=${this.inputLabel}>
                             <button type="submit"
                                     class=${btnClass}
+                                    aria-busy=${this._loading ? 'true' : nothing}
                                     ?disabled=${this._loading}>
-                                ${this._loading ? html`<span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>` : submitLabel}
+                                <span class=${this._loading ? 'opacity-0' : ''}>${submitLabel}</span>
+                                ${this._loading ? html`<span class="absolute inset-0 m-auto w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>` : nothing}
                             </button>
                         </div>
-                        ${error !== ''
-                            ? html`<p id="hyperion-coupon-error" class="text-sm text-error" data-hyperion-coupon-error>${error}</p>`
-                            : nothing}
+                        <p id=${error !== '' ? 'hyperion-coupon-error' : nothing}
+                           class="min-h-10 text-sm text-error sm:min-h-5"
+                           data-hyperion-coupon-message
+                           ?data-hyperion-coupon-error=${error !== ''}>${error}</p>
                         <div data-coupon-extra-slot class="empty:hidden"></div>
                     </form>
                 </details>

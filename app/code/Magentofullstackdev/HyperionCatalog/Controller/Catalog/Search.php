@@ -10,10 +10,10 @@ use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\View\Element\AbstractBlock;
-use Magento\Framework\View\Result\PageFactory;
 use Magento\Search\Model\Query;
 use Magento\Search\Model\QueryFactory;
 use Magento\Store\Model\StoreManagerInterface;
+use Magentofullstackdev\HyperionCatalog\Model\Listing\FragmentPage;
 use Magentofullstackdev\HyperionCatalog\Model\Listing\FragmentResponse;
 use Psr\Log\LoggerInterface;
 
@@ -28,7 +28,7 @@ use Psr\Log\LoggerInterface;
 class Search implements HttpGetActionInterface
 {
     public function __construct(
-        private readonly PageFactory $pageFactory,
+        private readonly FragmentPage $fragmentPage,
         private readonly RawFactory $rawFactory,
         private readonly LayerResolver $layerResolver,
         private readonly QueryFactory $queryFactory,
@@ -49,9 +49,7 @@ class Search implements HttpGetActionInterface
             if (trim((string) $query->getQueryText()) === '') {
                 return $this->rawFactory->create()->setHttpResponseCode(404)->setContents('');
             }
-            $page = $this->pageFactory->create(false, ['load_default' => false]);
-            $page->addHandle('hyperion_catalog_search');
-            $page->initLayout();
+            $page = $this->fragmentPage->create('hyperion_catalog_search');
             $layout = $page->getLayout();
             $block = $layout->getBlock('search_result_list');
             if (!$block instanceof AbstractBlock) {

@@ -98,6 +98,19 @@
             <block class="Magento\Framework\View\Element\Template" name="hyperion.category.load_more" as="load_more" template="Magento_Catalog::product/list/load-more.phtml"/>
         </referenceBlock>
 
+        <!-- Product tile hooks, printed by Magento_Catalog::product/list.phtml: the `additional`
+             container above the grid, the `details.renderers` list per tile (under the price) and
+             the `addto` container per tile (end of the tile actions). Core's own children are
+             removed by name here, in the page handle, because the grid fragment
+             (hyperion/category/filter) builds its layout from this handle without `default`: the
+             tile renders its own swatches, wish list and compare controls, core's are RequireJS
+             widgets. The list block is block cached and the page edge cached: a child must be
+             session agnostic and must not be cacheable="false". -->
+        <referenceBlock name="category.product.list.additional.wishlist_addto" remove="true"/>
+        <referenceBlock name="category.product.type.details.renderers.configurable" remove="true"/>
+        <referenceBlock name="category.product.addto.compare" remove="true"/>
+        <referenceBlock name="category.product.addto.wishlist" remove="true"/>
+
         <!-- Pager + toolbar point at theme templates (rewritten). -->
         <referenceBlock name="product_list_toolbar_pager" template="Magento_Theme::html/pager.phtml"/>
         <referenceBlock name="product_list_toolbar" template="Magento_Catalog::product/list/toolbar.phtml"/>
@@ -112,6 +125,13 @@
              category/view.phtml prints it under the inline filters; on the two and three
              column layouts the wrapper is pinned to the rail and the container is empty. -->
         <move element="hyperion.sidebar.inline" destination="hyperion.category.view" after="-"/>
+
+        <!-- Core's category RSS link (`rss.link`, Magento\Catalog\Block\Category\Rss\Link) is a child
+             of `page.main.title`, removed above. Moves run before removals, so the block survives
+             under the category title, which prints it next to the heading (and takes it along on
+             the category-full-width layout). It prints nothing while RSS or the category feed is
+             off, and only on top level categories, like core. -->
+        <move element="rss.link" destination="category.title" as="rss_link"/>
 
         <!--
             `catalog.leftnav` placement is LAYOUT-SCOPED.

@@ -21,6 +21,7 @@ use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Module\Manager as ModuleManager;
 use Magento\Framework\Message\MessageInterface;
+use Magento\Framework\ObjectManagerInterface;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\UrlInterface;
@@ -139,16 +140,22 @@ class CartDataTest extends TestCase
             $this->shippingMethodConverter,
             $this->taxHelper,
             $this->stockRegistry,
-            new TotalRowPool($rowBuilder, $this->scopeConfig, [
-                'subtotal' => new Subtotal($rowBuilder, $this->taxConfig),
-                'weee_tax' => new Fpt($rowBuilder, $this->weee),
-                'discount' => new Discount($rowBuilder),
-                'shipping' => new Shipping($rowBuilder, $this->taxConfig),
-                'tax' => new Tax($rowBuilder, $this->taxConfig),
-                'grand_total' => new GrandTotal($rowBuilder, $this->taxConfig),
-            ]),
+            new TotalRowPool(
+                $rowBuilder,
+                $this->scopeConfig,
+                $this->createStub(ObjectManagerInterface::class),
+                $logger,
+                [
+                    'subtotal' => new Subtotal($rowBuilder, $this->taxConfig),
+                    'weee_tax' => new Fpt($rowBuilder, $this->weee),
+                    'discount' => new Discount($rowBuilder),
+                    'shipping' => new Shipping($rowBuilder, $this->taxConfig),
+                    'tax' => new Tax($rowBuilder, $this->taxConfig),
+                    'grand_total' => new GrandTotal($rowBuilder, $this->taxConfig),
+                ]
+            ),
             new CheckoutBlocker($this->minimumAmountMessage),
-            new EstimateDestination($this->customerSession),
+            new EstimateDestination($this->customerSession, $this->checkoutSession),
             $this->itemResolver,
             $this->productConfiguration
         );
@@ -690,6 +697,106 @@ class CartDataTest extends TestCase
             ['country_id' => 'US', 'region_id' => '', 'region' => '', 'postcode' => ''],
             $this->viewModel->getEstimateAddress()
         );
+    }
+
+    /**
+     * A cart whose shipping address carries a destination, an applied method
+     * and its rates, owned by customer `$customerId` (null for a guest's
+     * cart), seen by a session that is signed in or not.
+     */
+    private function cartWithDestination(?int $customerId, bool $signedIn): Quote&Stub
+    {
+        $address = $this->createStub(QuoteAddress::class);
+        $address->method('getCountryId')->willReturn('US');
+        $address->method('getRegionId')->willReturn(33);
+        $address->method('getRegion')->willReturn('Michigan');
+        $address->method('getPostcode')->willReturn('49628-7978');
+        $address->method('getShippingMethod')->willReturn('flatrate_flatrate');
+        $address->method('getGroupedAllShippingRates')->willReturn(['flatrate' => [$this->flatRate()]]);
+        $quote = $this->createStub(Quote::class);
+        $quote->method('getId')->willReturn(2999);
+        $quote->method('isVirtual')->willReturn(false);
+        $quote->method('getData')->willReturnMap([['customer_id', null, $customerId]]);
+        $quote->method('getShippingAddress')->willReturn($address);
+        $this->checkoutSession->method('getQuote')->willReturn($quote);
+        $this->customerSession->method('isLoggedIn')->willReturn($signedIn);
+        $this->scopeConfig->method('getValue')->willReturn('IT');
+
+        return $quote;
+    }
+
+    /**
+     * @return array<string, array{int|null, bool}>
+     */
+    public static function cartsThatShowTheirDestination(): array
+    {
+        return [
+            'a signed-in customer' => [1, true],
+            'a guest' => [null, false],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('cartsThatShowTheirDestination')]
+    public function testTheEstimatorShowsTheDestinationOfTheShoppersOwnCart(?int $customerId, bool $signedIn): void
+    {
+        $this->cartWithDestination($customerId, $signedIn);
+
+        self::assertSame(
+            ['country_id' => 'US', 'region_id' => '33', 'region' => 'Michigan', 'postcode' => '49628-7978'],
+            $this->viewModel->getEstimateAddress()
+        );
+        self::assertSame('flatrate_flatrate', $this->viewModel->getSelectedShippingMethod());
+        self::assertTrue($this->viewModel->hasEstimate());
+    }
+
+    /**
+     * A customer's cart restored for a visitor who is not signed in: the
+     * estimator starts like a guest's, without the customer's destination,
+     * method or rates.
+     */
+    public function testACustomersCartOfASessionNotSignedInStartsFromTheStoreDefault(): void
+    {
+        $this->cartWithDestination(1, false);
+
+        self::assertSame(
+            ['country_id' => 'IT', 'region_id' => '', 'region' => '', 'postcode' => ''],
+            $this->viewModel->getEstimateAddress()
+        );
+        self::assertSame('', $this->viewModel->getSelectedShippingMethod());
+        self::assertSame([], $this->viewModel->getShippingRates());
+        self::assertFalse($this->viewModel->hasEstimate());
+        self::assertFalse($this->viewModel->canPrefillShippingRates());
+        self::assertFalse($this->viewModel->hasLoadFailure());
+    }
+
+    public function testACustomersCartOfASessionNotSignedInShowsTheDestinationTheSessionEntered(): void
+    {
+        $stored = [];
+        $this->checkoutSession->method('__call')->willReturnCallback(
+            static function (string $method, array $args) use (&$stored) {
+                if ($method === 'setData') {
+                    $stored[$args[0]] = $args[1];
+                }
+                return null;
+            }
+        );
+        $this->checkoutSession->method('getData')->willReturnCallback(
+            static function ($key = '') use (&$stored) {
+                return $stored[$key] ?? null;
+            }
+        );
+        $quote = $this->cartWithDestination(1, false);
+
+        $estimateDestination = new EstimateDestination($this->customerSession, $this->checkoutSession);
+        $estimateDestination->rememberEntered($quote, $estimateDestination->takeEntered($quote));
+
+        self::assertNotSame([], $stored, 'the estimate request recorded the destination');
+        self::assertSame(
+            ['country_id' => 'US', 'region_id' => '33', 'region' => 'Michigan', 'postcode' => '49628-7978'],
+            $this->viewModel->getEstimateAddress()
+        );
+        self::assertSame('flatrate_flatrate', $this->viewModel->getSelectedShippingMethod());
+        self::assertTrue($this->viewModel->hasEstimate());
     }
 
     /**

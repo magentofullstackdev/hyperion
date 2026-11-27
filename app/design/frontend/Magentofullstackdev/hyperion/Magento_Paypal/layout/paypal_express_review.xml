@@ -12,8 +12,11 @@
     the controller hands them the quote by name); the templates are the
     theme's. The coupon block is dropped: its theme template belongs to
     the Hyperion cart block, and a discount is applied in the cart, which
-    the page links to. The agreements get a template of their own because
-    the core one is a Knockout component.
+    the page links to. The other children of paypal.additional.actions
+    (blocks other modules add there) print under the address, shipping and
+    payment cards; the template skips a coupon block wherever it comes
+    from. The agreements get a template of their own because the core one
+    is a Knockout component.
 
     The page is rendered by a legacy controller, so its messages never
     reach the mage-messages cookie: paypal.validation.messages takes them
@@ -25,7 +28,7 @@
         <referenceBlock name="page.main.title" remove="true"/>
         <referenceBlock name="paypal_express_review_checkout_head_components" remove="true"/>
         <referenceBlock name="paypal_express_review_head_components" remove="true"/>
-        <referenceBlock name="paypal.additional.actions" remove="true"/>
+        <referenceBlock name="paypal.cart.coupon" remove="true"/>
         <referenceBlock name="paypal.validation.messages" template="Magento_Theme::messages.phtml"/>
         <referenceBlock name="paypal.express.review.details.agreements"
                         template="Magento_Paypal::express/review/agreements.phtml"/>

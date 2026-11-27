@@ -6,15 +6,16 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 vi.mock('../../api/captcha.js', () => ({
     loadCaptchaState: vi.fn().mockResolvedValue(true),
 }));
-vi.mock('../../components/hyperion-recaptcha.js', () => ({
+vi.mock('../../components/recaptcha-client.js', () => ({
     executeRecaptcha: vi.fn(),
 }));
 
 import { loadCaptchaState } from '../../api/captcha.js';
 import { MagentoApiError } from '../../api/client.js';
 import { setCheckoutConfig } from '../../bootstrap-config.js';
-import { executeRecaptcha } from '../../components/hyperion-recaptcha.js';
-import { registerPaymentRenderer } from '../../components/payment-renderers/registry.js';
+import { executeRecaptcha } from '../../components/recaptcha-client.js';
+import { patchEntry, resetPaymentRowsForTests } from '../../components/payment-host/row-state.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import type { RecaptchaAction, RecaptchaConfig } from '../../types/captcha.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import {
@@ -37,22 +38,22 @@ import { createStore, setStoreForTests, type Store } from '../index.js';
 const REQUIRED = { isRequired: true, isCaseSensitive: false, imageHeight: 50, imageWidth: 200 };
 
 function configure(recaptcha?: RecaptchaConfig): void {
-    setCheckoutConfig({ hyperion: recaptcha ? { recaptcha } : {} } as unknown as CheckoutConfig);
+    setCheckoutConfig({ hyperion: { paymentRenderers, ...(recaptcha ? { recaptcha } : {}) } } as unknown as CheckoutConfig);
 }
 
-// The shapes of the shipped renderers: the card follows the configuration,
-// the wallets and stored tokens of the same gateway send no token, every
-// other method says nothing.
+// What the element classes of the shipped entries answer once loaded: the
+// card follows the configuration, the wallets and stored tokens of the same
+// gateway send no token, every other method says nothing.
 function registerRenderers(): void {
-    registerPaymentRenderer({
-        code: 'braintree',
-        component: 'payment-braintree-card',
+    resetPaymentRowsForTests();
+    patchEntry('braintree_card', {
+        load: 'ready',
         recaptchaAction: () => (configuredBraintree ? 'braintree' : 'place_order'),
     });
-    for (const code of ['braintree_paypal', 'braintree_googlepay', 'braintree_cc_vault']) {
-        registerPaymentRenderer({ code, component: 'payment-fixture', recaptchaAction: () => null });
+    for (const id of ['braintree_paypal', 'braintree_googlepay', 'braintree_vault']) {
+        patchEntry(id, { load: 'ready', recaptchaAction: () => null });
     }
-    registerPaymentRenderer({ code: 'checkmo', component: 'payment-offline' });
+    patchEntry('offline', { load: 'ready' });
 }
 
 let configuredBraintree = false;

@@ -1,0 +1,69 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * Unit price / row subtotal of an order item with Fixed Product Tax, on the
+ * storefront order, invoice, credit memo and print pages (handle
+ * `sales_order_item_price`; `hyperion_price_kind` = unit | row).
+ *
+ * Same markup and class hooks as core's Magento_Weee::item/price/unit.phtml and
+ * row.phtml without the RequireJS tax toggle: in the display modes with details
+ * the FPT lines (`.cart-tax-info`) are always shown expanded. Order emails keep
+ * core's own renderers (`sales_email_item_price`).
+ *
+ * @var \Magento\Weee\Block\Item\Price\Renderer $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+/** @var \Magento\Weee\Helper\Data $weeeHelper */
+$weeeHelper = $block->getData('weeeHelper');
+$item = $block->getItem();
+$isRow = $block->getData('hyperion_price_kind') === 'row';
+$applied = $weeeHelper ? (array) $weeeHelper->getApplied($item) : [];
+$showDetails = $applied && $block->displayPriceWithWeeeDetails();
+$variants = [];
+if (($block->displayPriceInclTax() || $block->displayBothPrices()) && !($isRow && $item->getNoSubtotal())) {
+    $variants[] = [
+        'class' => 'price-including-tax',
+        'label' => __('Incl. Tax'),
+        'price' => $isRow ? $block->getRowDisplayPriceInclTax() : $block->getUnitDisplayPriceInclTax(),
+        'tax_key' => $isRow ? 'row_amount_incl_tax' : 'amount_incl_tax',
+        'final_label' => __('Total Incl. Tax'),
+        'final' => $isRow ? $block->getFinalRowDisplayPriceInclTax() : $block->getFinalUnitDisplayPriceInclTax(),
+    ];
+}
+if ($block->displayPriceExclTax() || $block->displayBothPrices()) {
+    $variants[] = [
+        'class' => 'price-excluding-tax',
+        'label' => __('Excl. Tax'),
+        'price' => $isRow ? $block->getRowDisplayPriceExclTax() : $block->getUnitDisplayPriceExclTax(),
+        'tax_key' => $isRow ? 'row_amount' : 'amount',
+        'final_label' => __('Total'),
+        'final' => $isRow ? $block->getFinalRowDisplayPriceExclTax() : $block->getFinalUnitDisplayPriceExclTax(),
+    ];
+}
+?>
+<?php foreach ($variants as $variant): ?>
+    <span class="<?= $escaper->escapeHtmlAttr($variant['class']) ?>"
+          data-label="<?= $escaper->escapeHtmlAttr($variant['label']) ?>">
+        <span class="<?= $showDetails ? 'cart-tax-total' : 'cart-price' ?>">
+            <?= /* @noEscape */ $block->formatPrice($variant['price']) ?>
+        </span>
+        <?php if ($showDetails): ?>
+            <span class="cart-tax-info">
+                <?php foreach ($applied as $tax): ?>
+                    <span class="weee" data-label="<?= $escaper->escapeHtmlAttr((string) ($tax['title'] ?? '')) ?>">
+                        <?= /* @noEscape */ $block->formatPrice($tax[$variant['tax_key']] ?? 0, true, true) ?>
+                    </span>
+                <?php endforeach; ?>
+            </span>
+            <?php if ($block->displayFinalPrice()): ?>
+                <span class="cart-tax-total">
+                    <span class="weee" data-label="<?= $escaper->escapeHtmlAttr($variant['final_label']) ?>">
+                        <?= /* @noEscape */ $block->formatPrice($variant['final']) ?>
+                    </span>
+                </span>
+            <?php endif; ?>
+        <?php endif; ?>
+    </span>
+<?php endforeach; ?>

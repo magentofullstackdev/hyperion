@@ -35,6 +35,21 @@
                 <argument name="cart_data_view_model"
                           xsi:type="object">Magentofullstackdev\HyperionCheckout\ViewModel\CartData</argument>
             </arguments>
+            <!--
+                Express buttons under the checkout link, not printed while the quote cannot go to
+                the checkout. A module adds a sibling with
+                <referenceContainer name="hyperion.express.minicart"> in its own
+                hyperion_checkout_minicart.xml. No htmlTag: an empty container prints nothing.
+            -->
+            <container name="hyperion.express.minicart" as="express" label="Mini-cart: Express Checkout">
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.express.minicart.slot"
+                       template="Magentofullstackdev_HyperionCheckout::express/slot.phtml">
+                    <arguments>
+                        <argument name="placement" xsi:type="string">minicart</argument>
+                    </arguments>
+                </block>
+            </container>
         </block>
     </body>
 </page>

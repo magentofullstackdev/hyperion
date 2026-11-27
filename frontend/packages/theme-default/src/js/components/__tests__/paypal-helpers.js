@@ -29,11 +29,11 @@ export function installIntersectionObserver() {
             this.callback(this.targets.map((target) => ({ target, isIntersecting })), this);
             // A placement in view stands for a shopper in front of it: the SDK
             // also waits for a sign of the shopper on the document, and listens
-            // for it only once the placement is wanted (two microtasks later).
+            // for it only once the placement is wanted (a few microtasks later).
             if (isIntersecting) {
-                Promise.resolve().then(() => Promise.resolve()).then(() => {
+                setTimeout(() => {
                     document.body.dispatchEvent(new Event('pointermove', { bubbles: true }));
-                });
+                }, 0);
             }
         }
     }

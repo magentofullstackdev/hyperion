@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import customerFixture from '../../../../fixtures/checkoutConfig.customer.json' with { type: 'json' };
 import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
+import paymentRenderers from '../../../../fixtures/payment-renderers.json' with { type: 'json' };
 import { configureApiClient, resetApiClientForTests } from '../../../../api/client.js';
 import { setCheckoutConfig } from '../../../../bootstrap-config.js';
 import { draftKey, startDraftPersistence } from '../../../../store/drafts.js';
@@ -16,18 +17,20 @@ import type { CheckoutConfig } from '../../../../types/config.js';
 import type { Totals } from '../../../../types/totals.js';
 import { setActiveCatalogForTests, t } from '../../../../utils/i18n.js';
 import { navigateTo } from '../../../../utils/navigate.js';
+import { resetCheckoutContextForTests } from '../../../../extension/context.js';
+import { resetScriptLoaderForTests } from '../../../../extension/load-script.js';
 import '../../../place-order-button.js';
-import { prepareCheckout } from '../../checkout-gate.js';
-import { getPaymentRenderer, type PaymentRenderer } from '../../registry.js';
-import { getPaypalExpressConfig } from '../config.js';
+import { resetHostedForTests } from '../../../payment-host/element-registry.js';
+import { matchEntry } from '../../../payment-host/entries.js';
+import { loadPaymentHost } from '../../../payment-host/host.js';
+import { resetMountForTests } from '../../../payment-host/mount.js';
+import { requestCheckoutValidation, resetPipelineForTests } from '../../../payment-host/pipeline.js';
+import { resetPaymentRowsForTests } from '../../../payment-host/row-state.js';
+import { getPaypalExpressConfig, isInContext } from '../config.js';
 import type { PaypalExpressConfig } from '../../../../types/config.js';
-import {
-    PaymentPaypalExpress,
-    approvePaypalOrder,
-    createPaypalOrder,
-} from '../payment-paypal-express.js';
-import { PAYPAL_SDK_NAMESPACE, setPaypalScriptLoaderForTests } from '../sdk.js';
-import type { PaypalButtonsOptions } from '../types.js';
+import { PaymentPaypalExpress } from '../payment-paypal-express.js';
+import { PAYPAL_SDK_NAMESPACE } from '../sdk.js';
+import type { PaypalApproveData, PaypalButtonsOptions } from '../types.js';
 
 vi.mock('../../../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
 
@@ -76,15 +79,19 @@ interface SdkDouble {
     messageRender: Mock;
 }
 
+let currentConfig: CheckoutConfig;
+
 function installConfig(section: Partial<PaypalExpressConfig> | null): void {
     const base = customerFixture as unknown as CheckoutConfig;
-    setCheckoutConfig({
+    currentConfig = ({
         ...base,
         hyperion: {
             ...base.hyperion,
+            paymentRenderers,
             ...(section === null ? {} : { paypalExpress: { ...SECTION, ...section } }),
         },
     } as unknown as CheckoutConfig);
+    setCheckoutConfig(currentConfig);
 }
 
 function installStore(code: string): Store {
@@ -118,13 +125,20 @@ function installStore(code: string): Store {
     return store;
 }
 
+let observer: MutationObserver | null = null;
+
+/**
+ * The PayPal SDK as the page would load it: the script the context's loader
+ * adds to the head "loads" (the loader double decides) and defines the
+ * namespaced global.
+ */
 function installSdkDouble(): SdkDouble {
     const buttons: PaypalButtonsOptions[] = [];
     const buttonRender = vi.fn().mockResolvedValue(undefined);
     const buttonClose = vi.fn().mockResolvedValue(undefined);
     const messageRender = vi.fn().mockResolvedValue(undefined);
     const messages = vi.fn(() => ({ render: messageRender }));
-    const loader = vi.fn(async (): Promise<void> => {
+    const loader = vi.fn(async (_src: string, _attributes: Record<string, string>): Promise<void> => {
         (window as unknown as Record<string, unknown>)[PAYPAL_SDK_NAMESPACE] = {
             Buttons: (options: PaypalButtonsOptions) => {
                 buttons.push(options);
@@ -133,7 +147,22 @@ function installSdkDouble(): SdkDouble {
             Messages: messages,
         };
     });
-    setPaypalScriptLoaderForTests(loader);
+    observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (!(node instanceof HTMLScriptElement) || node.src === '') continue;
+                const attributes: Record<string, string> = {};
+                for (const attribute of Array.from(node.attributes)) {
+                    if (attribute.name.startsWith('data-')) attributes[attribute.name] = attribute.value;
+                }
+                loader(node.src, attributes).then(
+                    () => node.dispatchEvent(new Event('load')),
+                    () => node.dispatchEvent(new Event('error'))
+                );
+            }
+        }
+    });
+    observer.observe(document.head, { childList: true });
     return { loader, buttons, buttonRender, buttonClose, messages, messageRender };
 }
 
@@ -144,18 +173,55 @@ function jsonResponse(body: unknown, status = 200): Response {
     });
 }
 
-function renderer(code = 'paypal_express'): PaymentRenderer {
-    const found = getPaymentRenderer(code);
-    if (!found) throw new Error(`${code} renderer is not registered`);
-    return found;
+/** The configuration of the section as the payment host hands it (`options.paypalExpress`). */
+function section(): PaypalExpressConfig | null {
+    const raw = (currentConfig as { hyperion?: { paypalExpress?: unknown } }).hyperion?.paypalExpress;
+    return getPaypalExpressConfig({ paypalExpress: raw });
 }
 
+function canMakePayment(code: string): boolean {
+    return PaymentPaypalExpress.canMakePayment({
+        method: { code, title: 'PayPal' },
+        options: { paypalExpress: (currentConfig as { hyperion?: { paypalExpress?: unknown } }).hyperion?.paypalExpress },
+    });
+}
+
+let current: PaymentPaypalExpress | null = null;
+
+/** The element of the method, created and connected by the payment host with its real context. */
 async function mount(code = 'paypal_express'): Promise<PaymentPaypalExpress> {
-    const el = document.createElement('payment-paypal-express');
-    el.setAttribute('code', code);
-    document.body.appendChild(el);
+    const host = await loadPaymentHost();
+    const entry = matchEntry(code);
+    if (entry === null) throw new Error(`no entry renders ${code}`);
+    await host.loadEntry(entry);
+    const body = document.createElement('div');
+    document.body.appendChild(body);
+    const el = host.elementFor({ rowKey: code, entry, method: { code, title: 'PayPal' }, token: null }) as PaymentPaypalExpress;
+    host.attach(body, code, el);
     await el.updateComplete;
+    current = el;
     return el;
+}
+
+async function element(): Promise<PaymentPaypalExpress> {
+    return current ?? mount();
+}
+
+async function createPaypalOrder(): Promise<string> {
+    return (await element()).createPaypalOrder();
+}
+
+async function approvePaypalOrder(data: PaypalApproveData): Promise<void> {
+    return (await element()).approvePaypalOrder(data);
+}
+
+/** The redirect flow's order step, through the checkout's pipeline as the Place Order button runs it. */
+async function placeRedirectOrder(): Promise<string | null> {
+    await element();
+    const host = await loadPaymentHost();
+    const result = await host.placeOrderFromButton();
+    if (result.status !== 'done') return null;
+    return result.outcome.status === 'redirect' ? result.outcome.url : null;
 }
 
 async function mountWithButton(sdk: SdkDouble): Promise<PaymentPaypalExpress> {
@@ -180,7 +246,7 @@ interface Answers {
     cart?: () => Response;
 }
 
-describe('<payment-paypal-express>', () => {
+describe('<hc-payment-paypal-express>', () => {
     let store: Store;
     let sdk: SdkDouble;
     let fetchMock: Mock;
@@ -222,6 +288,9 @@ describe('<payment-paypal-express>', () => {
 
     beforeEach(() => {
         setActiveCatalogForTests(enUS);
+        resetScriptLoaderForTests();
+        resetCheckoutContextForTests();
+        current = null;
         installConfig({});
         store = installStore('paypal_express');
         resetFlowSelectorsForTests();
@@ -243,7 +312,13 @@ describe('<payment-paypal-express>', () => {
 
     afterEach(() => {
         document.body.replaceChildren();
-        setPaypalScriptLoaderForTests(null);
+        observer?.disconnect();
+        observer = null;
+        for (const script of document.head.querySelectorAll('script')) script.remove();
+        resetPaymentRowsForTests();
+        resetHostedForTests();
+        resetMountForTests();
+        resetPipelineForTests();
         delete (window as unknown as Record<string, unknown>)[PAYPAL_SDK_NAMESPACE];
         resetApiClientForTests();
         resetFlowActionsForTests();
@@ -256,23 +331,22 @@ describe('<payment-paypal-express>', () => {
         it('is unavailable without the server section', async () => {
             installConfig(null);
 
-            expect(getPaypalExpressConfig()).toBeNull();
-            expect(renderer().isAvailable?.({ code: 'paypal_express', title: 'PayPal' })).toBe(false);
-            expect(renderer().ownsPlaceOrder?.()).toBe(false);
+            expect(section()).toBeNull();
+            expect(canMakePayment('paypal_express')).toBe(false);
 
             const el = await mount();
+            expect(el.ownsPlaceOrder).toBe(false);
             expect(el.children.length).toBe(0);
             expect(sdk.loader).not.toHaveBeenCalled();
         });
 
         it('offers a method only when the server lists its start URL', () => {
-            expect(renderer().isAvailable?.({ code: 'paypal_express', title: 'PayPal' })).toBe(true);
-            expect(renderer('payflow_express').isAvailable?.({ code: 'payflow_express', title: 'PayPal' }))
-                .toBe(false);
+            expect(canMakePayment('paypal_express')).toBe(true);
+            expect(canMakePayment('payflow_express')).toBe(false);
         });
 
         it('owns Place Order in context only, and never for the Payflow edition', () => {
-            expect(renderer().ownsPlaceOrder?.()).toBe(true);
+            expect(isInContext(section(), 'paypal_express')).toBe(true);
 
             installConfig({
                 startUrls: {
@@ -280,16 +354,16 @@ describe('<payment-paypal-express>', () => {
                     payflow_express: `${ORIGIN}/en/paypal/payflowexpress/start/`,
                 },
             });
-            expect(renderer('payflow_express').ownsPlaceOrder?.()).toBe(false);
+            expect(isInContext(section(), 'payflow_express')).toBe(false);
 
             installConfig({ inContext: false });
-            expect(renderer().ownsPlaceOrder?.()).toBe(false);
+            expect(isInContext(section(), 'paypal_express')).toBe(false);
         });
     });
 
     describe('in context', () => {
         it('does not request the SDK before the element exists', () => {
-            expect(renderer().ownsPlaceOrder?.()).toBe(true);
+            expect(isInContext(section(), 'paypal_express')).toBe(true);
             expect(sdk.loader).not.toHaveBeenCalled();
         });
 
@@ -316,10 +390,10 @@ describe('<payment-paypal-express>', () => {
             const message = el.querySelector<HTMLElement>('[data-pp-message]');
 
             await vi.waitFor(() => expect(sdk.messageRender).toHaveBeenCalledTimes(1));
-            expect(message?.getAttribute('data-pp-amount')).toBe('56.29');
+            expect(message?.getAttribute('data-pp-amount')).toBe('36.81');
             expect(message?.getAttribute('data-pp-placement')).toBe('payment');
             expect(message?.getAttribute('data-pp-style-layout')).toBe('text');
-            expect(sdk.messages).toHaveBeenLastCalledWith({ amount: 56.29 });
+            expect(sdk.messages).toHaveBeenLastCalledWith({ amount: 36.81 });
             expect(sdk.messageRender).toHaveBeenLastCalledWith(message);
 
             store.totals.set({ ...(store.totals.get() as Totals), base_grand_total: '80.00' as never });
@@ -445,7 +519,7 @@ describe('<payment-paypal-express>', () => {
             expect(latched).toBe(true);
             expect(requestsTo('/shipping-information')).toHaveLength(0);
 
-            await expect(prepareCheckout()).resolves.toBeNull();
+            await expect(requestCheckoutValidation()).resolves.toBe(true);
             expect(requestsTo('/shipping-information')).toHaveLength(1);
             expect(store.shippingDirty.get()).toBe(false);
         });
@@ -701,7 +775,7 @@ describe('<payment-paypal-express>', () => {
                 'Sign a billing agreement to streamline further purchases with PayPal.'
             );
             expect((checkbox(el) as unknown as { checked: boolean }).checked).toBe(false);
-            expect(store.paymentMethodData.get()['paypal_express']).toBeUndefined();
+            expect(el.getPaymentData()).toEqual({});
         });
 
         it('sends the choice as additional data with the payment information, before the token', async () => {
@@ -740,7 +814,7 @@ describe('<payment-paypal-express>', () => {
             const el = await mount();
 
             tick(el, true);
-            await renderer().placeOrder?.();
+            await placeRedirectOrder();
 
             const [save] = requestsTo('/set-payment-information');
             expect(JSON.parse(save?.body ?? '{}').paymentMethod.additional_data).toEqual({ paypal_ec_create_ba: 1 });
@@ -754,7 +828,7 @@ describe('<payment-paypal-express>', () => {
                 dataAttributes: { 'data-count': 3 } as never,
             });
 
-            const config = getPaypalExpressConfig();
+            const config = section();
             expect(config?.styles).toEqual({ layout: 'vertical', period: 6, tagline: false });
             expect(config?.dataAttributes).toEqual({ 'data-count': '3' });
             expect(config).not.toHaveProperty('onCancelUrl');
@@ -762,8 +836,8 @@ describe('<payment-paypal-express>', () => {
 
         it('reads an empty PHP array as an empty map', () => {
             installConfig({ styles: [] as never, billingAgreementCode: [] as never });
-            expect(getPaypalExpressConfig()?.styles).toEqual({});
-            expect(getPaypalExpressConfig()?.billingAgreementCode).toEqual({});
+            expect(section()?.styles).toEqual({});
+            expect(section()?.billingAgreementCode).toEqual({});
         });
     });
 
@@ -787,7 +861,8 @@ describe('<payment-paypal-express>', () => {
         it('saves the payment information and resolves with the start URL', async () => {
             answer();
 
-            await expect(renderer().placeOrder?.()).resolves.toBe(SECTION.startUrls['paypal_express']);
+            await expect(placeRedirectOrder()).resolves.toBe(SECTION.startUrls['paypal_express']);
+            expect(navigateTo).toHaveBeenCalledWith(SECTION.startUrls['paypal_express']);
 
             const requests = requestsTo('/set-payment-information');
             expect(requests).toHaveLength(1);
@@ -797,16 +872,21 @@ describe('<payment-paypal-express>', () => {
         it('stays on the checkout when the payment information is rejected', async () => {
             answer({ save: () => jsonResponse({ message: 'The billing address is invalid.' }, 400) });
 
-            await expect(renderer().placeOrder?.()).resolves.toBeNull();
+            await expect(placeRedirectOrder()).resolves.toBeNull();
 
             expect(store.globalError.get()).toBe('The billing address is invalid.');
+            expect(navigateTo).not.toHaveBeenCalled();
         });
 
         it('stays on the checkout while it is incomplete', async () => {
             store.email.set('');
+            await element();
 
-            await expect(renderer().placeOrder?.()).resolves.toBeNull();
+            await expect(placeRedirectOrder()).resolves.toBeNull();
+            expect(fetchMock).not.toHaveBeenCalled();
 
+            // The element's own order step reads the gate as well.
+            await expect((await element()).placeOrder()).resolves.toEqual({ status: 'failed' });
             expect(fetchMock).not.toHaveBeenCalled();
             expect(store.globalError.get()).toBe(t('Hyperion_Checkout::checkout_incomplete_email'));
         });
@@ -821,6 +901,7 @@ describe('<payment-paypal-express>', () => {
         }
 
         it('is not rendered while the smart button owns the order', async () => {
+            await mount();
             const el = await mountButton();
             expect(el.querySelector('hc-button')).toBeNull();
 
@@ -834,6 +915,7 @@ describe('<payment-paypal-express>', () => {
         it('continues on the start URL instead of placing the order in the redirect flow', async () => {
             installConfig({ inContext: false, payLater: null });
             answer();
+            await mount();
             const el = await mountButton();
 
             el.querySelector('hc-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -851,6 +933,7 @@ describe('<payment-paypal-express>', () => {
         it('stays put and reports the reason when the redirect flow fails', async () => {
             installConfig({ inContext: false, payLater: null });
             answer({ save: () => jsonResponse({ message: 'The cart is empty.' }, 400) });
+            await mount();
             const el = await mountButton();
 
             el.querySelector('hc-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

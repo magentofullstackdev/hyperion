@@ -1,0 +1,29 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2026 Sergiu Ro -- magentofullstackdev */
+/* The fake gateway's own pages: framed field, 3D Secure challenge, hosted page. */
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2937; background: #fff; }
+.sample-field { padding: 0 2px; }
+.sample-field__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sample-field__input { display: block; width: 100%; height: 44px; margin: 2px 0; padding: 0 12px; border: 1px solid #6b7280; border-radius: 6px; font: inherit; letter-spacing: 0.05em; color: inherit; background: #fff; }
+.sample-field__input:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+.sample-field__input[aria-invalid="true"] { border-color: #b91c1c; }
+.sample-page { background: #f3f4f6; min-height: 100vh; }
+.sample-page__main { max-width: 32rem; margin: 0 auto; padding: 2rem 1.25rem; }
+.sample-page__title { font-size: 1.5rem; margin: 0 0 1rem; }
+.sample-page__summary { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 1rem; margin: 1rem 0 1.5rem; }
+.sample-page__summary dt { font-weight: 600; }
+.sample-page__summary dd { margin: 0; }
+.sample-page__actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.sample-page__button { min-height: 44px; padding: 0 1.5rem; border: 1px solid #1d4ed8; border-radius: 6px; font: inherit; font-weight: 600; color: #fff; background: #1d4ed8; cursor: pointer; }
+.sample-page__button--secondary { color: #1d4ed8; background: #fff; }
+.sample-page__button:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+
+/* Same opt-in as the theme: a navigation between a storefront page and these pages is a
+   cross-document view transition on both sides (a one-sided opt-in aborts it). */
+@media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+        navigation: auto;
+    }
+}

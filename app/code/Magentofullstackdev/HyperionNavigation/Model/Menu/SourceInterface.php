@@ -11,6 +11,12 @@ namespace Magentofullstackdev\HyperionNavigation\Model\Menu;
  * renders the category tree when none does, so an installed source (the
  * mega menu module) replaces the navigation only where a merchant
  * configured one.
+ *
+ * Register an implementation in the `sources` argument of SourcePool, in
+ * etc/frontend/di.xml.
+ *
+ * @api
+ * @since 0.9.0
  */
 interface SourceInterface
 {

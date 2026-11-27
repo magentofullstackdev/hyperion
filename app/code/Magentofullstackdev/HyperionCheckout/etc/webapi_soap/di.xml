@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Guest cart reads of a cart that belongs to a customer (the quote has a
+    customer id) answer without the customer's record, email or addresses:
+    a masked cart id must not be enough to read them. A guest's cart is
+    answered as core builds it. Same plugins as in the webapi_rest area: the
+    SOAP services quoteGuestCartRepositoryV1 and
+    quoteGuestBillingAddressManagementV1 are anonymous in core as well.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Quote\Api\GuestCartRepositoryInterface">
+        <plugin name="hyperion_checkout_guest_cart_privacy"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Quote\GuestCartPrivacy"/>
+    </type>
+    <type name="Magento\Quote\Api\GuestBillingAddressManagementInterface">
+        <plugin name="hyperion_checkout_guest_billing_address_privacy"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Quote\GuestBillingAddressPrivacy"/>
+    </type>
+</config>

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    PayPal in the cart totals card, on the cart page and in the body the
+    htmx cart mutations re-render (both include this handle): the Pay Later
+    message the merchant placed "near the PayPal button" and the cart total
+    the Pay Later messages read. The smart buttons themselves are the
+    `paypal_express` entry of the express button pool.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="hyperion.cart.totals.after">
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.paypal.cart.message"
+                   template="Magento_Paypal::hyperion/buttons.phtml">
+                <arguments>
+                    <argument name="context" xsi:type="string">cart</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

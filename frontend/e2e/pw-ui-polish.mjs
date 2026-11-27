@@ -13,9 +13,27 @@
 // end at the right quantity with one or two requests; the cart page on a
 // phone: the sticky bar with the order total and the checkout link (its
 // footprint, its place in the flow, the state it shares with the summary card).
-// node e2e/pw-ui-polish.mjs <baseUrl>   (URL only, nothing is changed on the store)
+// node e2e/pw-ui-polish.mjs <baseUrl> [<slotDir>]
+// With the URL only nothing is changed on the store. With the Magento install
+// directory the store settings part runs too, each setting changed for its
+// check and put back as found (also when the run is interrupted): wish list,
+// newsletter and contact off (no link to /wishlist, no footer subscribe form,
+// no /contact link on the home, category, product and account pages, guest
+// and the sample customer; the header keeps its footprint with the wish list
+// off), the maximum search length on the header search fields (their minimum
+// stays 2), the logo size settings (their ratio at the drawn 40 px height) on
+// the header and footer logo (a logo image copied into the media directory for
+// that check), the layered navigation counts switched off, and one visible
+// "Out of stock" on a product taken out of stock
+// (e2e/fixtures/stock-zero-fixture.php). An interrupted run removes the logo
+// image and puts the stock back too. The customer login of that part needs the
+// customer_login reCAPTCHA type cleared (see docs/development.md).
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
+import { makeRunConfig } from './lib/run-config.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -32,6 +50,17 @@ const check = (name, ok, detail = '') => {
     results.push({ name, ok: !!ok, detail: String(detail).slice(0, 220) });
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + String(detail).slice(0, 220) : ''}`);
 };
+// The install, for the store settings part only.
+const slotDir = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : '';
+const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const compose = (service, cmd, user) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'exec', '-T', ...(user ? ['-u', user] : []), service, 'bash', '-c', cmd], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const magento = (cmd) => compose('php-fpm', `cd /var/www/html && bin/magento ${cmd}`, 'www-data');
+const sql = (query) => compose('db', `C=$(command -v mariadb || command -v mysql); $C -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -N -e ${JSON.stringify(query)} 2>/dev/null`).trim();
+const flushCaches = () => {
+    magento('cache:flush > /dev/null');
+    try { compose('varnish', "varnishadm ban 'req.url ~ .' > /dev/null"); } catch { /* no Varnish on this install */ }
+};
+const runConfig = slotDir ? makeRunConfig(sql, flushCaches) : null;
 // Headless Chromium hides the scrollbars by default (overlay, 0px wide); the
 // zero-shift checks need the classic 15px scrollbar a desktop browser has.
 const browser = await chromium.launch({ headless: true, ignoreDefaultArgs: ['--hide-scrollbars'], ...launchOptions() });
@@ -365,9 +394,204 @@ try {
         }));
         check(`${path}: every full-bleed promo image fills its card (${promoImages.length} images, ${promoImages.filter((p) => p.picture).length} in <picture>)`, promoImages.length > 0 && promoImages.every((p) => p.fills), JSON.stringify(promoImages.filter((p) => !p.fills)));
     }
+    // ---- store settings (with the install directory only)
+    if (!slotDir) {
+        console.log('SKIP  store settings: wish list, newsletter and contact off, search lengths, logo size, layered navigation counts, out of stock  -- no <slotDir> argument');
+    } else {
+        const watchPage = (p) => {
+            p.on('pageerror', (e) => problems.push(`pageerror ${p.url().replace(base, '')}: ${e.message.slice(0, 120)}`));
+            p.on('response', (r) => { if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.url().replace(base, '').slice(0, 100)}`); });
+        };
+        const overridden = (paths) => sql(`select concat(scope, ':', scope_id, ' ', path) from core_config_data where scope <> 'default' and path in (${paths.map((p) => `'${p}'`).join(', ')})`);
+        // ---- wish list, newsletter and contact off
+        const FEATURES = ['wishlist/general/active', 'newsletter/general/active', 'contact/contact/enabled'];
+        const featureOverrides = overridden(FEATURES);
+        if (featureOverrides) console.log(`NOTE  store or website values win over the default scope for: ${featureOverrides.replace(/\n/g, ', ')}`);
+        for (const configPath of FEATURES) runConfig.set(configPath, 0);
+        flushCaches();
+        const featureFacts = (p) => p.evaluate(() => {
+            const paths = [...document.querySelectorAll('a[href]')].map((a) => { try { return new URL(a.href, location.href).pathname; } catch { return ''; } });
+            return {
+                wishlistLinks: paths.filter((p) => /\/wishlist(\/|$)/.test(p)).length,
+                wishlistIcon: document.querySelectorAll('#hyperion-wishlist-count').length,
+                subscribe: document.querySelectorAll('form[action*="newsletter/subscriber/new"], #newsletter-validate-detail').length,
+                contactLinks: paths.filter((p) => /\/contact(\/index)?\/?$/.test(p)).length,
+            };
+        });
+        const pagesOff = [['home', '/'], ['category', u('/gear/bags.html')], ['product', u('/joust-duffle-bag.html')]];
+        for (const who of ['guest', 'customer']) {
+            const featureCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 } });
+            const p = await featureCtx.newPage();
+            watchPage(p);
+            const visits = [...pagesOff];
+            if (who === 'customer') {
+                await p.goto(base + '/customer/account/login/', { waitUntil: 'networkidle' });
+                await p.fill('input[name="login[username]"]', 'roni_cost@example.com');
+                await p.fill('input[name="login[password]"]', 'roni_cost3@example.com');
+                await Promise.all([p.waitForURL(/customer\/account\/?(\?.*)?$/, { timeout: 20000 }).catch(() => {}), p.click('form[action*="loginPost"] button[type="submit"]')]);
+                check('features off (customer): login as the sample customer', /customer\/account\/?(\?.*)?$/.test(p.url()), p.url().replace(base, ''));
+                visits.push(['account', '/customer/account/']);
+            }
+            for (const [name, target] of visits) {
+                await p.goto(base + target, { waitUntil: 'networkidle' });
+                const facts = await featureFacts(p);
+                check(`wish list off (${who}, ${name} page): no link to the wish list, no wish list icon`, facts.wishlistLinks === 0 && facts.wishlistIcon === 0, JSON.stringify(facts));
+                check(`newsletter off (${who}, ${name} page): no subscribe form`, facts.subscribe === 0, JSON.stringify(facts));
+                check(`contact off (${who}, ${name} page): no link to the contact page`, facts.contactLinks === 0, JSON.stringify(facts));
+            }
+            await featureCtx.close();
+        }
+        // The header with the wish list off: the action bar stays where it is when the header state arrives, and
+        // the markup before the components upgrade has the footprint of the upgraded header.
+        {
+            const offCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 } });
+            const p = await offCtx.newPage();
+            watchPage(p);
+            const positions = () => p.evaluate(() => {
+                const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+                return { compare: r('#hyperion-compare-count')?.x, account: r('hyperion-dropdown[placement="bottom-end"]')?.x, cart: r('hyperion-mini-cart')?.x, menu: r('hyperion-dropdown[placement="drawer"]')?.x };
+            });
+            const arrived = p.waitForResponse((r) => r.url().includes('/hyperion/header/state'), { timeout: 20000 }).catch(() => null);
+            await p.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'domcontentloaded' });
+            const early = await positions();
+            await arrived;
+            await p.waitForTimeout(500);
+            const late = await positions();
+            const shifted = Object.keys(early).filter((k) => Math.abs((early[k] ?? 0) - (late[k] ?? 0)) > 0.5);
+            check('wish list off: no horizontal movement of the action bar when the header state arrives', shifted.length === 0 && (await p.locator('#hyperion-wishlist-count').count()) === 0, JSON.stringify({ early, late }));
+            const offUpgraded = round(await p.evaluate(footprint));
+            await offCtx.close();
+            const offPlainCtx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 800 }, javaScriptEnabled: false });
+            const plainPage = await offPlainCtx.newPage();
+            await plainPage.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'load' });
+            const offPlain = round(await plainPage.evaluate(footprint));
+            await offPlainCtx.close();
+            check('wish list off: same header footprint before the components upgrade (scripting off) and after', JSON.stringify(offUpgraded) === JSON.stringify(offPlain), JSON.stringify({ offUpgraded, offPlain }));
+        }
+        for (const configPath of FEATURES) runConfig.restore(configPath);
+
+        // ---- search length limits on the header search fields: maxlength follows the store, minlength stays 2
+        // (core runs two letter queries such as "XS" whatever its minimum query length says).
+        runConfig.set('catalog/search/min_query_length', 4);
+        runConfig.set('catalog/search/max_query_length', 60);
+        flushCaches();
+        {
+            const p = await ctx.newPage();
+            watchPage(p);
+            await p.goto(base + '/', { waitUntil: 'networkidle' });
+            const fields = await p.evaluate(() => [...document.querySelectorAll('input[name="q"]')].filter((el) => !el.closest('#maincontent')).map((el) => ({ id: el.id, min: el.getAttribute('minlength'), max: el.getAttribute('maxlength') })));
+            check('header search: every search field carries maxlength from the search settings (60) and keeps minlength 2 with a minimum query length of 4', fields.length > 0 && fields.every((f) => f.min === '2' && f.max === '60'), JSON.stringify(fields));
+            await p.close();
+        }
+        runConfig.restore('catalog/search/min_query_length');
+        runConfig.restore('catalog/search/max_query_length');
+
+        // ---- logo size settings: an uploaded logo of the run (core reads it under media/logo/)
+        const logoSource = compose('php-fpm', 'cd /var/www/html/pub/media && ls wysiwyg/home/home-main.jpg catalog/product/placeholder/*.jpg 2> /dev/null | head -1', 'www-data').trim();
+        if (!logoSource) {
+            console.log('SKIP  logo size: no image in the media directory to use as a logo');
+        } else {
+            const removeLogo = () => compose('php-fpm', 'rm -rf /var/www/html/pub/media/logo/hyperion-e2e', 'www-data');
+            const logoRegistered = runConfig.onAbort('logo image of the run removed', removeLogo);
+            try {
+                compose('php-fpm', `cd /var/www/html/pub/media && mkdir -p logo/hyperion-e2e && cp ${JSON.stringify(logoSource)} logo/hyperion-e2e/logo.jpg`, 'www-data');
+                runConfig.set('design/header/logo_src', 'hyperion-e2e/logo.jpg');
+                const logoSize = async () => {
+                    const p = await ctx.newPage();
+                    await p.goto(base + '/', { waitUntil: 'networkidle' });
+                    const sizes = await p.evaluate(() => {
+                        const size = (img) => (img ? `${img.getAttribute('width')}x${img.getAttribute('height')}` : '');
+                        return { header: size(document.querySelector('header img[src*="/logo/"]')), footer: size(document.querySelector('#hyperion-footer img[src*="/logo/"], footer img[src*="/logo/"]')) };
+                    });
+                    await p.close();
+                    return sizes;
+                };
+                runConfig.set('design/header/logo_width', null);
+                runConfig.set('design/header/logo_height', null);
+                flushCaches();
+                const fallback = await logoSize();
+                check('logo: without size settings the header and footer logo are 140 x 40', fallback.header === '140x40' && (fallback.footer === '' || fallback.footer === '140x40'), JSON.stringify(fallback));
+                // The settings give the aspect ratio; the logo is drawn 40 px high, so 300 x 60 becomes 200 x 40.
+                runConfig.set('design/header/logo_width', 300);
+                runConfig.set('design/header/logo_height', 60);
+                flushCaches();
+                const sized = await logoSize();
+                check('logo: the header and footer logo follow the ratio of the logo settings at the drawn height (300 x 60 drawn 200 x 40)', sized.header === '200x40' && (sized.footer === '' || sized.footer === '200x40'), JSON.stringify(sized));
+            } finally {
+                // The image goes even when a restore throws (the run-config restores the settings again at the end).
+                try {
+                    for (const configPath of ['design/header/logo_src', 'design/header/logo_width', 'design/header/logo_height']) runConfig.restore(configPath);
+                } finally {
+                    removeLogo();
+                    logoRegistered();
+                }
+            }
+        }
+
+        // ---- layered navigation counts
+        {
+            const counts = async () => {
+                const p = await ctx.newPage();
+                await p.goto(base + u('/women/tops-women.html'), { waitUntil: 'networkidle' });
+                const found = await p.evaluate(() => {
+                    const nav = document.querySelector('#hyperion-layered-nav');
+                    const links = [...(nav?.querySelectorAll('a') ?? [])];
+                    // A count is a span of digits of its own (with or without parentheses) inside the option link.
+                    const counted = (a) => [...a.querySelectorAll('span')].some((span) => span.children.length === 0 && /^\(?\d+\)?$/.test(span.textContent.trim()));
+                    return { links: links.length, withCount: links.filter(counted).length };
+                });
+                await p.close();
+                return found;
+            };
+            runConfig.set('catalog/layered_navigation/display_product_count', 1);
+            flushCaches();
+            const shown = await counts();
+            runConfig.set('catalog/layered_navigation/display_product_count', 0);
+            flushCaches();
+            const hidden = await counts();
+            check('layered navigation: the option counts follow the product count setting (shown on 1, none on 0)', shown.withCount > 0 && hidden.links > 0 && hidden.withCount === 0, JSON.stringify({ shown, hidden }));
+            runConfig.restore('catalog/layered_navigation/display_product_count');
+        }
+
+        // ---- one visible "Out of stock" on an out of stock product page
+        const stockSku = '24-UG07';
+        execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', path.join(FIXTURE_DIR, 'stock-zero-fixture.php'), 'php-fpm:/tmp/stock-zero-fixture.php']);
+        const restoreStock = () => console.log(compose('php-fpm', `cd /var/www/html && php /tmp/stock-zero-fixture.php /var/www/html --remove ${stockSku}; rm -f /tmp/stock-zero-fixture.php`, 'www-data').trim());
+        const stockRegistered = runConfig.onAbort(`stock of ${stockSku} put back`, restoreStock);
+        try {
+            console.log(compose('php-fpm', `cd /var/www/html && php /tmp/stock-zero-fixture.php /var/www/html --apply ${stockSku}`, 'www-data').trim());
+            flushCaches();
+            const stockPath = sql(`select u.request_path from url_rewrite u join catalog_product_entity e on e.entity_id = u.entity_id where u.entity_type = 'product' and e.sku = '${stockSku}' and u.redirect_type = 0 and u.metadata is null order by u.store_id limit 1`);
+            const p = await ctx.newPage();
+            watchPage(p);
+            const response = await p.goto(`${base}/${stockPath}`, { waitUntil: 'networkidle' });
+            const messages = await p.evaluate(() => {
+                const walker = document.createTreeWalker(document.querySelector('#maincontent') ?? document.body, NodeFilter.SHOW_TEXT);
+                const found = [];
+                for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                    if (!/^\s*out of stock\s*$/i.test(node.textContent)) continue;
+                    const el = node.parentElement;
+                    const r = el.getBoundingClientRect();
+                    const style = getComputedStyle(el);
+                    if (r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && !el.closest('.sr-only')) found.push(el.localName);
+                }
+                return found;
+            });
+            check('out of stock product page: one visible "Out of stock" message', response?.status() === 200 && messages.length === 1, JSON.stringify({ status: response?.status(), path: stockPath, messages }));
+            await p.close();
+        } finally {
+            restoreStock();
+            stockRegistered();
+        }
+    }
     check('no page errors / HTTP 5xx', problems.length === 0, problems.slice(0, 4).join(' | '));
 } finally {
     await browser.close();
+    if (runConfig) {
+        const notRestored = runConfig.restoreAll();
+        if (notRestored.length) check('restore: settings of the run put back', false, notRestored.join(', '));
+        flushCaches();
+    }
 }
 const failed = results.filter((r) => !r.ok);
 console.log(JSON.stringify({ base, total: results.length, passed: results.length - failed.length, failed: failed.map((f) => f.name) }, null, 2));

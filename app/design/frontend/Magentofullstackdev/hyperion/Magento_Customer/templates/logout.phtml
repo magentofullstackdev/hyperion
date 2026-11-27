@@ -6,9 +6,13 @@
  *
  * Replaces the core RequireJS-driven redirect with a vanilla setTimeout
  * (RequireJS is removed from Hyperion, so the core template's auto-
- * redirect never fired). Adds a centred container, body copy, and a
+ * redirect never fired). Adds a centered container, body copy, and a
  * "Continue shopping" CTA so the page reads as a proper farewell rather
  * than two unstyled lines flush against the viewport edge.
+ *
+ * `data-hyperion-signed-out` tells the theme script that this is the
+ * sign-out page: it removes the checkout's typed data (drafts) from the
+ * tab's session storage (`lib/checkout-drafts.js` of the theme package).
  *
  * @var \Magento\Framework\View\Element\Template $block
  * @var \Magento\Framework\Escaper $escaper
@@ -19,7 +23,7 @@ $script = 'setTimeout(function () { window.location.href = '
     . json_encode($homeUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES)
     . '; }, 5000);';
 ?>
-<div class="container mx-auto px-4 py-16 text-center max-w-2xl">
+<div class="container mx-auto px-4 py-16 text-center max-w-2xl" data-hyperion-signed-out>
     <h1 class="text-3xl md:text-4xl font-bold text-primary mb-4"><?= $escaper->escapeHtml(__('You are signed out')) ?></h1>
     <p class="text-base text-secondary"><?= $escaper->escapeHtml(__('You have signed out and will go to our homepage in 5 seconds.')) ?></p>
     <p class="mt-6">

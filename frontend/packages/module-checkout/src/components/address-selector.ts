@@ -78,6 +78,13 @@ export class AddressSelector extends SignalWatcher(LitElement) {
     /** The saved address that was selected when the form opened: "Cancel" gives it back. */
     private _previous: Address | null = null;
 
+    /**
+     * The form was opened when the element connected (an address without an
+     * id in the store), not by the shopper, who has not picked, opened or
+     * cancelled anything since.
+     */
+    private _openedAtConnect = false;
+
     public override createRenderRoot(): HTMLElement { return this; }
 
     public override connectedCallback(): void {
@@ -97,7 +104,10 @@ export class AddressSelector extends SignalWatcher(LitElement) {
         if (addresses.length === 0) return;
         const current = this._currentAddress();
         if (current !== null) {
-            if (!hasId(current)) this._showNewForm = true;
+            if (!hasId(current)) {
+                this._showNewForm = true;
+                this._openedAtConnect = true;
+            }
             return;
         }
         const first = this._firstUsable();
@@ -110,6 +120,22 @@ export class AddressSelector extends SignalWatcher(LitElement) {
         const known = Object.keys(directory).length > 0;
         const addresses = getStore().savedAddresses.get();
         return addresses.find((a) => !known || directory[a.country_id] !== undefined) ?? null;
+    }
+
+    /**
+     * A form opened at the connection only ever emits addresses without an
+     * id, so a saved address in the store means that something else chose
+     * it (the typed address a shipping extension gives back, before or
+     * after the first render): the card is shown selected, never the form
+     * with what it held, nor an empty new address. A form the shopper
+     * opened is not concerned.
+     */
+    public override willUpdate(): void {
+        if (this._openedAtConnect && hasId(this._currentAddress())) {
+            this._showNewForm = false;
+            this._newAddressSeed = null;
+            this._openedAtConnect = false;
+        }
     }
 
     public override render(): unknown {
@@ -255,6 +281,7 @@ export class AddressSelector extends SignalWatcher(LitElement) {
      * address again.
      */
     private _beginNewAddress(seed: Address | null): void {
+        this._openedAtConnect = false;
         const current = this._currentAddress();
         this._previous = hasId(current) ? current : this._previous;
         this._newAddressSeed = seed;
@@ -278,6 +305,7 @@ export class AddressSelector extends SignalWatcher(LitElement) {
     }
 
     private _closeNewForm = (): void => {
+        this._openedAtConnect = false;
         const previous = this._previous ?? this._firstUsable();
         this._showNewForm = false;
         this._newAddressSeed = null;
@@ -289,6 +317,7 @@ export class AddressSelector extends SignalWatcher(LitElement) {
     };
 
     private _selectSaved(a: Address): void {
+        this._openedAtConnect = false;
         const store = getStore();
         this._showNewForm = false;
         this._newAddressSeed = null;

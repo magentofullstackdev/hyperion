@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="quote_address">
+        <column xsi:type="varchar" name="hyperion_sample_locker_id" nullable="true" length="32"
+                comment="Sample pickup point id"/>
+    </table>
+    <table name="sales_order_address">
+        <column xsi:type="varchar" name="hyperion_sample_locker_id" nullable="true" length="32"
+                comment="Sample pickup point id"/>
+    </table>
+</schema>

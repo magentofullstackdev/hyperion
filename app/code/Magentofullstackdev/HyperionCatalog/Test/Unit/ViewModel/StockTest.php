@@ -22,6 +22,7 @@ class StockTest extends TestCase
 {
     private float $threshold = 0.0;
     private float $stockQty = 0.0;
+    private bool $displayStockStatus = true;
     /** @var Item&Stub */
     private Item $item;
     private Stock $viewModel;
@@ -37,6 +38,9 @@ class StockTest extends TestCase
         $state->method('getStockQty')->willReturnCallback(fn () => $this->stockQty);
         $scopeConfig = $this->createStub(ScopeConfigInterface::class);
         $scopeConfig->method('getValue')->willReturnCallback(fn () => $this->threshold);
+        $scopeConfig->method('isSetFlag')->willReturnCallback(
+            fn (string $path): bool => $path === Stock::XML_PATH_DISPLAY_STOCK_STATUS && $this->displayStockStatus
+        );
         $store = $this->createStub(Store::class);
         $store->method('getWebsiteId')->willReturn(1);
         $storeManager = $this->createStub(StoreManagerInterface::class);
@@ -57,6 +61,13 @@ class StockTest extends TestCase
         $this->stockQty = 8.0;
         $this->assertFalse($this->viewModel->isLowStockVisible($this->product(true, true)), 'composite type');
         $this->assertFalse($this->viewModel->isLowStockVisible($this->product(false, false)), 'not saleable');
+    }
+
+    public function testStockStatusDisplayFollowsTheInventorySetting(): void
+    {
+        $this->assertTrue($this->viewModel->isStockStatusDisplayed());
+        $this->displayStockStatus = false;
+        $this->assertFalse($this->viewModel->isStockStatusDisplayed());
     }
 
     public function testQtyInputAttributesFollowIncrementsAndSaleLimits(): void

@@ -8,6 +8,14 @@
  * A logged-in customer always gets the <address-selector> (saved address
  * cards, or the form seeded with the account's name and flagged for the
  * address book when there is none); a guest the bare <address-form>.
+ *
+ * The slots `after-shipping-address` and `after-shipping-methods` of the
+ * extension API sit under the address and under the rates (hidden while
+ * empty). The shipping extensions (`hyperion.shippingExtensions`) are a
+ * chunk of their own (`shipping-extension-host.ts`), imported only when the
+ * list is not empty; once it arrived, it draws the address step around the
+ * editor and its host under the rates (`shippingExtensionView`). Until then,
+ * and without extensions, the step is the editor alone.
  */
 import { LitElement, html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
@@ -19,11 +27,13 @@ import { flowActions } from '../store/flow-actions.js';
 import { getCheckoutConfig } from '../bootstrap-config.js';
 import { t } from '../utils/i18n.js';
 import { sanitiseHtml } from '../utils/sanitize-html.js';
+import '../extension/slot-outlet.js';
 import './address-form.js';
 import './address-selector.js';
 import './section-status.js';
 import './shipping-method-list.js';
 import './ui/button.js';
+import { shippingExtensionsUnavailable, shippingExtensionView } from './shipping-extension-view.js';
 
 export class CheckoutShipping extends SignalWatcher(LitElement) {
     public override createRenderRoot(): HTMLElement { return this; }
@@ -31,40 +41,59 @@ export class CheckoutShipping extends SignalWatcher(LitElement) {
     public override connectedCallback(): void {
         super.connectedCallback();
         this.classList.add('hc-host');
+        // The chunk starts itself and installs its view (`shippingExtensionView`);
+        // a failed load is tried once more after a second.
+        if ((getCheckoutConfig().hyperion?.shippingExtensions?.length ?? 0) > 0 && !getStore().isVirtual.get()) {
+            const load = (): Promise<unknown> => import('./shipping-extension-host.js');
+            void load()
+                .catch(() => new Promise((resolve) => setTimeout(resolve, 1000)).then(load))
+                .catch((err: unknown) => {
+                    console.error('[hyperion-checkout] the shipping extensions could not be loaded', err);
+                    shippingExtensionsUnavailable();
+                });
+        }
     }
 
     public override render(): unknown {
         const store = getStore();
         if (store.isVirtual.get()) return null;
-        const addr = store.shippingAddress.get();
-        const isCustomer = store.customer.get() !== null;
+        const editor = this._renderEditor();
+        const view = shippingExtensionView.get();
         return html`
             <div>
                 <h3 class="mb-4 text-base font-semibold text-brand">
                     ${t('Hyperion_Checkout::shipping_address_heading')}
                 </h3>
-                ${isCustomer
-                    ? html`<address-selector mode="shipping"
-                                              @saved-address-select=${this._onSavedPick}
-                                              @address-change=${this._onAddressChange}
-                                              @focusout=${this._onFormFocusOut}
-                            ></address-selector>`
-                    : html`<address-form
-                                mode="shipping"
-                                .value=${addr}
-                                @address-change=${this._onAddressChange}
-                                @focusout=${this._onFormFocusOut}
-                            ></address-form>`}
+                ${view === null ? editor : view.address(editor)}
                 <hc-section-status section="shipping-address"></hc-section-status>
+                <hc-slot-outlet name="after-shipping-address"></hc-slot-outlet>
                 <div class="mt-4 pt-2 border-t border-subtle">
                     <h3 class="text-base font-semibold text-brand mb-2">
                         ${t('Hyperion_Checkout::shipping_method_heading')}
                     </h3>
                     <shipping-method-list></shipping-method-list>
+                    ${view?.afterMethods() ?? nothing}
+                    <hc-slot-outlet name="after-shipping-methods"></hc-slot-outlet>
                     ${this._renderShippingPolicy()}
                 </div>
             </div>
         `;
+    }
+
+    private _renderEditor(): unknown {
+        const store = getStore();
+        return store.customer.get() !== null
+            ? html`<address-selector mode="shipping"
+                                      @saved-address-select=${this._onSavedPick}
+                                      @address-change=${this._onAddressChange}
+                                      @focusout=${this._onFormFocusOut}
+                    ></address-selector>`
+            : html`<address-form
+                        mode="shipping"
+                        .value=${store.shippingAddress.get()}
+                        @address-change=${this._onAddressChange}
+                        @focusout=${this._onFormFocusOut}
+                    ></address-form>`;
     }
 
     /**
@@ -80,7 +109,7 @@ export class CheckoutShipping extends SignalWatcher(LitElement) {
         return html`
             <div class="pt-3">
                 <button type="button"
-                        class="text-sm font-medium text-accent hover:underline"
+                        class="flex min-h-6 items-center text-sm font-medium text-accent hover:underline"
                         data-hyperion-shipping-policy-open
                         @click=${this._openPolicy}>
                     ${t('Hyperion_Checkout::shipping_policy_open')}

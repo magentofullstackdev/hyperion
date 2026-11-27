@@ -2,21 +2,22 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * Resolve a server-supplied redirect target into a same-origin URL
- * string we'll hand to `window.location.assign()`.
+ * Where the checkout may send the browser.
  *
- * The Place Order flow navigates to whatever `defaultSuccessPageUrl`
- * the backend sent. That value is server-rendered today, but treating
- * it as untrusted is the cheap defense:
+ * The success page comes from the server (`defaultSuccessPageUrl`) and is
+ * still treated as untrusted, the cheap defense:
  *   - cross-origin or scheme-relative (`//evil.com`) -> fall back to
  *     the canonical success page rather than redirect off-origin.
  *   - non-http(s) scheme (`javascript:`, `data:`) -> fall back.
  *   - `URL()` constructor throws (malformed input) -> fall back.
- *
  * The fallback is chosen so a misconfigured backend still lands the
  * customer on the success page after a successful charge instead of
  * stranding them on `/checkout`.
+ *
+ * A URL a payment renderer names (its gateway) follows the host rule of
+ * `resolveAllowedUrl()` in `after-order.ts`.
  */
+
 export function decideRedirectTarget(
     targetUrl: string,
     fallbackPath: string = '/checkout/onepage/success'

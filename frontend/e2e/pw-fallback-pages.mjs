@@ -20,7 +20,22 @@
 // gateway on the Stored Payment Methods page (a fixture row,
 // e2e/fixtures/vault-token-fixture.php; skipped when that module is absent).
 // The customer of the run is created by e2e/fixtures/customer-fixture.php and
-// deleted at the end. The customer login needs the customer_login reCAPTCHA
+// deleted at the end. Order documents: with `tax/sales_display/price` on
+// "both" the item rows of the order view, the invoice page and the print pages
+// (customer and guest) show the price including and excluding tax, each with
+// its label; the invoice comment of the fixture shows on the invoice pages.
+// RSS (`rss/config/active`, `rss/catalog/category`, `rss/order/status` on for
+// that part): the category page links its feed and the feed answers XML, the
+// order view links the order status feed, /rss/ lists the feeds.
+// The compare page prints through its Print This Page button (window.print
+// stubbed). The account dashboard shows the recently viewed products after a
+// product view and nothing while the history is empty. Every setting the run
+// changes is put back as found and every fixture removed, also when the run is
+// interrupted.
+//   --with-fpt   also places the order with the FPT demo of e2e/fixtures/weee-demo.php (applied for the run and
+//                removed again when the run created it; `tax/weee/enable` and `tax/weee/display_sales` on for the
+//                run) and checks the FPT line of its order row.
+// The customer login needs the customer_login reCAPTCHA
 // type cleared for the run (see docs/development.md). Exit code 1 on any failure.
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
@@ -28,6 +43,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeUrl, resolveUrlSuffix } from './lib/url-suffix.mjs';
 import { makeConfigSnapshot } from './lib/config-snapshot.mjs';
+import { makeRunConfig } from './lib/run-config.mjs';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('@playwright/test');
@@ -62,16 +78,37 @@ const fixtures = (args) => compose('php-fpm', `cd /var/www/html && php /tmp/spri
 // The other fixtures of the run: copied into the container, their last output line is a JSON object.
 const copyFixture = (name) => execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', path.join(FIXTURE_DIR, name), `php-fpm:/tmp/${name}`]);
 const runFixture = (name, fixtureArgs) => JSON.parse(compose('php-fpm', `cd /var/www/html && php /tmp/${name} /var/www/html ${fixtureArgs}`, 'www-data').trim().split('\n').pop());
-const { configSnapshot, configValue, restoreConfig } = makeConfigSnapshot(sql);
-// The settings the run changes, as stored before it (no row, SQL NULL or a value).
+const { configSnapshot, configValue } = makeConfigSnapshot(sql);
+const flushCaches = () => {
+    magento('cache:flush');
+    try { compose('varnish', "varnishadm ban 'req.url ~ .' > /dev/null"); } catch { /* no Varnish on this install */ }
+};
+// Settings changed for part of the run: put back as found at the end of their part, at the end of the run and when
+// the run is interrupted.
+const runConfig = makeRunConfig(sql, flushCaches);
+const withFpt = process.argv.includes('--with-fpt');
+const FPT = { attribute: 'hyperion_fpt', product: 'Joust Duffle Bag' };
+// Two settings the run changes, as stored before it: the checks compare with them.
 const previousConfig = {
-    sendfriendEnabled: configSnapshot('sendfriend/email/enabled'),
-    sendfriendGuest: configSnapshot('sendfriend/email/allow_guest'),
     demoNotice: configSnapshot('design/head/demonotice'),
     recaptchaNewsletter: configSnapshot('recaptcha_frontend/type_for/newsletter'),
 };
-let demoNoticeChanged = false;
-let recaptchaNewsletterChanged = false;
+// What the run creates besides settings (fixtures, the customer, files): undone in reverse order at the end of the
+// run and, through run-config, when the run is interrupted; a failing step does not skip the others.
+const undoSteps = [];
+const undoLater = (label, undo) => { undoSteps.push({ label, undo, unregister: runConfig.onAbort(label, undo) }); };
+const undoAll = () => {
+    while (undoSteps.length) {
+        const { label, undo, unregister } = undoSteps.pop();
+        // Unregistered once the step has run: an interrupt during it still leaves it to the abort handler.
+        try {
+            undo();
+            unregister();
+        } catch (e) {
+            check(`restore: ${label}`, false, String(e?.message ?? e).split('\n')[0]);
+        }
+    }
+};
 // Sum of the layout shifts the page recorded so far (shifts right after an input do not count).
 const layoutShift = (page) => page.evaluate(() => new Promise((resolve) => {
     let total = 0;
@@ -81,15 +118,7 @@ const layoutShift = (page) => page.evaluate(() => new Promise((resolve) => {
     setTimeout(() => resolve(total), 500);
 }));
 const SEED_TERM = 'hyperion popular term check';
-let seededTerm = false;
-execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint4-fixtures.php']);
-console.log(fixtures('page'));
-copyFixture('customer-fixture.php');
-copyFixture('vault-token-fixture.php');
-console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} '${CUSTOMER.password}' --apply`)));
-magento('cache:flush');
-
-const browser = await chromium.launch({ headless: true, ...launchOptions() });
+let browser = null;
 async function newJourney(viewport = { width: 1366, height: 1000 }) {
     const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport });
     const page = await ctx.newPage();
@@ -116,10 +145,63 @@ const pageFacts = (page) => page.evaluate(() => ({
     luma: document.querySelectorAll('.table-order-items, .block-order-details-view, .data.table, .product-review, .my-credit-cards, .page.tracking').length,
     text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 300),
 }));
+// The item prices of an order document page as core's tax renderers print them: including and excluding tax, each
+// with the label of its data-label attribute painted before it; core's `no-display` parts hidden.
+const taxPrices = (page) => page.evaluate(() => {
+    const facts = (selector) => [...document.querySelectorAll(selector)].map((el) => {
+        const r = el.getBoundingClientRect();
+        const before = getComputedStyle(el, '::before').content;
+        const label = el.getAttribute('data-label') ?? '';
+        return { label, before, visible: r.width > 0 && r.height > 0, labeled: label !== '' && before !== 'none' && before !== 'normal' && (before.includes(label) || /attr\(\s*data-label\s*\)/.test(before)) };
+    });
+    return {
+        incl: facts('.price-including-tax'),
+        excl: facts('.price-excluding-tax'),
+        shownNoDisplay: [...document.querySelectorAll('.no-display')].filter((el) => getComputedStyle(el).display !== 'none').length,
+    };
+});
+const taxPricesShown = (prices) => prices.incl.length > 0 && prices.excl.length > 0
+    && [...prices.incl, ...prices.excl].every((p) => p.visible && p.labeled) && prices.shownNoDisplay === 0;
+const taxDetail = (prices) => JSON.stringify({ incl: prices.incl.slice(0, 2), excl: prices.excl.slice(0, 2), shownNoDisplay: prices.shownNoDisplay });
+// The FPT line of the order row of the FPT product: visible, with its amount.
+const fptLine = (page, name) => page.evaluate((needle) => {
+    const row = [...document.querySelectorAll('tbody tr')].find((tr) => tr.textContent.includes(needle));
+    const lines = [...(row?.querySelectorAll('.weee, [data-hyperion-fpt]') ?? [])].filter((el) => el.getBoundingClientRect().height > 0);
+    return { row: !!row, lines: lines.length, text: lines.map((el) => el.textContent.replace(/\s+/g, ' ').trim()).join(' | ').slice(0, 120), deadInit: row?.querySelectorAll('[data-mage-init]').length ?? -1 };
+}, name);
+const invoiceCommentShown = (page, text) => page.evaluate((needle) => {
+    const shell = document.querySelector('section[aria-labelledby="hyperion-account-heading"]') ?? document.querySelector('#maincontent');
+    return !!shell && shell.innerText.includes(needle);
+}, text);
 let orderId;
 let docs;
 
 try {
+    // Inside the try: a failing or interrupted set-up still reaches the clean-up below.
+    execFileSync('docker', ['compose', '--project-directory', slotDir, 'cp', FIXTURES, 'php-fpm:/tmp/sprint4-fixtures.php']);
+    copyFixture('customer-fixture.php');
+    copyFixture('vault-token-fixture.php');
+    // Registered first, undone last: the fixture files the other steps run.
+    undoLater('fixture files removed', () => compose('php-fpm', 'rm -f /tmp/sprint4-fixtures.php /tmp/customer-fixture.php /tmp/vault-token-fixture.php /tmp/weee-demo.php'));
+    undoLater('CMS page /hyperion-fallback-check removed', () => console.log(fixtures('remove')));
+    console.log(fixtures('page'));
+    undoLater('customer of the run deleted', () => console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} --remove`))));
+    console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} '${CUSTOMER.password}' --apply`)));
+    // Deleting the customer takes its stored tokens with it; the token fixture is removed first all the same.
+    undoLater('vault token fixture removed', () => runFixture('vault-token-fixture.php', `${CUSTOMER.email} --remove`));
+    if (withFpt) {
+        // The FPT demo goes in before the order is placed: the order row keeps the FPT the quote collected. The attribute
+        // is removed again only when this run created it.
+        const fptCreated = sql(`select count(*) from eav_attribute where attribute_code = '${FPT.attribute}'`) === '0';
+        copyFixture('weee-demo.php');
+        if (fptCreated) undoLater('FPT demo attribute removed', () => console.log(compose('php-fpm', 'cd /var/www/html && php /tmp/weee-demo.php /var/www/html --remove', 'www-data').trim()));
+        console.log(compose('php-fpm', 'cd /var/www/html && php /tmp/weee-demo.php /var/www/html', 'www-data').trim());
+        runConfig.set('tax/weee/enable', 1);
+        // Core's value 1: including FPT and the FPT description.
+        runConfig.set('tax/weee/display_sales', 1);
+    }
+    magento('cache:flush');
+    browser = await chromium.launch({ headless: true, ...launchOptions() });
     // ------------------------------------------------------------ guest: drawers, carousel, compare, single review, widget
     {
         const j = await newJourney({ width: 390, height: 844 });
@@ -182,8 +264,24 @@ try {
         await page.setViewportSize({ width: 1366, height: 1000 });
         await page.goto(base + u('/gear/bags.html'), { waitUntil: 'networkidle' });
         await Promise.all([page.waitForResponse((r) => r.url().includes('/catalog/product_compare/add')), page.click('[data-hyperion-tile] hyperion-list-toggle[kind="compare"] button')]);
+        // window.print stubbed before the page runs: the button must call it once.
+        await page.addInitScript(() => {
+            window.__hyperionPrintCalls = 0;
+            window.print = () => { window.__hyperionPrintCalls += 1; };
+        });
         await page.goto(base + '/catalog/product_compare/', { waitUntil: 'networkidle' });
         check('compare page: a single h1', (await pageFacts(page)).h1 === 1, String((await pageFacts(page)).h1));
+        const printButton = page.locator('button[type="button"][data-hyperion-print]');
+        const printFacts = { buttons: await printButton.count(), text: ((await printButton.first().textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim() };
+        if (printFacts.buttons === 1) {
+            await printButton.click();
+            await page.waitForTimeout(300);
+        }
+        printFacts.calls = await page.evaluate(() => window.__hyperionPrintCalls);
+        check('compare page: one Print This Page button, a click calls window.print once', printFacts.buttons === 1 && printFacts.text !== '' && printFacts.calls === 1, JSON.stringify(printFacts));
+        await page.emulateMedia({ media: 'print' });
+        check('compare page: the print button is hidden when the page is printed', printFacts.buttons === 1 && !(await printButton.isVisible()));
+        await page.emulateMedia({ media: 'screen' });
 
         const reviewId = sql("select r.review_id from review r join review_store rs on rs.review_id = r.review_id where r.status_id = 1 and rs.store_id = 1 order by r.review_id limit 1");
         if (reviewId) {
@@ -258,6 +356,48 @@ try {
         }
         docs = JSON.parse(fixtures(`documents ${orderId}`));
         check('fixtures: invoice, tracked shipment and refund created', docs.invoice_id > 0 && docs.shipment_id > 0 && docs.creditmemo_id > 0 && !!docs.tracking_url, JSON.stringify(docs));
+        // The order documents from here to the end of the guest pages: prices including and excluding tax (core's
+        // value 3, "both") and RSS on.
+        for (const [configPath, value] of [['tax/sales_display/price', 3], ['rss/config/active', 1], ['rss/catalog/category', 1], ['rss/order/status', 1]]) runConfig.set(configPath, value);
+        flushCaches();
+
+        await page.goto(base + `/sales/order/view/order_id/${docs.order_id}/`, { waitUntil: 'networkidle' });
+        const viewPrices = await taxPrices(page);
+        check('order view: each item price shows including and excluding tax, both labeled', taxPricesShown(viewPrices), taxDetail(viewPrices));
+        const orderFeed = await page.evaluate(() => [...document.querySelectorAll('a[href*="/rss/feed/index/type/order_status"]')].map((a) => a.href));
+        check('order view: links the order status RSS feed while the feed is on', orderFeed.length === 1, orderFeed.join(' ').replace(base, ''));
+        if (withFpt) {
+            const fpt = await fptLine(page, FPT.product);
+            check('order view: the row of the FPT product shows its FPT line, no data-mage-init', fpt.row && fpt.lines > 0 && fpt.text.includes('5.00') && fpt.deadInit === 0, JSON.stringify(fpt));
+        }
+        await page.goto(base + `/sales/order/invoice/order_id/${docs.order_id}/`, { waitUntil: 'networkidle' });
+        const invoicePrices = await taxPrices(page);
+        const invoicePage = await pageFacts(page);
+        check('invoice page: each item price shows including and excluding tax, both labeled', taxPricesShown(invoicePrices), taxDetail(invoicePrices));
+        check('invoice page: the visible invoice comment is printed, no data-mage-init', await invoiceCommentShown(page, docs.invoice_comment) && invoicePage.deadInit === 0, JSON.stringify({ comment: docs.invoice_comment, deadInit: invoicePage.deadInit }));
+        if (withFpt) {
+            const fpt = await fptLine(page, FPT.product);
+            check('invoice page: the row of the FPT product shows its FPT line', fpt.row && fpt.lines > 0 && fpt.deadInit === 0, JSON.stringify(fpt));
+        }
+
+        // Core links the category feed on top level categories only.
+        await page.goto(base + u('/gear.html'), { waitUntil: 'networkidle' });
+        const categoryFeed = await page.evaluate(() => [...document.querySelectorAll('a[href*="/rss/feed/index/type/category"]')].map((a) => ({ href: a.href, text: a.textContent.replace(/\s+/g, ' ').trim() })));
+        check('top level category page: one RSS link with a visible name while the category feed is on', categoryFeed.length === 1 && categoryFeed[0].text !== '', JSON.stringify(categoryFeed).replace(base, ''));
+        if (categoryFeed.length) {
+            const feed = await j.ctx.request.get(categoryFeed[0].href);
+            const body = await feed.text();
+            check('category RSS feed: answers 200 with an XML feed', feed.status() === 200 && /xml/.test(feed.headers()['content-type'] ?? '') && /<rss[\s>]/.test(body), `${feed.status()} ${feed.headers()['content-type']} ${body.slice(0, 80)}`);
+        }
+        // Core's list of feeds is the rss/index/index route; rss/feed/index answers a single feed by its type.
+        const listResponse = await page.goto(base + '/rss/', { waitUntil: 'networkidle' });
+        const feedList = await page.evaluate(() => ({
+            lists: document.querySelectorAll('#maincontent [data-hyperion-rss-feeds]').length,
+            links: document.querySelectorAll('#maincontent a[href*="/rss/feed/index/type/"]').length,
+            coreTable: document.querySelectorAll('#maincontent table.rss, #maincontent table.data.table').length,
+        }));
+        const feedListFacts = await pageFacts(page);
+        check('feed list: /rss/ lists the feeds as links under one heading, no core table', listResponse?.status() === 200 && feedList.lists === 1 && feedList.links > 0 && feedList.coreTable === 0 && feedListFacts.h1 === 1 && feedListFacts.deadInit === 0, JSON.stringify({ status: listResponse?.status(), ...feedList, h1: feedListFacts.h1, deadInit: feedListFacts.deadInit }));
 
         await page.goto(base + '/vault/cards/listaction/', { waitUntil: 'networkidle' });
         const vault = await pageFacts(page);
@@ -330,6 +470,10 @@ try {
             const f = await pageFacts(page);
             const header = await page.evaluate(() => document.querySelector('[data-hyperion-print-header] h1')?.innerText.replace(/\s+/g, ' ').trim() || '');
             check(`print ${name}: Hyperion header with the order number, styled body, no core markup`, header.includes(orderId) && await page.locator(marker).count() === 1 && f.luma === 0 && f.deadInit === 0 && f.h1 === 1, JSON.stringify({ header, luma: f.luma, deadInit: f.deadInit, h1: f.h1 }));
+            if (name === 'order' || name === 'invoice') {
+                const prices = await taxPrices(page);
+                check(`print ${name}: each item price shows including and excluding tax, both labeled`, taxPricesShown(prices), taxDetail(prices));
+            }
         }
         check('print shipment: tracking number in the shipping method card', await page.goto(base + `/sales/order/printShipment/order_id/${docs.order_id}/`, { waitUntil: 'networkidle' }) && (await page.locator('[data-hyperion-print="shipment"] dd:has-text("HYPE2ETRACK")').count()) === 1);
 
@@ -352,6 +496,8 @@ try {
         await page.click('[data-hyperion-oar-widget] form button[type="submit"]');
         await page.waitForURL((u) => u.toString().includes('/sales/guest/view/'), { timeout: 30000 }).catch(() => {});
         check('orders and returns widget: lookup reaches the guest order view', page.url().includes('/sales/guest/view/'), page.url().replace(base, ''));
+        const guestViewPrices = await taxPrices(page);
+        check('guest order view: each item price shows including and excluding tax, both labeled', taxPricesShown(guestViewPrices), taxDetail(guestViewPrices));
         const tabs = await page.evaluate(() => [...document.querySelectorAll('.hyperion-order-tabs a')].map((a) => new URL(a.href).pathname));
         check('guest order view: styled tabs link the guest invoice, shipment and refund pages', ['invoice', 'shipment', 'creditmemo'].every((doc) => tabs.some((p) => p.includes(`/sales/guest/${doc}/`))), tabs.join(' '));
         for (const [name, doc, printAction, totals] of [
@@ -376,6 +522,11 @@ try {
                 };
             }, printAction);
             check(`guest ${name} tab: Hyperion shell with the info card, the items${totals ? ', the totals' : ''} and guest print links, no core markup`, page.url().includes(url) && tab.shell === 1 && tab.info >= 2 && tab.rows > 0 && (!totals || tab.grandTotal) && tab.guestPrint > 0 && tab.accountPrint === 0 && tab.currentTab === 1 && f.luma === 0 && f.deadInit === 0 && f.h1 === 1, JSON.stringify({ ...tab, luma: f.luma, deadInit: f.deadInit, h1: f.h1, url: page.url().replace(base, '') }));
+            if (name === 'invoice') {
+                const prices = await taxPrices(page);
+                check('guest invoice tab: each item price shows including and excluding tax, both labeled', taxPricesShown(prices), taxDetail(prices));
+                check('guest invoice tab: the visible invoice comment is printed', await invoiceCommentShown(page, docs.invoice_comment), docs.invoice_comment);
+            }
             // X-Magento-Debug asks the VCL for the cache verdict, which is stripped otherwise.
             const verdict = (await j.ctx.request.get(base + url, { headers: { 'X-Magento-Debug': '1' } })).headers()['x-magento-cache-debug'] || '';
             check(`guest ${name} tab: the page is never cached`, verdict === 'UNCACHEABLE', verdict || 'no verdict header');
@@ -390,8 +541,41 @@ try {
             const f = await pageFacts(page);
             const header = await page.evaluate(() => document.querySelector('[data-hyperion-print-header] h1')?.innerText.replace(/\s+/g, ' ').trim() || '');
             check(`guest print ${name}: Hyperion header, styled body, no core markup`, header.includes(orderId) && await page.locator(marker).count() === 1 && f.luma === 0 && f.deadInit === 0 && f.h1 === 1, JSON.stringify({ header, luma: f.luma, deadInit: f.deadInit, h1: f.h1 }));
+            if (name === 'order' || name === 'invoice') {
+                const prices = await taxPrices(page);
+                check(`guest print ${name}: each item price shows including and excluding tax, both labeled`, taxPricesShown(prices), taxDetail(prices));
+            }
         }
         check('guest: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
+        await j.ctx.close();
+        for (const configPath of ['tax/sales_display/price', 'rss/config/active', 'rss/catalog/category', 'rss/order/status']) runConfig.restore(configPath);
+        flushCaches();
+    }
+
+    // ------------------------------------------------------------ account dashboard: recently viewed products
+    {
+        // A fresh browser: the history of the viewed products lives in the browser, so it starts empty.
+        const j = await newJourney();
+        const { page } = j;
+        check('dashboard: login', await login(page), page.url().replace(base, ''));
+        const viewed = () => page.evaluate(() => {
+            const hosts = [...document.querySelectorAll('#maincontent hyperion-recently-viewed[kind="viewed"]')];
+            return {
+                hosts: hosts.length,
+                height: Math.round(hosts.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0)),
+                links: hosts.flatMap((el) => [...el.querySelectorAll('article a[href]')].map((a) => new URL(a.href).pathname)),
+            };
+        });
+        await page.goto(base + '/customer/account/', { waitUntil: 'networkidle' });
+        await page.waitForTimeout(800);
+        const empty = await viewed();
+        check('dashboard: with an empty history the recently viewed block renders nothing', empty.links.length === 0 && empty.height === 0, JSON.stringify(empty));
+        await page.goto(base + u('/fusion-backpack.html'), { waitUntil: 'networkidle' });
+        await page.goto(base + '/customer/account/', { waitUntil: 'networkidle' });
+        await page.waitForFunction(() => !!document.querySelector('#maincontent hyperion-recently-viewed[kind="viewed"] article a[href]'), null, { timeout: 15000 }).catch(() => {});
+        const filled = await viewed();
+        check('dashboard: after a product view the recently viewed block lists that product', filled.hosts === 1 && filled.height > 0 && filled.links.some((p) => p.includes('fusion-backpack')), JSON.stringify(filled));
+        check('dashboard: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
         await j.ctx.close();
     }
 
@@ -401,8 +585,8 @@ try {
         const { page } = j;
         await page.goto(base + '/catalogsearch/result/?q=bag', { waitUntil: 'networkidle' });
         if (sql('select count(*) from search_query where store_id = 1 and num_results > 0') === '0') {
+            undoLater('seeded search term removed', () => sql(`delete from search_query where query_text = '${SEED_TERM}'`));
             sql(`insert into search_query (query_text, num_results, popularity, store_id, is_active, is_processed) values ('${SEED_TERM}', 3, 2, 1, 1, 1)`);
-            seededTerm = true;
         }
         await page.goto(base + '/search/term/popular/', { waitUntil: 'networkidle' });
         const terms = await page.evaluate(() => ({
@@ -414,13 +598,13 @@ try {
         }));
         check('popular search terms: Hyperion pills linking to the results page, one h1, no core markup', terms.container === 1 && terms.pills.length > 0 && terms.pills.every((h) => h.includes('/catalogsearch/result/?q=')) && terms.core === 0 && terms.h1 === 1 && terms.deadInit === 0, JSON.stringify({ ...terms, pills: terms.pills.length }));
 
-        magento('config:set sendfriend/email/enabled 0');
+        runConfig.set('sendfriend/email/enabled', 0);
         magento('cache:flush');
         await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         check('email a friend: no link on the product page while the feature is off', await page.locator('[data-hyperion-sendfriend-link]').count() === 0);
 
-        magento('config:set sendfriend/email/enabled 1');
-        magento('config:set sendfriend/email/allow_guest 1');
+        runConfig.set('sendfriend/email/enabled', 1);
+        runConfig.set('sendfriend/email/allow_guest', 1);
         magento('cache:flush');
         await page.goto(base + u('/joust-duffle-bag.html'), { waitUntil: 'networkidle' });
         const link = page.locator('[data-hyperion-sendfriend-link]');
@@ -503,8 +687,7 @@ try {
             check('footer: the advanced search page answers 200', response?.status() === 200, String(response?.status()));
         }
 
-        demoNoticeChanged = true;
-        magento('config:set design/head/demonotice 1');
+        runConfig.set('design/head/demonotice', 1);
         magento('cache:flush');
         for (const [device, viewport] of [['desktop', { width: 1366, height: 1000 }], ['phone', { width: 390, height: 844 }]]) {
             await page.setViewportSize(viewport);
@@ -540,9 +723,8 @@ try {
             }));
             check(`demo store notice (${device}): the bar scrolls away and the header stays at the top`, sticky.scrolled > 0 && sticky.headerTop === 0 && sticky.barBottom <= 0, JSON.stringify(sticky));
         }
-        restoreConfig('design/head/demonotice', previousConfig.demoNotice);
+        runConfig.restore('design/head/demonotice');
         magento('cache:flush');
-        demoNoticeChanged = false;
         await page.goto(base + '/', { waitUntil: 'networkidle' });
         check('demo store notice: no bar once the setting is back', previousConfig.demoNotice.value === '1' || await page.locator('[data-hyperion-notice="demo"]').count() === 0);
         check('footer and notice: no page errors / HTTP 5xx', j.problems.length === 0, j.problems.slice(0, 4).join(' | '));
@@ -578,8 +760,7 @@ try {
             check('newsletter with reCAPTCHA blocked: the store has no reCAPTCHA key pair (skipped)', true);
         } else {
             if (previousConfig.recaptchaNewsletter.value !== type) {
-                recaptchaNewsletterChanged = true;
-                magento(`config:set recaptcha_frontend/type_for/newsletter ${type}`);
+                runConfig.set('recaptcha_frontend/type_for/newsletter', type);
                 magento('cache:flush');
             }
             const j = await newJourney();
@@ -617,27 +798,11 @@ try {
         }
     }
 } finally {
-    await browser.close();
-    console.log(fixtures('remove'));
-    // Every step of the clean-up runs, also when one of them fails.
-    for (const [label, step] of [
-        ['vault token fixture removed', () => runFixture('vault-token-fixture.php', `${CUSTOMER.email} --remove`)],
-        ['customer of the run deleted', () => console.log('customer fixture:', JSON.stringify(runFixture('customer-fixture.php', `${CUSTOMER.email} --remove`)))],
-        ['fixture files removed', () => compose('php-fpm', 'rm -f /tmp/customer-fixture.php /tmp/vault-token-fixture.php')],
-    ]) {
-        try {
-            step();
-        } catch (e) {
-            check(`restore: ${label}`, false, String(e?.message ?? e).split('\n')[0]);
-        }
-    }
-    compose('php-fpm', 'rm -f /tmp/sprint4-fixtures.php');
-    restoreConfig('sendfriend/email/enabled', previousConfig.sendfriendEnabled);
-    restoreConfig('sendfriend/email/allow_guest', previousConfig.sendfriendGuest);
-    if (demoNoticeChanged) restoreConfig('design/head/demonotice', previousConfig.demoNotice);
-    if (recaptchaNewsletterChanged) restoreConfig('recaptcha_frontend/type_for/newsletter', previousConfig.recaptchaNewsletter);
-    if (seededTerm) sql(`delete from search_query where query_text = '${SEED_TERM}'`);
-    magento('cache:flush');
+    await browser?.close();
+    undoAll();
+    const notRestored = runConfig.restoreAll();
+    if (notRestored.length) check('restore: settings of the run put back', false, notRestored.join(', '));
+    flushCaches();
 }
 const failed = results.filter((r) => !r.ok);
 console.log(JSON.stringify({ base, total: results.length, passed: results.length - failed.length, failed: failed.map((f) => f.name) }, null, 2));

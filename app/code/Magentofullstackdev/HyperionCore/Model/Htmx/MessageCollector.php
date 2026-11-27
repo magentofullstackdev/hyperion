@@ -28,6 +28,9 @@ use Psr\Log\LoggerInterface;
  *      other cart validation failures as NOTICE messages, not errors. For
  *      a toast they are failures all the same, so anything that is not a
  *      success counts as an error here.
+ *
+ * @api
+ * @since 0.9.0
  */
 class MessageCollector
 {
@@ -68,6 +71,29 @@ class MessageCollector
         }
 
         return ['html' => implode(' ', $parts), 'has_error' => $hasError];
+    }
+
+    /**
+     * True when the queue holds at least one success message and no failure
+     * (error, warning or notice). The queue is read without being cleared:
+     * the messages stay in the session for the page the visitor goes to next.
+     *
+     * @return bool
+     */
+    public function hasOnlySuccess(): bool
+    {
+        $hasSuccess = false;
+        foreach ($this->messageManager->getMessages(false)->getItems() as $message) {
+            $type = $message->getType();
+            if (in_array($type, self::FAILURE_TYPES, true)) {
+                return false;
+            }
+            if ($type === MessageInterface::TYPE_SUCCESS) {
+                $hasSuccess = true;
+            }
+        }
+
+        return $hasSuccess;
     }
 
     private function interpret(MessageInterface $message): string

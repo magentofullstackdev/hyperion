@@ -24,6 +24,8 @@ class GiftMessageBridge
     private const MESSAGE_FACTORY_CLASS = 'Magento\GiftMessage\Api\Data\MessageInterfaceFactory';
     private const CONFIG_PROVIDER_CLASS = 'Magento\GiftMessage\Model\GiftMessageConfigProvider';
     private const CONFIG_KEYS = ['giftMessage', 'isOrderLevelGiftOptionsEnabled', 'isItemLevelGiftOptionsEnabled'];
+    /** The keys of a stored message the checkout reads: the message's id and its three texts. */
+    private const MESSAGE_KEYS = ['gift_message_id', 'sender', 'recipient', 'message'];
 
     /**
      * @param ModuleManager $moduleManager
@@ -51,6 +53,12 @@ class GiftMessageBridge
      * options block), not on the checkout composite, so the Lit checkout
      * gets them through here. Empty when the module is absent.
      *
+     * A stored message (`giftMessage.orderLevel`, `giftMessage.itemLevel.<id>.message`)
+     * keeps only its id, sender, recipient and text: core's data also carries
+     * the id of the customer who wrote it, which the checkout never reads and
+     * which a page printed for a visitor the persistent cookie remembers must
+     * not carry.
+     *
      * @return array<string, mixed>
      */
     public function getCheckoutConfig(): array
@@ -59,8 +67,40 @@ class GiftMessageBridge
             return [];
         }
         $config = (array) $this->objectManager->get(self::CONFIG_PROVIDER_CLASS)->getConfig();
+        $config = array_intersect_key($config, array_flip(self::CONFIG_KEYS));
+        if (isset($config['giftMessage']) && is_array($config['giftMessage'])) {
+            $config['giftMessage'] = $this->storedMessagesTextOnly($config['giftMessage']);
+        }
 
-        return array_intersect_key($config, array_flip(self::CONFIG_KEYS));
+        return $config;
+    }
+
+    /**
+     * The `giftMessage` entry with every stored message reduced to `MESSAGE_KEYS`.
+     *
+     * @param array<string, mixed> $giftMessage `orderLevel` and `itemLevel` of core's provider
+     * @return array<string, mixed>
+     */
+    private function storedMessagesTextOnly(array $giftMessage): array
+    {
+        if (isset($giftMessage['orderLevel']) && is_array($giftMessage['orderLevel'])) {
+            $giftMessage['orderLevel'] = array_intersect_key(
+                $giftMessage['orderLevel'],
+                array_flip(self::MESSAGE_KEYS)
+            );
+        }
+        if (isset($giftMessage['itemLevel']) && is_array($giftMessage['itemLevel'])) {
+            foreach ($giftMessage['itemLevel'] as $itemId => $entry) {
+                if (is_array($entry) && isset($entry['message']) && is_array($entry['message'])) {
+                    $giftMessage['itemLevel'][$itemId]['message'] = array_intersect_key(
+                        $entry['message'],
+                        array_flip(self::MESSAGE_KEYS)
+                    );
+                }
+            }
+        }
+
+        return $giftMessage;
     }
 
     /**

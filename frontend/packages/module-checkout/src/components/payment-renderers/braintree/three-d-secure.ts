@@ -18,18 +18,12 @@
  * Resolves with the nonce to send to Magento, rejects with a translated
  * message.
  */
+import type { PaymentContext } from '../../../../extension-api.js';
 import type { Address } from '../../../types/address.js';
-import { getStore } from '../../../store/index.js';
-import { t } from '../../../utils/i18n.js';
+import { firstPartyOf } from '../first-party.js';
 import { getBraintreeClient } from './client.js';
 import { getThreeDSecureConfig, type ThreeDSecureConfig } from './config.js';
-import {
-    digitsOnly,
-    getBaseGrandTotal,
-    getBillingAddress,
-    getShippingAddress,
-    regionCodeOf,
-} from './quote.js';
+import { digitsOnly, getBaseGrandTotal, regionCodeOf } from './quote.js';
 import { loadBraintreeModule } from './sdk.js';
 import type {
     BraintreeError,
@@ -87,21 +81,24 @@ function hasOverlongLine(address: Address | null): boolean {
     return (address?.street ?? []).slice(0, 2).some((line) => line.length > MAX_ADDRESS_LINE_LENGTH);
 }
 
-export async function verifyThreeDSecure(request: ThreeDSecureRequest): Promise<string> {
-    const config = getThreeDSecureConfig();
-    const billing = getBillingAddress();
-    const amount = getBaseGrandTotal();
+export async function verifyThreeDSecure(context: PaymentContext, request: ThreeDSecureRequest): Promise<string> {
+    const services = firstPartyOf(context);
+    if (services === null) throw new Error('3-D Secure needs the first-party context');
+    const config = getThreeDSecureConfig(services.config());
+    const quote = services.quote();
+    const billing = quote.billingAddress;
+    const amount = getBaseGrandTotal(quote);
     if (!billing || !isThreeDSecureRequired(config, amount, billing.country_id, request.storedCard)) {
         return request.nonce;
     }
 
-    const failure = new Error(t('Hyperion_Checkout::braintree_3ds_failed'));
-    const shipping = getShippingAddress();
+    const failure = new Error(context.t('Your card could not be verified. Please try again with another form of payment.'));
+    const shipping = quote.shippingAddress;
     let instance;
     try {
         const [client, threeDSecure] = await Promise.all([
-            getBraintreeClient(request.authorization),
-            loadBraintreeModule('three-d-secure'),
+            getBraintreeClient(context, request.authorization),
+            loadBraintreeModule(context, 'three-d-secure'),
         ]);
         instance = await threeDSecure.create({ client, version: 2 });
     } catch (err) {
@@ -125,7 +122,7 @@ export async function verifyThreeDSecure(request: ThreeDSecureRequest): Promise<
         };
     }
 
-    const email = getStore().email.get();
+    const email = context.snapshot().email;
     const options: ThreeDSecureVerifyOptions = {
         amount,
         nonce: request.nonce,
@@ -152,7 +149,7 @@ export async function verifyThreeDSecure(request: ThreeDSecureRequest): Promise<
         console.error('[hyperion-checkout] 3D Secure verification failed', err);
         if ((err as BraintreeError)?.code === 'THREEDS_LOOKUP_VALIDATION_ERROR'
             && (hasOverlongLine(billing) || hasOverlongLine(shipping))) {
-            throw new Error(t('Hyperion_Checkout::braintree_3ds_address_too_long'), { cause: err });
+            throw new Error(context.t('Each address line must be shorter than 50 characters for card verification. Please update the address and try again.'), { cause: err });
         }
         throw failure;
     } finally {

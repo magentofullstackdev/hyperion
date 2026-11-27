@@ -4,9 +4,9 @@
 /**
  * Typed reader for `checkoutConfig.hyperion.paypalExpress`, the slice
  * `HyperionCheckout\Model\Checkout\PaypalExpressConfigProvider` adds when a
- * PayPal Express method is available.
+ * PayPal Express method is available. The payment host hands it to the
+ * renderer as `options.paypalExpress`.
  */
-import { getCheckoutConfig } from '../../../bootstrap-config.js';
 import type { PaypalExpressConfig, PaypalPayLaterConfig } from '../../../types/config.js';
 
 export const PAYPAL_EXPRESS_CODE = 'paypal_express';
@@ -60,8 +60,8 @@ function payLater(value: unknown): PaypalPayLaterConfig | null {
  * is, with the types the server gave (the SDK wants numbers as numbers);
  * the other maps end up in URLs and attributes and are strings.
  */
-export function getPaypalExpressConfig(): PaypalExpressConfig | null {
-    const raw: unknown = getCheckoutConfig().hyperion?.paypalExpress;
+export function getPaypalExpressConfig(options: Readonly<Record<string, unknown>>): PaypalExpressConfig | null {
+    const raw: unknown = options['paypalExpress'];
     if (!raw || typeof raw !== 'object') return null;
     const slice = raw as Record<string, unknown>;
     return {
@@ -83,8 +83,7 @@ export function getPaypalExpressConfig(): PaypalExpressConfig | null {
  * The smart button flow exists for `paypal_express` only; the Payflow
  * edition always goes through the redirect, like in the core checkout.
  */
-export function isInContext(code: string): boolean {
-    const config = getPaypalExpressConfig();
+export function isInContext(config: PaypalExpressConfig | null, code: string): boolean {
     return code === PAYPAL_EXPRESS_CODE
         && config !== null
         && config.inContext
@@ -93,11 +92,11 @@ export function isInContext(code: string): boolean {
         && config.onAuthorizeUrl !== '';
 }
 
-export function getStartUrl(code: string): string | null {
-    return getPaypalExpressConfig()?.startUrls[code] ?? null;
+export function getStartUrl(config: PaypalExpressConfig | null, code: string): string | null {
+    return config?.startUrls[code] ?? null;
 }
 
 /** The `additional_data` key of the billing agreement choice, null when the shopper is not asked. */
-export function getBillingAgreementCode(code: string): string | null {
-    return getPaypalExpressConfig()?.billingAgreementCode[code] ?? null;
+export function getBillingAgreementCode(config: PaypalExpressConfig | null, code: string): string | null {
+    return config?.billingAgreementCode[code] ?? null;
 }

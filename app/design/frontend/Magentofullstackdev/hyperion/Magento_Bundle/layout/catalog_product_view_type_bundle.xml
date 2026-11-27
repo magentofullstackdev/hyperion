@@ -26,5 +26,12 @@
                 </arguments>
             </block>
         </referenceBlock>
+        <!-- Core's options top container leaves core's options block (removed with
+             product.info.main) for the Hyperion one, which prints it above the options; a move
+             escapes the removal of its old parent. Its only core child is the Luma "Go back to
+             product details" button of the customize step, which this page has no use for. -->
+        <move element="product.info.bundle.options.top" destination="hyperion.product.bundle.options"
+              as="product_info_bundle_options_top"/>
+        <referenceBlock name="bundle.back.button" remove="true"/>
     </body>
 </page>

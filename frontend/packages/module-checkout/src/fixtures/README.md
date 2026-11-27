@@ -1,14 +1,31 @@
 # checkoutConfig fixtures
 
-Live captures of a Magento storefront's `checkoutConfig`, used by the dev
-harness and by the TypeScript types in `src/types/config.ts` to pin the
-shapes against a real installation.
+Sanitized live captures of a Magento storefront's checkout config (the
+`#checkout-config` JSON island of `/checkout/`), used by the dev harness, the
+unit tests and the TypeScript types in `src/types/config.ts` to pin the shapes
+against a real installation.
 
 | File | Scenario | Captured against |
 |---|---|---|
-| `checkoutConfig.guest.json` | Guest cart, one physical configurable (MH01 Chaz Kangeroo Hoodie, S + Black). | Magento CE 2.4.7-p9 with the Luma sample data |
-| `checkoutConfig.customer.json` | Logged-in sample data customer (Veronica Costello), one saved address, same physical cart. | Magento CE 2.4.7-p9 with the Luma sample data |
-| `checkoutConfig.virtual.json` | Guest, downloadable-only cart (Beginner's Yoga, SKU 240-LV04). `quoteData.is_virtual === 1`. Total segments: subtotal, tax, grand_total (no shipping). | Magento CE 2.4.7-p9 with the Luma sample data |
+| `checkoutConfig.guest.json` | Guest cart, one physical simple product (Joust Duffle Bag, SKU 24-MB01). | Magento Open Source 2.4.9 with the Luma sample data |
+| `checkoutConfig.customer.json` | Logged-in sample data customer (Veronica Costello, Michigan), one saved address, the same physical cart (US tax applied). | Magento Open Source 2.4.9 with the Luma sample data |
+| `checkoutConfig.virtual.json` | Guest, virtual-only cart (one virtual product of the Hyperion sample data). `quoteData.is_virtual === 1`. Total segments: subtotal, tax, grand_total (no shipping). | Magento Open Source 2.4.9 with the Luma and Hyperion sample data |
+
+The captures pin what the PLATFORM emits. What Hyperion's own providers add is
+left out: `hyperion` is reduced to `{ checkoutVersion, enabled }`, and the
+top-level keys `directoryData`, `optionalZipCountries`, `streetLines`,
+`companyConfig`, `telephoneConfig`, `faxConfig`, `vatFrontendVisibility`,
+`giftMessage`, `isItemLevelGiftOptionsEnabled` and
+`isOrderLevelGiftOptionsEnabled` are dropped. Tests set the Hyperion keys they
+exercise; `hyperion.initial.json` pins the prefetched state.
+
+Sanitized: the store origin is `https://shop.example`; the form key, quote
+ids, captcha timestamps and IP addresses are fixed values; every credential
+(Braintree client tokens, merchant ids, PayPal client and merchant ids in the
+SDK URL, CSP nonces, Cardinal JWTs, partner attribution ids) is a
+`placeholder-*` string. The customer is the public sample data customer.
+The `payment` slices of PayPal_Braintree and Adobe Payment Services come from
+a sandbox configuration, with those credentials replaced.
 
 `payment.braintree.json` is NOT a live capture (it was written without
 Braintree merchant credentials). It is a partial config (`payment`,
@@ -28,10 +45,11 @@ When Magento is patched or store config changes (new payment method,
 new customer attribute, etc.), regenerate the fixtures by:
 
 1. Seed the matching cart state via CLI / REST / admin.
-2. `curl -sk -b <cookie-jar> https://shop.example/checkout | \
-      grep -oP 'id="checkout-config">\K[^<]*' \
-      | python3 -m json.tool --sort-keys > <fixture>.json`
-3. Commit, and update the "Captured against" column above.
+2. Read the `#checkout-config` island of `/checkout/` in that session.
+3. Apply the sanitizing rules above (origin, fixed ids, `placeholder-*`
+   credentials, Hyperion keys left out), sort the keys, and check that
+   `pnpm test:kit` (the package content test) is green.
+4. Update the "Captured against" column above.
 
 ## `hyperion.initial.json`
 

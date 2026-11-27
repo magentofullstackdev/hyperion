@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Account dashboard: core's three extension points. The extra block of
+    the contact card is a child of customer_account_dashboard_info with the
+    alias the template prints.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="customer_account_dashboard_top">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.dashboard.top"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">customer_account_dashboard_top</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+        <referenceContainer name="customer.account.dashboard.info.blocks">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.dashboard.blocks"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">customer.account.dashboard.info.blocks</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceBlock name="customer_account_dashboard_info">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.dashboard.extra" as="customer.account.dashboard.info.extra"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">customer.account.dashboard.info.extra</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

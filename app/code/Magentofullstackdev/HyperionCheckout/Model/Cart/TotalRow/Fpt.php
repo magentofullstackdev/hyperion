@@ -8,11 +8,12 @@ namespace Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address\Total;
 use Magentofullstackdev\HyperionCheckout\Model\WeeeBridge;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 
 /**
  * Fixed Product Tax of the quote, unless the store adds it to the subtotal.
  */
-class Fpt implements RendererInterface
+class Fpt implements TotalRowRendererInterface
 {
     /**
      * @param RowBuilder $rowBuilder

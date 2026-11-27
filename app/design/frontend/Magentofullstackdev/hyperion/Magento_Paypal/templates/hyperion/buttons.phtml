@@ -4,18 +4,21 @@
 declare(strict_types=1);
 
 /**
- * PayPal Express Checkout smart buttons for one placement, with the Pay
- * Later message the merchant positioned "near the PayPal button".
+ * What PayPal adds next to its express buttons, apart from the buttons
+ * themselves (those are the `paypal_express` entry of the express button
+ * pool, printed by `<hyperion-express-slot>`): the Pay Later message the
+ * merchant positioned "near the PayPal button", and on the cart the cart
+ * total the Pay Later messages read.
  *
  * Block data:
- *   context  `cart` | `minicart` | `product`
+ *   context  `cart` | `product`
  *
- * On the cart page the wrapper also carries the cart total
+ * On the cart page the wrapper carries the cart total
  * (`data-hyperion-paypal-amount`), which the Pay Later message at the top
- * of the page reads after every HTMX cart swap; it is therefore printed
- * even when there is no button to show, as long as the merchant enabled a
- * Pay Later message for the cart. With PayPal switched off nothing is
- * printed at all.
+ * of the page reads after every htmx cart swap; it is therefore printed
+ * even when there is no message to show, as long as the merchant enabled a
+ * Pay Later message for the cart. With PayPal switched off, or a visitor
+ * who may not buy, nothing is printed at all.
  *
  * @var \Magento\Framework\View\Element\Template $block
  * @var \Magento\Framework\Escaper $escaper
@@ -26,66 +29,62 @@ $express = $viewModels->optional(\Magentofullstackdev\HyperionCheckout\ViewModel
 if ($express === null || !$express->isAvailable()) {
     return;
 }
+/** @var \Magentofullstackdev\HyperionCore\ViewModel\Purchase $purchase */
+$purchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class);
+if (!$purchase->canPurchase()) {
+    return;
+}
 /** @var \Magentofullstackdev\HyperionCheckout\ViewModel\PaypalPayLater|null $payLater */
 $payLater = $viewModels->optional(\Magentofullstackdev\HyperionCheckout\ViewModel\PaypalPayLater::class);
+if ($payLater === null) {
+    return;
+}
 
 $context = (string) $block->getData('context');
 $isProduct = $context === $express::CONTEXT_PRODUCT;
 $isCart = $context === $express::CONTEXT_CART;
+if (!$isProduct && !$isCart) {
+    return;
+}
 $product = null;
 if ($isProduct) {
-    $parent = $block->getParentBlock();
-    $product = $parent && method_exists($parent, 'getProduct') ? $parent->getProduct() : null;
+    // The block may sit in a container: the product comes from the nearest ancestor block that has one.
+    $layout = $block->getLayout();
+    $name = (string) $block->getNameInLayout();
+    while ($product === null && $name !== '' && ($name = (string) $layout->getParentName($name)) !== '') {
+        $ancestor = $layout->getBlock($name);
+        if ($ancestor && method_exists($ancestor, 'getProduct')) {
+            $product = $ancestor->getProduct();
+        }
+    }
     if (!$product instanceof \Magento\Catalog\Model\Product) {
         return;
     }
 }
 
-$configData = $express->isVisible($context, $product) ? $express->getConfig($context) : [];
-$config = $express->serialize($configData);
-// The height the SDK will render (fixed button height, one row per stacked funding
-// source): reserved from the first paint so the buttons never push the page (CLS).
-$reservedHeight = $config !== '' ? $express->getReservedHeight($configData) : 0;
-$placement = $isProduct ? 'product' : ($isCart ? 'cart' : '');
-$showMessage = $config !== '' && $placement !== '' && $payLater !== null
-    && $payLater->isEnabled($placement, $payLater::POSITION_NEAR_BUTTON);
-$amount = $isProduct ? $express->getProductAmount($product) : $express->getCartAmount();
-
-$carriesAmount = $isCart && $payLater !== null && $payLater->isPlacementEnabled('cart');
-if ($config === '' && !$carriesAmount) {
+// The message belongs next to the buttons: only where the buttons show.
+$hasButtons = $express->isVisible($context, $product)
+    && $express->serialize($express->getConfig($context)) !== '';
+$showMessage = $hasButtons && $payLater->isEnabled($context, $payLater::POSITION_NEAR_BUTTON);
+$carriesAmount = $isCart && $payLater->isPlacementEnabled('cart');
+if (!$showMessage && !$carriesAmount) {
     return;
 }
-$signInMessage = __('To check out, please sign in with your email address.');
-$errorMessage = __('Something went wrong with your request. Please try again later.');
+$amount = $isProduct ? $express->getProductAmount($product) : $express->getCartAmount();
 ?>
-<div class="<?= $escaper->escapeHtmlAttr($config === '' ? 'hidden' : 'mt-3 space-y-2') ?>"
+<div class="<?= $escaper->escapeHtmlAttr($showMessage ? 'mt-2' : 'hidden') ?>"
      data-hyperion-paypal="<?= $escaper->escapeHtmlAttr($context) ?>"
      <?php if ($carriesAmount): ?>
          data-hyperion-paypal-amount="<?= $escaper->escapeHtmlAttr(number_format($amount, 2, '.', '')) ?>"
      <?php endif; ?>>
-    <?php if ($config !== ''): ?>
-        <hyperion-paypal-buttons class="block"
-            style="min-height: <?= (int) $reservedHeight ?>px"
-            context="<?= $escaper->escapeHtmlAttr($context) ?>"
-            config="<?= $escaper->escapeHtmlAttr($config) ?>"
-            <?php if ($isProduct): ?>
-                form="#product_addtocart_form"
-            <?php endif; ?>
-            sign-in-message="<?= $escaper->escapeHtmlAttr($signInMessage) ?>"
-            options-message="<?= $escaper->escapeHtmlAttr(__('You need to choose options for your item.')) ?>"
-            error-message="<?= $escaper->escapeHtmlAttr($errorMessage) ?>"
-            cancel-message="<?= $escaper->escapeHtmlAttr(__('Express Checkout has been canceled.')) ?>"
-            busy-message="<?= $escaper->escapeHtmlAttr(__('Submitting order information...')) ?>">
-        </hyperion-paypal-buttons>
-    <?php endif; ?>
     <?php if ($showMessage): ?>
         <hyperion-paypal-message class="block"
             sdk-url="<?= $escaper->escapeUrl($payLater->getSdkUrl()) ?>"
             sdk-attributes="<?= $escaper->escapeHtmlAttr($payLater->getSdkAttributesJson()) ?>"
-            message="<?= $escaper->escapeHtmlAttr($payLater->getAttributesJson($placement)) ?>"
+            message="<?= $escaper->escapeHtmlAttr($payLater->getAttributesJson($context)) ?>"
             <?php if ($payLater->canDisplayAmount() && $amount > 0): ?>
                 amount="<?= $escaper->escapeHtmlAttr(number_format($amount, 2, '.', '')) ?>"
-                amount-source="<?= $escaper->escapeHtmlAttr($placement) ?>"
+                amount-source="<?= $escaper->escapeHtmlAttr($context) ?>"
             <?php endif; ?>>
         </hyperion-paypal-message>
     <?php endif; ?>

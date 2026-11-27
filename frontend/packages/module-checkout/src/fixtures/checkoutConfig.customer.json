@@ -9,7 +9,7 @@
     "groupLength": 3,
     "groupSymbol": ",",
     "integerRequired": false,
-    "pattern": "\u20ac%s",
+    "pattern": "€%s",
     "precision": 2,
     "requiredPrecision": 2
   },
@@ -19,24 +19,24 @@
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976066
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     },
     "sales_rule_coupon_request": {
       "imageHeight": 50,
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976066
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     },
     "user_login": {
       "imageHeight": 50,
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976066
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     }
   },
   "captchaPayments": {
@@ -45,19 +45,19 @@
       "imageSrc": "",
       "isCaseSensitive": false,
       "isRequired": false,
-      "refreshUrl": "https://hyperion.local/captcha/refresh/",
-      "timestamp": 1776976066
+      "refreshUrl": "https://shop.example/captcha/refresh/",
+      "timestamp": 1700000000
     }
   },
   "cardinal": {
     "environment": "production",
-    "requestJWT": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI0Yzg3ZDk3Zi1mODJkLTRhZTUtODVhNS1mMTMwOWIzZDQ5NzciLCJpc3MiOiIiLCJpYXQiOjE3NzY5NzYwNjYsIk9yZ1VuaXRJZCI6IiIsIlBheWxvYWQiOnsiT3JkZXJEZXRhaWxzIjp7Ik9yZGVyTnVtYmVyIjoiMTM2IiwiQW1vdW50Ijo1NjI5LCJDdXJyZW5jeUNvZGUiOiJFVVIifX0sIk9iamVjdGlmeVBheWxvYWQiOnRydWV9.Rj9PaoAEdq1_0E8RFOOoIXhmdNNF2YuseQSJ7QhH_wE"
+    "requestJWT": "placeholder-requestjwt"
   },
-  "cartUrl": "https://hyperion.local/checkout/cart/",
+  "cartUrl": "https://shop.example/checkout/cart/",
   "checkoutAgreements": {
     "isEnabled": false
   },
-  "checkoutUrl": "https://hyperion.local/checkout/",
+  "checkoutUrl": "https://shop.example/checkout/",
   "customerData": {
     "addresses": {
       "1": {
@@ -80,9 +80,9 @@
         "region": {
           "region": "Michigan",
           "region_code": "MI",
-          "region_id": 97
+          "region_id": 33
         },
-        "region_id": "97",
+        "region_id": "33",
         "street": [
           "6146 Honey Bluff Parkway"
         ],
@@ -92,7 +92,7 @@
       }
     },
     "confirmation": null,
-    "created_at": "2026-04-19 10:07:55",
+    "created_at": "2026-01-01 00:00:00",
     "created_in": "Default Store View",
     "default_billing": "1",
     "default_shipping": "1",
@@ -103,7 +103,7 @@
       "is_subscribed": false
     },
     "firstname": "Veronica",
-    "gender": "4",
+    "gender": "2",
     "group_id": "1",
     "id": "1",
     "lastname": "Costello",
@@ -112,26 +112,26 @@
     "store_id": "1",
     "suffix": null,
     "taxvat": null,
-    "updated_at": "2026-04-23 20:27:16",
+    "updated_at": "2026-01-01 00:00:00",
     "website_id": "1"
   },
   "defaultCountryId": "US",
   "defaultPostcode": null,
   "defaultRegionId": null,
-  "defaultSuccessPageUrl": "https://hyperion.local/checkout/onepage/success/",
+  "defaultSuccessPageUrl": "https://shop.example/checkout/onepage/success/",
   "displayBillingOnPaymentMethod": true,
-  "forgotPasswordUrl": "https://hyperion.local/customer/account/forgotpassword/",
-  "formKey": "ZcspblmCrDH7hO3q",
+  "forgotPasswordUrl": "https://shop.example/customer/account/forgotpassword/",
+  "formKey": "FixtureFormKey01",
   "getIncludeWeeeFlag": false,
   "hyperion": {
     "checkoutVersion": "2.0.0",
     "enabled": true
   },
   "imageData": {
-    "178": {
-      "alt": "Chaz Kangeroo Hoodie-S-Black",
+    "4217": {
+      "alt": "Joust Duffle Bag",
       "height": 156,
-      "src": "https://hyperion.local/media/catalog/product/cache/f784592cce1c1a37499dd87fb5ab4967/m/h/mh01-black_main_1.jpg",
+      "src": "https://shop.example/media/catalog/product/cache/2042bc3ac72748ad4b75cd3071de8616/m/b/mb01-blue-0.jpg",
       "width": 156
     }
   },
@@ -149,97 +149,415 @@
   "isZeroTaxDisplayed": false,
   "maxCartItemsToDisplay": 10,
   "originCountryCode": "US",
-  "pageNotFoundUrl": "https://hyperion.local/checkout/noroute/",
+  "pageNotFoundUrl": "https://shop.example/checkout/noroute/",
   "payment": {
     "": [],
+    "braintree": {
+      "availableCardTypes": [
+        "AE",
+        "VI",
+        "MC",
+        "DI",
+        "JCB",
+        "DN",
+        "MI",
+        "ELO",
+        "UPD"
+      ],
+      "ccTypesMapper": {
+        "american-express": "AE",
+        "diners-club": "DN",
+        "discover": "DI",
+        "elo": "ELO",
+        "jcb": "JCB",
+        "maestro": "MI",
+        "master-card": "MC",
+        "mastercard": "MC",
+        "uk-maestro": "MI",
+        "unionpay": "UPD",
+        "visa": "VI"
+      },
+      "ccVaultCode": "braintree_cc_vault",
+      "clientToken": "placeholder-clienttoken",
+      "countrySpecificCardTypes": [],
+      "disabledFunding": {
+        "card": false,
+        "elv": false
+      },
+      "environment": "sandbox",
+      "icons": {
+        "AE": {
+          "alt": "AE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/AE.png",
+          "width": 48
+        },
+        "DI": {
+          "alt": "DI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DI.png",
+          "width": 48
+        },
+        "DN": {
+          "alt": "DN",
+          "height": 47,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DN.png",
+          "width": 50
+        },
+        "ELO": {
+          "alt": "ELO",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/ELO.png",
+          "width": 48
+        },
+        "JCB": {
+          "alt": "JCB",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/JCB.png",
+          "width": 48
+        },
+        "MC": {
+          "alt": "MC",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MC.png",
+          "width": 48
+        },
+        "MI": {
+          "alt": "MI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MI.png",
+          "width": 48
+        },
+        "NONE": {
+          "alt": "NONE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/NONE.png",
+          "width": 48
+        },
+        "UPD": {
+          "alt": "UPD",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/UPD.png",
+          "width": 48
+        },
+        "VI": {
+          "alt": "VI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/VI.png",
+          "width": 48
+        }
+      },
+      "isActive": true,
+      "merchantId": "placeholder-merchantid",
+      "style": {
+        "color": "gold",
+        "shape": "rect"
+      },
+      "useCvv": true
+    },
     "braintree_cc_vault": {
-      "cvvVerify": false
+      "cvvVerify": true
+    },
+    "braintree_googlepay": {
+      "btnColor": 0,
+      "cardTypes": [
+        "VISA",
+        "MASTERCARD",
+        "AMEX"
+      ],
+      "clientToken": "placeholder-clienttoken",
+      "environment": "TEST",
+      "icons": {
+        "AE": {
+          "alt": "AE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/AE.png",
+          "width": 48
+        },
+        "DI": {
+          "alt": "DI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DI.png",
+          "width": 48
+        },
+        "DN": {
+          "alt": "DN",
+          "height": 47,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/DN.png",
+          "width": 50
+        },
+        "ELO": {
+          "alt": "ELO",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/ELO.png",
+          "width": 48
+        },
+        "JCB": {
+          "alt": "JCB",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/JCB.png",
+          "width": 48
+        },
+        "MC": {
+          "alt": "MC",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MC.png",
+          "width": 48
+        },
+        "MI": {
+          "alt": "MI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/MI.png",
+          "width": 48
+        },
+        "NONE": {
+          "alt": "NONE",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/NONE.png",
+          "width": 48
+        },
+        "UPD": {
+          "alt": "UPD",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/UPD.png",
+          "width": 48
+        },
+        "VI": {
+          "alt": "VI",
+          "height": 48,
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/cc/VI.png",
+          "width": 48
+        }
+      },
+      "isActive": true,
+      "isActiveShipping": false,
+      "merchantId": "placeholder-merchantid",
+      "multiCouponLimit": "1",
+      "paymentMarkSrc": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/GooglePay_AcceptanceMark.png",
+      "priceIncludesTax": false,
+      "skipOrderReviewStep": true,
+      "vaultCode": "braintree_googlepay_vault"
+    },
+    "braintree_paypal": {
+      "canSendCartLineItems": true,
+      "clientToken": "placeholder-clienttoken",
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": true,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "gold",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal (Braintree)",
+      "vaultCode": "braintree_paypal_vault"
+    },
+    "braintree_paypal_credit": {
+      "canSendCartLineItems": true,
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": false,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/ppc-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "darkblue",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal Credit"
+    },
+    "braintree_paypal_paylater": {
+      "canSendCartLineItems": true,
+      "contactPreference": false,
+      "cspNonce": "placeholder-cspnonce",
+      "environment": "sandbox",
+      "isActive": false,
+      "isActiveShipping": true,
+      "isAllowShippingAddressOverride": true,
+      "isMessageActive": true,
+      "isRequiredBillingAddress": "0",
+      "locale": "en_US",
+      "merchantCountry": "IT",
+      "merchantName": null,
+      "messageStyles": {
+        "text_align": "left",
+        "text_color": "black"
+      },
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/ppc-acceptance-medium.png",
+      "paymentIcon": {
+        "height": 32,
+        "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/PayPal_Braintree/images/paypal.png",
+        "width": 54
+      },
+      "skipOrderReviewStep": true,
+      "style": {
+        "color": "gold",
+        "label": "paypal",
+        "shape": "rect"
+      },
+      "title": "PayPal PayLater"
     },
     "ccform": {
+      "availableTypes": {
+        "braintree": {
+          "AE": "American Express",
+          "DI": "Discover",
+          "DN": "Diners",
+          "ELO": "Elo",
+          "JCB": "JCB",
+          "MC": "MasterCard",
+          "MI": "Maestro International",
+          "UPD": "Union Pay through Discover",
+          "VI": "Visa"
+        }
+      },
+      "cvvImageUrl": {
+        "braintree": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Checkout/cvv.png"
+      },
+      "hasVerification": {
+        "braintree": true
+      },
       "icons": {
         "AE": {
           "height": 30,
           "title": "American Express",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/ae.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/ae.png",
           "width": 46
         },
         "AU": {
           "height": 30,
           "title": "Aura",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/au.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/au.png",
           "width": 46
         },
         "DI": {
           "height": 30,
           "title": "Discover",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/di.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/di.png",
           "width": 46
         },
         "DN": {
           "height": 30,
           "title": "Diners",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/dn.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/dn.png",
           "width": 46
         },
         "ELO": {
           "height": 30,
           "title": "Elo",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/elo.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/elo.png",
           "width": 46
         },
         "HC": {
           "height": 30,
           "title": "Hipercard",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/hc.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/hc.png",
           "width": 46
         },
         "JCB": {
           "height": 30,
           "title": "JCB",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/jcb.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/jcb.png",
           "width": 46
         },
         "MC": {
           "height": 30,
           "title": "MasterCard",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/mc.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/mc.png",
           "width": 46
         },
         "MD": {
           "height": 30,
           "title": "Maestro Domestic",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/md.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/md.png",
           "width": 46
         },
         "MI": {
           "height": 30,
           "title": "Maestro International",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/mi.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/mi.png",
           "width": 46
         },
         "SM": {
           "height": 30,
           "title": "Switch/Maestro",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/sm.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/sm.png",
           "width": 46
         },
         "SO": {
           "height": 30,
           "title": "Solo",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/so.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/so.png",
           "width": 46
         },
         "UN": {
           "height": 30,
           "title": "UnionPay",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/un.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/un.png",
           "width": 46
         },
         "VI": {
           "height": 30,
           "title": "Visa",
-          "url": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/Magento_Payment/images/cc/vi.png",
+          "url": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/Magento_Payment/images/cc/vi.png",
           "width": 46
+        }
+      },
+      "months": {
+        "braintree": {
+          "1": "01 - January",
+          "2": "02 - February",
+          "3": "03 - March",
+          "4": "04 - April",
+          "5": "05 - May",
+          "6": "06 - June",
+          "7": "07 - July",
+          "8": "08 - August",
+          "9": "09 - September",
+          "10": "10 - October",
+          "11": "11 - November",
+          "12": "12 - December"
+        }
+      },
+      "years": {
+        "braintree": {
+          "2026": 2026,
+          "2027": 2027,
+          "2028": 2028,
+          "2029": 2029,
+          "2030": 2030,
+          "2031": 2031,
+          "2032": 2032,
+          "2033": 2033,
+          "2034": 2034,
+          "2035": 2035,
+          "2036": 2036
         }
       }
     },
@@ -264,13 +582,13 @@
         "payflowpro": 2
       },
       "placeOrderUrl": {
-        "payflowpro": "https://hyperion.local/paypal/transparent/requestSecureToken/"
+        "payflowpro": "https://shop.example/paypal/transparent/requestSecureToken/"
       },
       "saveOrderUrl": {
-        "payflowpro": "https://hyperion.local/checkout/onepage/saveOrder/"
+        "payflowpro": "https://shop.example/checkout/onepage/saveOrder/"
       },
       "source": {
-        "payflowpro": "https://hyperion.local/static/version1776974555/frontend/Hyperion/default/en_US/blank.html"
+        "payflowpro": "https://shop.example/static/version1700000000/frontend/Magentofullstackdev/hyperion/en_US/blank.html"
       },
       "timeoutTime": {
         "payflowpro": 30000
@@ -299,12 +617,53 @@
       "transportName": "ba_agreement_id"
     },
     "paypalExpress": {
-      "inContextConfig": [],
-      "isContextCheckout": false,
+      "billingAgreementCode": {
+        "paypal_express": null
+      },
+      "inContextConfig": {
+        "clientConfig": {
+          "button": [
+            "paypal-express-in-context-button"
+          ],
+          "dataAttributes": {
+            "data-csp-nonce": "placeholder-data-csp-nonce",
+            "data-partner-attribution-id": "placeholder-data-partner-attribution-id"
+          },
+          "getTokenUrl": "https://shop.example/paypal/express/getTokenData/",
+          "isGuestCheckoutAllowed": true,
+          "isVisibleOnProductPage": true,
+          "onAuthorizeUrl": "https://shop.example/paypal/express/onAuthorization/",
+          "onCancelUrl": "https://shop.example/paypal/express/cancel/",
+          "sdkUrl": "https://www.paypal.com/sdk/js?client-id=placeholder-client-id&locale=en_US&currency=EUR&buyer-country=IT&enable-funding=venmo%2Cpaylater&commit=true&intent=authorize&merchant-id=placeholder-merchant-id&disable-funding=card%2Cbancontact%2Ceps%2Cgiropay%2Cideal%2Cmybank%2Cp24%2Csofort&components=messages%2Cbuttons",
+          "styles": {
+            "color": "gold",
+            "label": "paypal",
+            "layout": "vertical",
+            "shape": "rect",
+            "size": "responsive"
+          }
+        },
+        "inContextId": "paypal-express-in-context-button",
+        "merchantId": "placeholder-merchantid"
+      },
+      "isContextCheckout": true,
       "paymentAcceptanceMarkHref": "https://www.paypal.com/us/cgi-bin/webscr?cmd=xpt/Marketing/popup/OLCWhatIsPayPal-outside",
-      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png"
+      "paymentAcceptanceMarkSrc": "https://www.paypalobjects.com/webstatic/en_US/i/buttons/pp-acceptance-medium.png",
+      "redirectUrl": {
+        "paypal_express": "https://shop.example/paypal/express/start/"
+      }
     },
-    "paypalIframe": []
+    "paypalIframe": [],
+    "three_d_secure": {
+      "ccVaultCode": "braintree_cc_vault",
+      "challengeRequested": false,
+      "enabled": false,
+      "ipAddress": "",
+      "specificCountries": [],
+      "thresholdAmount": 0,
+      "useCvvVault": true
+    },
+    "vault": []
   },
   "paymentMethods": [],
   "persistenceConfig": {
@@ -742,6 +1101,12 @@
         "pattern": "^[0-9]{5}$"
       }
     },
+    "IE": {
+      "pattern_1": {
+        "example": "A65 F4E2",
+        "pattern": "^([AC-FHKNPRTV-Y]{1}[0-9]{2}|D6W)[ ]?[0-9AC-FHKNPRTV-Y]{4}$"
+      }
+    },
     "IL": {
       "pattern_1": {
         "example": "6687865",
@@ -1030,6 +1395,10 @@
       "pattern_1": {
         "example": "1234 AB/1234AB",
         "pattern": "^[1-9][0-9]{3}\\s?[a-zA-Z]{2}$"
+      },
+      "pattern_2": {
+        "example": "1234",
+        "pattern": "^[1-9][0-9]{3}$"
       }
     },
     "NO": {
@@ -1362,26 +1731,26 @@
     "groupLength": 3,
     "groupSymbol": ",",
     "integerRequired": false,
-    "pattern": "\u20ac%s",
+    "pattern": "€%s",
     "precision": 2,
     "requiredPrecision": 2
   },
   "quoteData": {
-    "applied_rule_ids": "4",
+    "applied_rule_ids": null,
     "base_currency_code": "EUR",
-    "base_grand_total": "56.2900",
-    "base_subtotal": "52.0000",
-    "base_subtotal_with_discount": "52.0000",
+    "base_grand_total": "36.8100",
+    "base_subtotal": "34.0000",
+    "base_subtotal_with_discount": "34.0000",
     "base_to_global_rate": "1.0000",
     "base_to_quote_rate": "1.0000",
     "checkout_method": null,
     "converted_at": null,
     "coupon_code": null,
-    "created_at": "2026-04-22 16:40:07",
+    "created_at": "2026-01-01 00:00:00",
     "customer_dob": "1973-12-15",
     "customer_email": "roni_cost@example.com",
     "customer_firstname": "Veronica",
-    "customer_gender": 4,
+    "customer_gender": 2,
     "customer_group_id": 1,
     "customer_id": 1,
     "customer_is_guest": "0",
@@ -1393,7 +1762,7 @@
     "customer_suffix": null,
     "customer_tax_class_id": null,
     "customer_taxvat": null,
-    "entity_id": "136",
+    "entity_id": "1000",
     "ext_shipping_info": null,
     "extension_attributes": {
       "shipping_assignments": [
@@ -1402,7 +1771,7 @@
     },
     "gift_message_id": null,
     "global_currency_code": "EUR",
-    "grand_total": "56.2900",
+    "grand_total": "36.8100",
     "is_active": "1",
     "is_changed": "1",
     "is_multi_shipping": "0",
@@ -1421,29 +1790,29 @@
     "store_id": 1,
     "store_to_base_rate": "0.0000",
     "store_to_quote_rate": "0.0000",
-    "subtotal": "52.0000",
-    "subtotal_with_discount": "52.0000",
+    "subtotal": "34.0000",
+    "subtotal_with_discount": "34.0000",
     "trigger_recollect": "0",
-    "updated_at": "2026-04-23 20:27:45"
+    "updated_at": "2026-01-01 00:00:00"
   },
   "quoteItemData": [
     {
       "additional_data": null,
-      "applied_rule_ids": "4",
+      "applied_rule_ids": null,
       "base_cost": null,
       "base_discount_amount": "0.0000",
       "base_discount_tax_compensation_amount": "0.0000",
-      "base_price": "52.0000",
-      "base_price_incl_tax": "56.2900",
-      "base_row_total": "52.0000",
-      "base_row_total_incl_tax": "56.2900",
-      "base_tax_amount": "4.2900",
+      "base_price": "34.0000",
+      "base_price_incl_tax": "36.8100",
+      "base_row_total": "34.0000",
+      "base_row_total_incl_tax": "36.8100",
+      "base_tax_amount": "2.8100",
       "base_tax_before_discount": null,
       "base_weee_tax_applied_amount": null,
       "base_weee_tax_applied_row_amnt": null,
       "base_weee_tax_disposition": null,
       "base_weee_tax_row_disposition": null,
-      "created_at": "2026-04-23 20:27:45",
+      "created_at": "2026-01-01 00:00:00",
       "custom_price": null,
       "description": null,
       "discount_amount": "0.0000",
@@ -1454,71 +1823,71 @@
       "has_error": false,
       "is_qty_decimal": false,
       "is_virtual": "0",
-      "item_id": "178",
+      "item_id": "4217",
       "message": "",
-      "name": "Chaz Kangeroo Hoodie-S-Black",
+      "name": "Joust Duffle Bag",
       "no_discount": "0",
       "options": [],
       "original_custom_price": null,
       "parent_item_id": null,
-      "price": "52.0000",
-      "price_incl_tax": "56.2900",
+      "price": "34.0000",
+      "price_incl_tax": "36.8100",
       "product": {
-        "attribute_set_id": "10",
-        "created_at": "2026-04-19 10:07:22",
+        "attribute_set_id": "15",
+        "created_at": "2026-01-01 00:00:00",
         "customer_group_id": "1",
-        "entity_id": "166",
+        "entity_id": "1",
         "extension_attributes": {},
         "final_price": null,
         "has_options": "0",
         "msrp_display_actual_price_type": "0",
-        "name": "Chaz Kangeroo Hoodie-S-Black",
-        "price": "52.000000",
+        "name": "Joust Duffle Bag",
+        "price": "34.000000",
+        "request_path": "joust-duffle-bag.html",
         "required_options": "0",
-        "sku": "MH01-S-Black",
-        "small_image": "/m/h/mh01-black_main_1.jpg",
+        "sku": "24-MB01",
+        "small_image": "/m/b/mb01-blue-0.jpg",
         "status": "1",
         "store_id": 1,
         "tax_class_id": "2",
-        "thumbnail": "/m/h/mh01-black_main_1.jpg",
+        "thumbnail": "/m/b/mb01-blue-0.jpg",
         "type_id": "simple",
-        "updated_at": "2026-04-19 10:07:22",
-        "url_key": "chaz-kangeroo-hoodie-s-black",
-        "visibility": "1",
-        "weight": "1.000000"
+        "updated_at": "2026-01-01 00:00:00",
+        "url_key": "joust-duffle-bag",
+        "visibility": "4"
       },
-      "product_id": "166",
+      "product_id": "1",
       "product_type": "simple",
       "qty": 1,
       "qty_options": [],
-      "quote_id": "136",
+      "quote_id": "2364",
       "redirect_url": null,
-      "row_total": "52.0000",
-      "row_total_incl_tax": "56.2900",
+      "row_total": "34.0000",
+      "row_total_incl_tax": "36.8100",
       "row_total_with_discount": "0.0000",
       "row_weight": "0.0000",
-      "sku": "MH01-S-Black",
+      "sku": "24-MB01",
       "stock_state_result": {},
       "store_id": 1,
-      "tax_amount": "4.2900",
+      "tax_amount": "2.8100",
       "tax_before_discount": null,
       "tax_class_id": "2",
       "tax_percent": "8.2500",
-      "thumbnail": "https://hyperion.local/media/catalog/product/cache/6a22b02b40e8b4dee10aff14eeef1c85/m/h/mh01-black_main_1.jpg",
-      "updated_at": "2026-04-23 20:27:45",
+      "thumbnail": "https://shop.example/media/catalog/product/cache/dc09e1c71e492175f875827bcbf6a37c/m/b/mb01-blue-0.jpg",
+      "updated_at": "2026-01-01 00:00:00",
       "weee_tax_applied": null,
       "weee_tax_applied_amount": null,
       "weee_tax_applied_row_amount": null,
       "weee_tax_disposition": null,
       "weee_tax_row_disposition": null,
-      "weight": "1.000000"
+      "weight": null
     }
   ],
   "quoteMessages": {
-    "178": ""
+    "4217": ""
   },
   "recaptcha_paypal": false,
-  "registerUrl": "https://hyperion.local/customer/account/create/",
+  "registerUrl": "https://shop.example/customer/account/create/",
   "reloadOnBillingAddress": false,
   "reviewItemPriceDisplayMode": "excluding",
   "reviewShippingDisplayMode": "excluding",
@@ -1528,44 +1897,44 @@
     "isEnabled": false,
     "shippingPolicyContent": ""
   },
-  "staticBaseUrl": "https://hyperion.local/static/version1776974555/",
-  "storeCode": "en",
+  "staticBaseUrl": "https://shop.example/static/version1700000000/",
+  "storeCode": "en_us",
   "storePickupApiSearchTermDelimiter": ":",
   "totalsData": {
     "base_currency_code": "EUR",
     "base_discount_amount": "0.0000",
-    "base_grand_total": "56.2900",
+    "base_grand_total": "36.8100",
     "base_shipping_amount": "0.0000",
     "base_shipping_discount_amount": "0.0000",
     "base_shipping_incl_tax": "0.0000",
     "base_shipping_tax_amount": "0.0000",
-    "base_subtotal": "52.0000",
-    "base_subtotal_with_discount": "52.0000",
-    "base_tax_amount": "4.2900",
+    "base_subtotal": "34.0000",
+    "base_subtotal_with_discount": "34.0000",
+    "base_tax_amount": "2.8100",
     "coupon_code": null,
     "discount_amount": "0.0000",
     "extension_attributes": [],
-    "grand_total": "56.2900",
+    "grand_total": "36.8100",
     "items": [
       {
         "base_discount_amount": "0.0000",
-        "base_price": "52.0000",
-        "base_price_incl_tax": "56.2900",
-        "base_row_total": "52.0000",
-        "base_row_total_incl_tax": "56.2900",
-        "base_tax_amount": "4.2900",
+        "base_price": "34.0000",
+        "base_price_incl_tax": "36.8100",
+        "base_row_total": "34.0000",
+        "base_row_total_incl_tax": "36.8100",
+        "base_tax_amount": "2.8100",
         "discount_amount": "0.0000",
         "discount_percent": "0.0000",
-        "item_id": "178",
-        "name": "Chaz Kangeroo Hoodie-S-Black",
+        "item_id": "4217",
+        "name": "Joust Duffle Bag",
         "options": "[]",
-        "price": "52.0000",
-        "price_incl_tax": "56.2900",
+        "price": "34.0000",
+        "price_incl_tax": "36.8100",
         "qty": 1,
-        "row_total": "52.0000",
-        "row_total_incl_tax": "56.2900",
+        "row_total": "34.0000",
+        "row_total_incl_tax": "36.8100",
         "row_total_with_discount": "0.0000",
-        "tax_amount": "4.2900",
+        "tax_amount": "2.8100",
         "tax_percent": "8.2500",
         "weee_tax_applied": null,
         "weee_tax_applied_amount": null
@@ -1577,17 +1946,17 @@
     "shipping_discount_amount": "0.0000",
     "shipping_incl_tax": "0.0000",
     "shipping_tax_amount": "0.0000",
-    "subtotal": "52.0000",
-    "subtotal_incl_tax": "56.2900",
-    "subtotal_with_discount": "52.0000",
-    "tax_amount": "4.2900",
+    "subtotal": "34.0000",
+    "subtotal_incl_tax": "36.8100",
+    "subtotal_with_discount": "34.0000",
+    "tax_amount": "2.8100",
     "total_segments": [
       {
         "area": null,
         "code": "subtotal",
         "extension_attributes": [],
         "title": "Subtotal",
-        "value": "52.0000"
+        "value": "34.0000"
       },
       {
         "area": null,
@@ -1602,7 +1971,7 @@
         "extension_attributes": {
           "tax_grandtotal_details": [
             {
-              "amount": 4.29,
+              "amount": 2.81,
               "group_id": 1,
               "rates": [
                 {
@@ -1614,18 +1983,22 @@
           ]
         },
         "title": "Tax",
-        "value": "4.2900"
+        "value": "2.8100"
       },
       {
         "area": "footer",
         "code": "grand_total",
         "extension_attributes": [],
         "title": "Grand Total",
-        "value": "56.2900"
+        "value": "36.8100"
       }
     ]
   },
   "useQty": true,
-  "vault": [],
+  "vault": {
+    "braintree_cc_vault": {
+      "is_enabled": true
+    }
+  },
   "websiteCode": "base"
 }

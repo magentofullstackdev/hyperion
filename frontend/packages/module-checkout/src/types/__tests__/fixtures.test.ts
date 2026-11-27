@@ -26,7 +26,7 @@ const virtualCfg = virtualCart as unknown as CheckoutConfig;
 describe('checkoutConfig fixtures', () => {
     it('guest fixture has hyperion + storeCode + quoteData', () => {
         expect(guestCfg.hyperion).toEqual({ checkoutVersion: '2.0.0', enabled: true });
-        expect(guestCfg.storeCode).toBe('en');
+        expect(guestCfg.storeCode).toBe('en_us');
         expect(guestCfg.isCustomerLoggedIn).toBe(false);
         expect(guestCfg.quoteData.entity_id).toMatch(/^[A-Za-z0-9]{20,}$/);
     });

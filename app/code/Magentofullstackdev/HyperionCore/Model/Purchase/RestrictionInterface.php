@@ -19,6 +19,9 @@ use Magento\Framework\Phrase;
  * A rule must answer from request state that is part of the page cache
  * key (customer group, store, currency): the result is baked into
  * cached pages and block cache entries.
+ *
+ * @api
+ * @since 0.9.0
  */
 interface RestrictionInterface
 {

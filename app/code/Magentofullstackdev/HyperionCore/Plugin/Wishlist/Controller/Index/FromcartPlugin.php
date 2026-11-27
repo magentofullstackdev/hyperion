@@ -5,10 +5,11 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index;
 
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
-use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
-use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
+use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\Result\RawFactory;
@@ -23,6 +24,11 @@ use Magento\Wishlist\Controller\Index\Fromcart;
  * badge and the header wishlist counter out of band, and the toast.
  * Guests never see the button (the cart offers it to customers only), and
  * core's authentication redirect stays untouched for them.
+ *
+ * The body goes through ActionResponse (event `hyperion_htmx_action_response`,
+ * action `wishlist_fromcart`).
+ *
+ * @internal
  */
 class FromcartPlugin
 {
@@ -34,12 +40,21 @@ class FromcartPlugin
     private const WISHLIST_HANDLE = 'hyperion_customer_wishlist';
     private const WISHLIST_BLOCK = 'hyperion.customer.wishlist.fragment';
 
+    /**
+     * @param RawFactory $resultRawFactory
+     * @param CacheHeadersInterface $cacheHeaders
+     * @param MessageCollector $messageCollector
+     * @param NotificationRendererInterface $notificationRenderer
+     * @param FragmentRendererInterface $fragmentRenderer
+     * @param ActionResponse $actionResponse
+     */
     public function __construct(
         private readonly RawFactory $resultRawFactory,
-        private readonly CacheHeaders $cacheHeaders,
+        private readonly CacheHeadersInterface $cacheHeaders,
         private readonly MessageCollector $messageCollector,
-        private readonly NotificationRenderer $notificationRenderer,
-        private readonly FragmentRenderer $fragmentRenderer
+        private readonly NotificationRendererInterface $notificationRenderer,
+        private readonly FragmentRendererInterface $fragmentRenderer,
+        private readonly ActionResponse $actionResponse
     ) {
     }
 
@@ -57,11 +72,15 @@ class FromcartPlugin
         }
 
         $messages = $this->messageCollector->collect();
-        $tone = $messages['has_error'] ? NotificationRenderer::TONE_ERROR : NotificationRenderer::TONE_SUCCESS;
+        $tone = $messages['has_error']
+            ? NotificationRendererInterface::TONE_ERROR
+            : NotificationRendererInterface::TONE_SUCCESS;
 
         $response = $this->resultRawFactory->create();
         $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
-        $response->setContents(
+        $response->setContents($this->actionResponse->build(
+            ActionResponse::ACTION_WISHLIST_FROMCART,
+            $messages,
             $this->fragmentRenderer->render(self::CART_HANDLE, self::CART_BLOCK)
             . "\n"
             . $this->fragmentRenderer->render(self::COUNT_HANDLE, self::COUNT_BLOCK, ['oob' => true])
@@ -69,7 +88,7 @@ class FromcartPlugin
             . $this->fragmentRenderer->render(self::WISHLIST_HANDLE, self::WISHLIST_BLOCK, ['oob' => true])
             . "\n"
             . $this->notificationRenderer->render($messages['html'], $tone, true)
-        );
+        ));
 
         return $this->cacheHeaders->applyPrivate($response);
     }

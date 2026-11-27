@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCatalog\Controller\Category;
 
+use Magentofullstackdev\HyperionCatalog\Model\Listing\FragmentPage;
 use Magentofullstackdev\HyperionCatalog\Model\Listing\FragmentResponse;
 use Magento\Catalog\Api\CategoryRepositoryInterface;
 use Magento\Catalog\Helper\Category as CategoryHelper;
@@ -16,7 +17,6 @@ use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Registry;
 use Magento\Framework\View\Element\AbstractBlock;
-use Magento\Framework\View\Result\PageFactory;
 use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -24,7 +24,7 @@ class Filter implements HttpGetActionInterface
 {
 
     /**
-     * @param PageFactory $pageFactory
+     * @param FragmentPage $fragmentPage
      * @param RawFactory $rawFactory
      * @param CategoryRepositoryInterface $categoryRepository
      * @param Registry $registry
@@ -35,7 +35,7 @@ class Filter implements HttpGetActionInterface
      * @param CategoryHelper $categoryHelper
      */
     public function __construct(
-        private readonly PageFactory $pageFactory,
+        private readonly FragmentPage $fragmentPage,
         private readonly RawFactory $rawFactory,
         private readonly CategoryRepositoryInterface $categoryRepository,
         private readonly Registry $registry,
@@ -75,9 +75,7 @@ class Filter implements HttpGetActionInterface
             $this->registry->unregister('current_category');
             $this->registry->register('current_category', $category);
 
-            $page = $this->pageFactory->create(false, ['load_default' => false]);
-            $page->addHandle('hyperion_catalog_category_filter');
-            $page->initLayout();
+            $page = $this->fragmentPage->create('hyperion_catalog_category_filter');
 
             $layout = $page->getLayout();
             $block = $layout->getBlock('category.products.list')

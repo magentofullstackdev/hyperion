@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    A header link (child of top.links) and a footer link (child of
+    footer_links). Both lists sit in cached blocks: the links are session
+    agnostic. Layout ifconfig takes one path, so they follow the markers
+    flag alone. The footer lists a child of footer_links only when its URL
+    is not one of its designed links (contact, orders and returns, privacy,
+    terms), so the sample link points at the cart.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="top.links">
+            <block class="Magento\Framework\View\Element\Html\Link" name="hyperion.sample.header.link"
+                   ifconfig="hyperion_sample_extension/general/markers">
+                <arguments>
+                    <argument name="label" xsi:type="string" translate="true">Sample header link</argument>
+                    <argument name="path" xsi:type="string">customer/account</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+        <referenceBlock name="footer_links">
+            <block class="Magento\Framework\View\Element\Html\Link" name="hyperion.sample.footer.link"
+                   ifconfig="hyperion_sample_extension/general/markers">
+                <arguments>
+                    <argument name="label" xsi:type="string" translate="true">Sample footer link</argument>
+                    <argument name="path" xsi:type="string">checkout/cart</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

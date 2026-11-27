@@ -14,13 +14,21 @@ vi.mock('../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
 import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type: 'json' };
 import enUS from '../../i18n/en_US.json' with { type: 'json' };
 import { setCheckoutConfig } from '../../bootstrap-config.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import { resetFlowSelectorsForTests } from '../../store/flow-selectors.js';
 import { createStore, setStoreForTests, type Store } from '../../store/index.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import type { Totals } from '../../types/totals.js';
 import { setActiveCatalogForTests } from '../../utils/i18n.js';
+import { loadPaymentHost } from '../payment-host/host.js';
 import '../place-order-button.js';
 import type { PlaceOrderButton } from '../place-order-button.js';
+
+/** The configuration with the bundle's payment renderer entries, as the server emits them. */
+function withPaymentRenderers(config: CheckoutConfig | null): CheckoutConfig {
+    const base = (config ?? {}) as unknown as { hyperion?: Record<string, unknown> };
+    return { ...base, hyperion: { ...(base.hyperion ?? {}), paymentRenderers } } as unknown as CheckoutConfig;
+}
 
 const CONFIG = guestFixture as unknown as CheckoutConfig;
 
@@ -47,7 +55,7 @@ describe('<place-order-button> label, hook and latch', () => {
         submitOrder.mockReset();
         cancelOrder.mockReset();
         setActiveCatalogForTests(enUS as Record<string, string>, 'en_US');
-        setCheckoutConfig(CONFIG);
+        setCheckoutConfig(withPaymentRenderers(CONFIG));
         resetFlowSelectorsForTests();
         store = createStore();
         setStoreForTests(store);
@@ -112,11 +120,21 @@ describe('<place-order-button> label, hook and latch', () => {
 
     it('starts the order pipeline on a press while no attempt is under way', async () => {
         button().click();
-        await Promise.resolve();
-        expect(prepareOrder).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(prepareOrder).toHaveBeenCalledTimes(1));
     });
 
-    it.each(['placing', 'placed', 'unknown'] as const)('ignores a press once the attempt is "%s"', async (outcome) => {
+    it('gives way to a status line with a link to the success page once the order exists', async () => {
+        // An order is always placed through the payment host, so it is there.
+        await loadPaymentHost();
+        store.orderOutcome.set('placed');
+        await el.updateComplete;
+        expect(el.querySelector('[data-hyperion-place-order]')).toBeNull();
+        const status = el.querySelector('[data-order-placed]');
+        expect(status?.getAttribute('role')).toBe('status');
+        expect(status?.querySelector('a')?.getAttribute('href')).toContain('/checkout/onepage/success');
+    });
+
+    it.each(['placing', 'unknown'] as const)('ignores a press once the attempt is "%s"', async (outcome) => {
         store.orderOutcome.set(outcome);
         await settle();
         const control = button();

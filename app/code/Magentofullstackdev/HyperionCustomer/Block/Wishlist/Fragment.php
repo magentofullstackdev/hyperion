@@ -9,7 +9,10 @@ use Magentofullstackdev\HyperionCustomer\ViewModel\CustomerData;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\View\Element\Template;
 use Magento\Wishlist\Helper\Data as WishlistHelper;
+use Magento\Wishlist\Model\ResourceModel\Item\CollectionFactory as ItemCollectionFactory;
+use Magento\Wishlist\Model\Wishlist;
 use Magentofullstackdev\HyperionCore\ViewModel\Catalog\ProductSummary;
+use Magentofullstackdev\HyperionCustomer\Model\Wishlist\ItemMap;
 use Psr\Log\LoggerInterface;
 
 class Fragment extends Template
@@ -21,6 +24,8 @@ class Fragment extends Template
      * @param LoggerInterface $logger
      * @param WishlistHelper $wishlistHelper
      * @param ProductSummary $productSummary
+     * @param ItemMap $itemMap
+     * @param ItemCollectionFactory $itemCollectionFactory
      * @param array $data
      */
     public function __construct(
@@ -30,6 +35,8 @@ class Fragment extends Template
         private readonly LoggerInterface $logger,
         private readonly WishlistHelper $wishlistHelper,
         private readonly ProductSummary $productSummary,
+        private readonly ItemMap $itemMap,
+        private readonly ItemCollectionFactory $itemCollectionFactory,
         array $data = []
     ) {
         parent::__construct($context, $data);
@@ -48,11 +55,11 @@ class Fragment extends Template
             if (!$this->isLoggedIn()) {
                 return [];
             }
-            $map = [];
-            foreach ($this->wishlistHelper->getWishlistItemCollection() as $item) {
-                $map[(int) $item->getProductId()] = (int) $item->getId();
+            $wishlist = $this->wishlistHelper->getWishlist();
+            if (!$wishlist instanceof Wishlist || !$wishlist->getId()) {
+                return [];
             }
-            return $map;
+            return $this->itemMap->get((int) $wishlist->getId(), (array) $wishlist->getSharedStoreIds());
         } catch (\Throwable $e) {
             $this->logger->error('Wishlist\Fragment::getItemMap -- ' . $e->getMessage());
             return [];
@@ -63,7 +70,8 @@ class Fragment extends Template
      * The newest wishlist items as product summaries for the client-side
      * sidebar (`<hyperion-wishlist-sidebar>`), each with the wishlist item
      * id (`item`) the remove and add-to-cart controllers expect and the
-     * stored quantity. Same number of items as core's sidebar.
+     * stored quantity. Same selection as core's sidebar: the newest items in
+     * stock, at most `$limit` of them, loaded with a collection of that size.
      *
      * @param int $limit
      * @return array<int, array<string, mixed>>
@@ -74,17 +82,26 @@ class Fragment extends Template
             if (!$this->isLoggedIn()) {
                 return [];
             }
+            $wishlist = $this->wishlistHelper->getWishlist();
+            if (!$wishlist instanceof Wishlist || !$wishlist->getId()) {
+                return [];
+            }
+            $collection = $this->itemCollectionFactory->create()
+                ->addWishlistFilter($wishlist)
+                ->addStoreFilter($wishlist->getSharedStoreIds())
+                ->setVisibilityFilter()
+                ->setInStockFilter()
+                ->setOrder('added_at', 'DESC')
+                ->setPageSize($limit)
+                ->setCurPage(1);
             $items = [];
-            foreach ($this->wishlistHelper->getWishlistItemCollection() as $item) {
+            foreach ($collection as $item) {
                 $product = $item->getProduct();
                 if (!$product instanceof \Magento\Catalog\Model\Product || !$product->getId()) {
                     continue;
                 }
                 $items[] = $this->productSummary->fromProduct($product, 'product_small_image')
                     + ['item' => (int) $item->getId(), 'qty' => (float) $item->getQty()];
-                if (count($items) >= $limit) {
-                    break;
-                }
             }
             return $items;
         } catch (\Throwable $e) {

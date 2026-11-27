@@ -13,16 +13,16 @@
  * collector is always created, a collector failure is logged and the order
  * goes on without `device_data`.
  */
-import { loadBraintreeModule } from './sdk.js';
+import { loadBraintreeModule, type ScriptLoader } from './sdk.js';
 import type { BraintreeClient } from './types.js';
 
 const clients = new Map<string, Promise<BraintreeClient>>();
 const deviceData = new Map<string, Promise<string | null>>();
 
-export function getBraintreeClient(authorization: string): Promise<BraintreeClient> {
+export function getBraintreeClient(loader: ScriptLoader, authorization: string): Promise<BraintreeClient> {
     const cached = clients.get(authorization);
     if (cached) return cached;
-    const request = loadBraintreeModule('client')
+    const request = loadBraintreeModule(loader, 'client')
         .then((client) => client.create({ authorization }))
         .catch((err: unknown) => {
             clients.delete(authorization);
@@ -33,13 +33,14 @@ export function getBraintreeClient(authorization: string): Promise<BraintreeClie
 }
 
 export function getDeviceData(
+    loader: ScriptLoader,
     authorization: string,
     options: { paypal?: boolean } = {}
 ): Promise<string | null> {
     const key = `${authorization}|${options.paypal ? 'paypal' : 'card'}`;
     const cached = deviceData.get(key);
     if (cached) return cached;
-    const request = Promise.all([getBraintreeClient(authorization), loadBraintreeModule('data-collector')])
+    const request = Promise.all([getBraintreeClient(loader, authorization), loadBraintreeModule(loader, 'data-collector')])
         .then(([client, collector]) => collector.create({
             client,
             ...(options.paypal ? { paypal: true } : {}),

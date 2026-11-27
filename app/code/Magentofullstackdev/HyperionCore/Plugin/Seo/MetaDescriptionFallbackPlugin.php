@@ -23,6 +23,8 @@ use Psr\Log\LoggerInterface;
  * sets the description after the blocks are generated, so an earlier hook
  * is overwritten). A value the merchant typed, or the store's default
  * description, is never replaced; the option switches the fallback off.
+ *
+ * @internal
  */
 class MetaDescriptionFallbackPlugin
 {

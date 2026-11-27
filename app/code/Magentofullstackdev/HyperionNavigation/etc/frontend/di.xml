@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Navigation sources: other modules add an implementation of
+    Model\Menu\SourceInterface to the `sources` argument of
+    Model\Menu\SourcePool in THEIR etc/frontend/di.xml (see
+    Magentofullstackdev_HyperionMegaMenu/etc/frontend/di.xml). The pool exists
+    in the frontend area only and is empty out of the box (the constructor
+    default), so the category tree is the navigation. No module declares the
+    argument in a global di.xml: the frontend scope would replace it.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+</config>

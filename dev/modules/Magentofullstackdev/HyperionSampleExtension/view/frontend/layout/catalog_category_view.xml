@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Listing hooks: the block above the grid, the per tile details renderer
+    (core's `default` renderer: every product type without a renderer of its own) and
+    the per tile "add to" container. The list block is cached: children are
+    session agnostic.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="category.product.list.additional">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.category.additional"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">category.product.list.additional</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <!-- Core declares the `default` renderer (category.product.type.details.renderers.default, no
+             template): a second block with the same alias would not be used, so the marker template goes
+             onto core's block. -->
+        <referenceBlock name="category.product.type.details.renderers.default"
+                        template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+            <arguments>
+                <argument name="marker" xsi:type="string">details.renderers</argument>
+                <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+            </arguments>
+        </referenceBlock>
+        <referenceBlock name="category.product.addto">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.category.addto"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">addto</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

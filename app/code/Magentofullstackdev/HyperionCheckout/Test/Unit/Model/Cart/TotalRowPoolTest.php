@@ -6,21 +6,25 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Test\Unit\Model\Cart;
 
 use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\ObjectManagerInterface;
 use Magento\Framework\Pricing\PriceCurrencyInterface;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Model\Quote\Address\Total;
+use Magentofullstackdev\HyperionCheckout\Api\Cart\TotalRowRendererInterface;
 use Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\RendererInterface;
 use Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRow\RowBuilder;
 use Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 /**
  * The cart summary lists what the quote collected: a renderer per known
  * total code, a plain row for any other total, in the store's totals sort
- * order.
+ * order. Renderers are class names built on first use; an entry that is
+ * not a usable renderer is logged and its total prints as the plain row.
  *
  * @covers \Magentofullstackdev\HyperionCheckout\Model\Cart\TotalRowPool
  */
@@ -120,7 +124,9 @@ class TotalRowPoolTest extends TestCase
         foreach ($items as $item) {
             /** @var \DOMElement $item */
             $class = trim($item->textContent);
-            self::assertTrue(is_a($class, RendererInterface::class, true), $class);
+            self::assertSame('string', $item->getAttribute('xsi:type'), $class . ' must be a class name string');
+            self::assertTrue(is_a($class, TotalRowRendererInterface::class, true), $class);
+            self::assertFalse(is_a($class, RendererInterface::class, true), $class . ' implements the deprecated name');
             $declared[] = $item->getAttribute('name');
         }
         sort($declared);
@@ -217,12 +223,12 @@ class TotalRowPoolTest extends TestCase
 
     public function testARendererMayAnswerSeveralRowsOrNone(): void
     {
-        $two = $this->createStub(RendererInterface::class);
+        $two = $this->createStub(TotalRowRendererInterface::class);
         $two->method('render')->willReturn([
             ['code' => 'subtotal_excl', 'label' => 'A', 'note' => '', 'value' => '1.00', 'kind' => 'regular'],
             ['code' => 'subtotal_incl', 'label' => 'B', 'note' => '', 'value' => '2.00', 'kind' => 'regular'],
         ]);
-        $none = $this->createStub(RendererInterface::class);
+        $none = $this->createStub(TotalRowRendererInterface::class);
         $none->method('render')->willReturn([]);
         $rows = $this->pool(['subtotal' => $two, 'shipping' => $none])->getRows($this->quote([
             ['subtotal', 'Subtotal', '1.0000'],
@@ -232,18 +238,134 @@ class TotalRowPoolTest extends TestCase
         self::assertSame(['subtotal_excl', 'subtotal_incl'], array_column($rows, 'code'));
     }
 
-    public function testARendererThatIsNotOneIsRefused(): void
+    public function testAClassNameIsBuiltOnlyWhenTheQuoteCarriesItsTotalAndOnlyOnce(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $renderer = $this->echoRenderers(['hyperion_test_fee'])['hyperion_test_fee'];
+        $objectManager = $this->createMock(ObjectManagerInterface::class);
+        $objectManager->expects(self::once())->method('get')->with('Vendor\\Fee\\Renderer')->willReturn($renderer);
+        $pool = $this->pool(
+            ['hyperion_test_fee' => '\\Vendor\\Fee\\Renderer', 'unused_total' => 'Vendor\\Unused\\Renderer'],
+            $objectManager
+        );
+        $quote = $this->quote([['subtotal', 'Subtotal', '9.0000'], ['hyperion_test_fee', 'Fee', '2.0000']]);
 
-        $this->pool(['subtotal' => new \stdClass()]);
+        $pool->getRows($quote);
+        $rows = $pool->getRows($quote);
+
+        self::assertSame(['subtotal', 'hyperion_test_fee'], array_column($rows, 'code'));
+    }
+
+    public function testARendererWrittenAgainstTheDeprecatedNameIsAccepted(): void
+    {
+        $legacy = $this->createStub(RendererInterface::class);
+        $legacy->method('render')->willReturn([
+            ['code' => 'fee', 'label' => 'Legacy fee', 'note' => '', 'value' => '1.00', 'kind' => 'regular'],
+        ]);
+
+        $rows = $this->pool(['fee' => $legacy])->getRows($this->quote([['fee', 'Fee', '1.0000']]));
+
+        self::assertSame(['Legacy fee'], array_column($rows, 'label'));
+    }
+
+    /**
+     * @param mixed $entry
+     */
+    #[DataProvider('unusableEntries')]
+    public function testAnUnusableEntryIsLoggedOnceAndItsTotalPrintsAsThePlainRow($entry, bool $builds): void
+    {
+        $objectManager = $this->createStub(ObjectManagerInterface::class);
+        if ($builds) {
+            $objectManager->method('get')->willReturn(new \stdClass());
+        } else {
+            $objectManager->method('get')->willThrowException(new \ReflectionException('Class "Vendor\\Missing" does not exist'));
+        }
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('"fee"'));
+        $pool = $this->pool(['fee' => $entry], $objectManager, $logger);
+        $quote = $this->quote([['fee', 'Handling Fee', '2.5000']]);
+
+        $pool->getRows($quote);
+        $rows = $pool->getRows($quote);
+
+        self::assertSame(
+            [['code' => 'fee', 'label' => 'Handling Fee', 'note' => '', 'value' => '2.50', 'kind' => 'regular']],
+            $rows
+        );
+    }
+
+    /**
+     * @return array<string, array{0: mixed, 1: bool}>
+     */
+    public static function unusableEntries(): array
+    {
+        return [
+            'unknown class' => ['Vendor\\Missing', false],
+            'class that is not a renderer' => ['Vendor\\NotARenderer', true],
+            'object that is not a renderer' => [new \stdClass(), false],
+            'empty string' => ['', false],
+            'array' => [['class' => 'Vendor\\Fee'], false],
+        ];
+    }
+
+    public function testARendererThatThrowsIsLoggedAndItsTotalPrintsAsThePlainRow(): void
+    {
+        $broken = $this->createStub(TotalRowRendererInterface::class);
+        $broken->method('render')->willThrowException(new \RuntimeException('fee service down'));
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('fee service down'));
+
+        $rows = $this->pool(['fee' => $broken], null, $logger)->getRows($this->quote([['fee', 'Handling Fee', '2.5000']]));
+
+        self::assertSame(['Handling Fee'], array_column($rows, 'label'));
+    }
+
+    public function testRowsOfAnotherShapeAreSkippedAndTheRestNormalized(): void
+    {
+        $renderer = $this->createStub(TotalRowRendererInterface::class);
+        $renderer->method('render')->willReturn([
+            ['code' => 'fee', 'label' => 'Fee', 'value' => '1.00'],
+            ['code' => 'fee_detail', 'label' => 'Detail', 'note' => 'n', 'value' => '0.50', 'kind' => 'sparkly'],
+            ['label' => 'No code', 'value' => '1.00'],
+            ['code' => 'fee_amount', 'label' => 'Amount', 'value' => 1.0],
+        ]);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('2 row(s)'));
+
+        $pool = $this->pool(['fee' => $renderer], null, $logger);
+        $pool->getRows($this->quote([['fee', 'Fee', '1.0000']]));
+        $rows = $pool->getRows($this->quote([['fee', 'Fee', '1.0000']]));
+
+        self::assertSame(
+            [
+                ['code' => 'fee', 'label' => 'Fee', 'note' => '', 'value' => '1.00', 'kind' => 'regular'],
+                ['code' => 'fee_detail', 'label' => 'Detail', 'note' => 'n', 'value' => '0.50', 'kind' => 'regular'],
+            ],
+            $rows
+        );
+    }
+
+    public function testARendererWhoseRowsAreAllUnusablePrintsThePlainRow(): void
+    {
+        $renderer = $this->createStub(TotalRowRendererInterface::class);
+        $renderer->method('render')->willReturn([
+            ['code' => 'fee', 'label' => 'Fee', 'value' => 1.0],
+        ]);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::once())->method('error')->with(self::stringContains('the plain row is shown'));
+
+        $rows = $this->pool(['fee' => $renderer], null, $logger)->getRows($this->quote([['fee', 'Handling Fee', '2.5000']]));
+
+        self::assertSame(['Handling Fee'], array_column($rows, 'label'));
     }
 
     /**
      * @param array<string, mixed> $renderers
      */
-    private function pool(array $renderers): TotalRowPool
-    {
+    private function pool(
+        array $renderers,
+        ?ObjectManagerInterface $objectManager = null,
+        ?LoggerInterface $logger = null
+    ): TotalRowPool {
         $priceCurrency = $this->createStub(PriceCurrencyInterface::class);
         $priceCurrency->method('format')->willReturnCallback(
             static fn ($amount): string => number_format((float) $amount, 2)
@@ -251,20 +373,26 @@ class TotalRowPoolTest extends TestCase
         $scopeConfig = $this->createStub(ScopeConfigInterface::class);
         $scopeConfig->method('getValue')->willReturn(self::TOTALS_SORT);
 
-        return new TotalRowPool(new RowBuilder($priceCurrency), $scopeConfig, $renderers);
+        return new TotalRowPool(
+            new RowBuilder($priceCurrency),
+            $scopeConfig,
+            $objectManager ?? $this->createStub(ObjectManagerInterface::class),
+            $logger ?? $this->createStub(LoggerInterface::class),
+            $renderers
+        );
     }
 
     /**
      * Renderers that answer one row carrying the code of their total.
      *
      * @param string[] $codes
-     * @return array<string, RendererInterface>
+     * @return array<string, TotalRowRendererInterface>
      */
     private function echoRenderers(array $codes): array
     {
         $renderers = [];
         foreach ($codes as $code) {
-            $renderer = $this->createStub(RendererInterface::class);
+            $renderer = $this->createStub(TotalRowRendererInterface::class);
             $renderer->method('render')->willReturnCallback(
                 static fn (Total $total): array => [[
                     'code' => (string) $total->getCode(),

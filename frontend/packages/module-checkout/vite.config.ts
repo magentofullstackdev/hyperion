@@ -16,14 +16,18 @@
  * Manifest: `build.manifest = true` is mandatory: without it the PHTML
  * block has nothing to resolve and will throw RuntimeException.
  *
- * Code splitting: the entry boots (config, store, catalog) and imports
- * the UI as one chunk, `checkout-app`, which the PHP block preloads from
- * the head. The parts only some stores show (gift options, terms to
- * accept, the image CAPTCHA field) are chunks of their own, imported next
- * to it when the store uses them (`src/components/optional-sections.ts`)
- * and preloaded on the same condition. Individual payment gateway
- * renderers `await import()` their code lazily; those become separate
- * chunks via Rollup's default behavior.
+ * Code splitting: the entry boots (config, store, flow, error handling,
+ * catalog) and imports the UI as one chunk, `checkout-app`, which the PHP
+ * block preloads from the head; the two are what every checkout page
+ * downloads before it mounts (`scripts/bundle-budget.mjs` keeps their size
+ * in check). The parts only some stores show (gift options, terms to
+ * accept, the image CAPTCHA field, the reCAPTCHA client) are chunks of
+ * their own, imported by the application chunk before the mount when the
+ * store uses them (`src/components/optional-sections.ts`) and preloaded on
+ * the same condition. Importing them from the application chunk keeps the
+ * code they share with it (Lit, the form controls) inside that chunk.
+ * Individual payment gateway renderers `await import()` their code lazily;
+ * those become separate chunks via Rollup's default behavior.
  *
  * Licenses: `THIRD_PARTY_LICENSES.txt` next to the assets carries the full
  * license text of every bundled library (../../build/third-party-licenses.ts).
@@ -82,12 +86,17 @@ export default defineConfig({
                 entryFileNames: 'assets/checkout-[hash].js',
                 // The chunk that holds <checkout-app> keeps the file name
                 // `checkout-app-<hash>.js` whatever name Rollup derives for
-                // it: Block\Checkout recognizes it by that name to preload it
-                // (its manifest key carries the hash).
-                chunkFileNames: (chunk) =>
-                    chunk.moduleIds.some((id) => id.endsWith('/src/components/checkout-app.ts'))
-                        ? 'assets/checkout-app-[hash].js'
-                        : 'assets/[name]-[hash].js',
+                // it, and the chunk of the payment host `payment-host-<hash>.js`:
+                // Block\Checkout recognizes them by those names to preload
+                // them (their manifest keys carry the hash).
+                chunkFileNames: (chunk) => {
+                    if (chunk.moduleIds.some((id) => id.endsWith('/src/components/checkout-app.ts'))) {
+                        return 'assets/checkout-app-[hash].js';
+                    }
+                    return chunk.moduleIds.some((id) => id.endsWith('/src/components/payment-host/mount.ts'))
+                        ? 'assets/payment-host-[hash].js'
+                        : 'assets/[name]-[hash].js';
+                },
                 assetFileNames: (info) => {
                     const name = info.name ?? 'asset';
                     if (name.endsWith('.css')) {

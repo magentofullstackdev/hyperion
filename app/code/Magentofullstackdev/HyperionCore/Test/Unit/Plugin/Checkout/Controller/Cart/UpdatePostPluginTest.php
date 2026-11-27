@@ -12,10 +12,13 @@ use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Escaper;
+use Magento\Framework\Event\ManagerInterface as EventManagerInterface;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Item;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\EventTransport;
 use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
 use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
@@ -95,10 +98,18 @@ class UpdatePostPluginTest extends TestCase
             $messages,
             $notification,
             $fragments,
+            $this->actionResponse(),
             $this->checkoutSession,
             new Escaper(),
             $this->createStub(LoggerInterface::class)
         );
+    }
+
+    private function actionResponse(): ActionResponse
+    {
+        $logger = $this->createStub(LoggerInterface::class);
+
+        return new ActionResponse($this->createStub(EventManagerInterface::class), new EventTransport($logger), $logger);
     }
 
     /** The action under plugin: its request is the one the test configured. */
@@ -262,6 +273,7 @@ class UpdatePostPluginTest extends TestCase
             $messages,
             $notification,
             $fragments,
+            $this->actionResponse(),
             $this->checkoutSession,
             new Escaper(),
             $logger

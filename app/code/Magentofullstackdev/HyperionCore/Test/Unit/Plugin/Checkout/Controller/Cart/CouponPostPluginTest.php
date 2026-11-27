@@ -13,14 +13,18 @@ use Magento\Framework\App\Response\Http as HttpResponse;
 use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\Result\Redirect;
+use Magento\Framework\Event\ManagerInterface as EventManagerInterface;
 use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\EventTransport;
 use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
 use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
 use Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\CouponPostPlugin;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 /**
  * @covers \Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart\CouponPostPlugin
@@ -92,8 +96,16 @@ class CouponPostPluginTest extends TestCase
             $messages,
             $notification,
             $fragments,
-            $this->actionFlag
+            $this->actionFlag,
+            $this->actionResponse()
         );
+    }
+
+    private function actionResponse(): ActionResponse
+    {
+        $logger = $this->createStub(LoggerInterface::class);
+
+        return new ActionResponse($this->createStub(EventManagerInterface::class), new EventTransport($logger), $logger);
     }
 
     private function htmx(bool $on): void

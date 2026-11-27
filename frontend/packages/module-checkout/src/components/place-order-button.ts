@@ -4,8 +4,9 @@
 /**
  * <place-order-button>: primary CTA.
  *
- * Not rendered while the selected method's renderer `ownsPlaceOrder`
- * (it completes the order with its own control). Otherwise gated by the
+ * Not rendered while the selected method's element owns Place Order (it
+ * completes the order with its own control: the element's
+ * `ownsPlaceOrder`, else its entry's flag). Otherwise gated by the
  * `canPlaceOrder` selector: while it is false the button is soft-disabled
  * (`aria-disabled`, still focusable and clickable, Enter / Space as any
  * button). Its label carries the amount once the totals are settled
@@ -13,27 +14,22 @@
  * button fills the width of its container and carries
  * `data-hyperion-place-order`. A press does nothing once an order attempt
  * left the `none` outcome (being placed, placed, or waiting for the check
- * of a lost answer). Otherwise it runs the order pipeline of the flow
- * actions:
- *   1. `prepareOrder()` takes the latch, puts every pending edit on the
- *      quote (a form that is ahead of it, a billing address, a payment
- *      method) and evaluates the gate on what the server confirmed. When
- *      something is missing the press reveals it instead of doing nothing:
- *      every form shows its pending errors (`requestValidation()`), the
- *      email error is set, one hint line names the first missing piece and
- *      the keyboard focus moves to the first invalid field (or to the
- *      hint). The order is never placed while the gate is closed.
- *   2. The selected method's `beforePlaceOrder` hook collects the
- *      token / nonce / PO number into `paymentMethodData`. It runs after
- *      step 1, so a tokenization or a 3D Secure challenge sees the settled
- *      totals. Gateway hooks can take a while: the button shows its loading
- *      state (the latch) and ignores further presses.
- *   3. `submitOrder()` sends the order, or the renderer's `placeOrder`
- *      does when it has one (redirect gateways).
- *   4. On success the browser goes to `/checkout/onepage/success` (stock
- *      Magento success page) or to the URL the renderer resolved with; the
- *      loading state stays until the browser leaves. On failure the latch
- *      is released and the renderer's `afterPlaceOrderFailed` hook runs.
+ * of a lost answer). Otherwise it runs the order pipeline of the payment
+ * host (`payment-host/pipeline.ts`): the latch, every pending edit put on
+ * the quote, the gate, the payment element's own step, the order, where
+ * to continue.
+ *
+ * When something is missing the press reveals it instead of doing
+ * nothing: every form shows its pending errors (`requestValidation()`),
+ * the email error is set, one hint line names the first missing piece,
+ * an error summary under it lists every invalid field as a link that
+ * focuses it, and the keyboard focus moves to the first invalid field (or
+ * to the hint).
+ *
+ * Once the order exists the button gives way to a status line with a link
+ * to the success page, for the moment the browser takes to leave. The
+ * error summary and that line come with the payment host chunk
+ * (`payment-host/row-view.ts`), which every press loads.
  */
 import { LitElement, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
@@ -41,26 +37,38 @@ import { SignalWatcher } from '@lit-labs/signals';
 
 import { getStore } from '../store/index.js';
 import { getCheckoutConfig } from '../bootstrap-config.js';
-import { flowActions, type PrepareOrderBlockReason } from '../store/flow-actions.js';
-import { renderersVersion } from './payment-renderers/lazy-renderers.js';
-import { getPaymentRenderer, type PaymentRenderer } from './payment-renderers/registry.js';
+import type { PrepareOrderBlockReason } from '../store/flow-actions.js';
 import { initFlowSelectors } from '../store/flow-selectors.js';
 import { checkoutUpdatingMessage, placeOrderBlockerMessage, placeOrderHint } from '../store/place-order-hint.js';
 import { requestValidation } from '../store/validation-request.js';
 import { t } from '../utils/i18n.js';
 import { email as emailValidator } from '../validation/rules.js';
-import { navigateTo } from '../utils/navigate.js';
-import { decideRedirectTarget, resolveSameOriginUrl } from '../utils/safe-redirect.js';
+import { decideRedirectTarget } from '../utils/safe-redirect.js';
+import { matchEntry } from './payment-host/entries.js';
+import { paymentHostNow, placeOrderFromButton } from './payment-host/host.js';
+import { selectedRowKey } from './payment-host/payment-rows.js';
+import { rowState } from './payment-host/row-state.js';
 import { readGrandTotal } from './summary-totals.js';
+import './payment-host/importer.js';
 import './ui/button.js';
 
 export { placeOrderHint };
+
+/** The selected method completes the order with a control of its own. Reads signals. */
+export function selectedOwnsPlaceOrder(code: string | null): boolean {
+    if (code === null) return false;
+    const key = selectedRowKey(code);
+    const owns = key === null ? null : rowState(key).ownsPlaceOrder;
+    return owns ?? matchEntry(code)?.ownsPlaceOrder === true;
+}
 
 export class PlaceOrderButton extends SignalWatcher(LitElement) {
     private readonly _selectors = initFlowSelectors();
 
     /** What the last early press found missing; cleared once the gate opens. */
     @state() private _hint: string | null = null;
+    /** The invalid fields the last early press found, by id and label. */
+    @state() private _invalid: ReadonlyArray<{ id: string; label: string }> = [];
 
     public override createRenderRoot(): HTMLElement { return this; }
 
@@ -73,6 +81,7 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
         const latched = store.orderOutcome.get() !== 'none' || store.sessionExpired.get() || store.quoteGone.get();
         if (latched || this._selectors.canPlaceOrder.get()) {
             this._hint = null;
+            this._invalid = [];
         } else if (this._hint === checkoutUpdatingMessage()) {
             // The update ended without opening the gate: name what is
             // missing now instead of an update that is no longer running.
@@ -81,10 +90,12 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
     }
 
     public override render(): unknown {
-        renderersVersion.get();
         const store = getStore();
-        const method = store.selectedPaymentMethod.get();
-        if (method && getPaymentRenderer(method)?.ownsPlaceOrder?.()) return nothing;
+        const host = paymentHostNow();
+        if (store.orderOutcome.get() === 'placed' && host !== null) {
+            return host.renderOrderPlaced(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl ?? ''));
+        }
+        if (selectedOwnsPlaceOrder(store.selectedPaymentMethod.get())) return nothing;
         const can = this._selectors.canPlaceOrder.get();
         const placing = store.isPlacingOrder.get() || store.orderOutcome.get() === 'placing';
         const total = readGrandTotal(store);
@@ -108,54 +119,16 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
                           tabindex="-1"
                           data-place-order-hint>${this._hint}</p>`
                 : nothing}
+            ${this._hint !== null && host !== null ? host.renderErrorSummary(this._invalid) : nothing}
         `;
     }
 
     private _onClick = async (): Promise<void> => {
-        const store = getStore();
-        if (store.orderOutcome.get() !== 'none') return;
-        const flow = flowActions();
+        if (getStore().orderOutcome.get() !== 'none') return;
         // A second press while the first is still at work does nothing
-        // (`prepareOrder()` answers `busy`).
-        const prepared = await flow.prepareOrder();
-        if (prepared.status === 'blocked') {
-            await this._revealMissing(prepared.reason);
-            return;
-        }
-        const method = store.selectedPaymentMethod.get();
-        if (!method) {
-            flow.cancelOrder();
-            return;
-        }
-
-        // The renderer's step, on the settled quote.
-        const renderer = getPaymentRenderer(method);
-        if (renderer?.beforePlaceOrder) {
-            store.globalError.set(null);
-            try {
-                const data = await renderer.beforePlaceOrder();
-                const current = store.paymentMethodData.get();
-                store.paymentMethodData.set({ ...current, [method]: data });
-            } catch (err) {
-                flow.cancelOrder();
-                store.globalError.set((err as Error).message || t('Hyperion_Checkout::unexpected_error'));
-                return;
-            }
-        }
-
-        if (renderer?.placeOrder) {
-            await this._placeThroughRenderer(renderer.placeOrder, renderer);
-            return;
-        }
-
-        // A number, or the marker of an order confirmed by the quote after
-        // its answer was lost: both continue on the success page.
-        const orderId = await flow.submitOrder();
-        if (orderId !== null) {
-            navigateTo(decideRedirectTarget(getCheckoutConfig().defaultSuccessPageUrl));
-            return;
-        }
-        renderer?.afterPlaceOrderFailed?.();
+        // (the pipeline answers `busy`).
+        const result = await placeOrderFromButton();
+        if (result.status === 'blocked') await this._revealMissing(result.reason);
     };
 
     /**
@@ -181,37 +154,10 @@ export class PlaceOrderButton extends SignalWatcher(LitElement) {
         await this.updateComplete;
         await new Promise((resolve) => setTimeout(resolve, 0));
         const root: ParentNode = this.closest('checkout-app') ?? document;
-        const invalid = root.querySelector<HTMLElement>('[aria-invalid="true"]');
-        const target = invalid ?? this.querySelector<HTMLElement>('[data-place-order-hint]');
+        const fields = Array.from(root.querySelectorAll<HTMLElement>('[aria-invalid="true"]'));
+        this._invalid = paymentHostNow()?.invalidFieldsOf(fields) ?? [];
+        const target = fields[0] ?? this.querySelector<HTMLElement>('[data-place-order-hint]');
         target?.focus();
-    }
-
-    /**
-     * The order of a redirect gateway, under the latch `prepareOrder()` took:
-     * it holds while the browser leaves the page and is given back when the
-     * renderer could not start the payment.
-     */
-    private async _placeThroughRenderer(
-        placeOrder: NonNullable<PaymentRenderer['placeOrder']>,
-        renderer: PaymentRenderer
-    ): Promise<void> {
-        const store = getStore();
-        let target: string | null = null;
-        try {
-            const url = await placeOrder();
-            target = url === null ? null : resolveSameOriginUrl(url);
-            if (url !== null && target === null) {
-                store.globalError.set(t('Hyperion_Checkout::unexpected_error'));
-            }
-        } catch (err) {
-            store.globalError.set((err as Error).message || t('Hyperion_Checkout::unexpected_error'));
-        }
-        if (target !== null) {
-            navigateTo(target);
-            return;
-        }
-        flowActions().cancelOrder();
-        renderer.afterPlaceOrderFailed?.();
     }
 }
 

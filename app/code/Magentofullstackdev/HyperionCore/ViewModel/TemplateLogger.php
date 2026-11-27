@@ -17,6 +17,9 @@ use Psr\Log\LoggerInterface;
  * Templates have no constructor injection, so a try/catch inside a template
  * used to swallow the exception silently. Route it here instead so the
  * failure lands in var/log with the template name as context.
+ *
+ * @api
+ * @since 0.9.0
  */
 class TemplateLogger implements ArgumentInterface
 {

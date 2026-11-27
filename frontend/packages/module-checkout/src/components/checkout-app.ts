@@ -23,6 +23,19 @@
  *
  * The page's `<main>` is the theme's: the shell adds no landmark of that
  * kind.
+ *
+ * The sections only some stores show (gift options, terms, the image
+ * CAPTCHA field, the reCAPTCHA attribution) are chunks of their own,
+ * defined before this element mounts when the store uses them
+ * (`optional-sections.ts`); their tags are always written.
+ *
+ * The named slots of the extension API are `<hc-slot-outlet>` elements:
+ * `after-email` in the contact card, `after-agreements` and
+ * `before-place-order` in the payment card. The second sits above the
+ * status of the order and the Place Order bar, outside the bar, so a slot
+ * element never sticks to the bottom of the viewport with it and the
+ * failure of an order stays next to the button. An outlet without a
+ * registered element is hidden and takes no space.
  */
 import { LitElement, html, nothing } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
@@ -33,14 +46,22 @@ import { t } from '../utils/i18n.js';
 import './checkout-email.js';
 import './checkout-shipping.js';
 import './checkout-payment.js';
-import './hyperion-recaptcha.js';
 import './order-summary.js';
 import { readGrandTotal } from './summary-totals.js';
 import './place-order-button.js';
-import './loading-overlay.js';
 import './error-banner.js';
 import './section-status.js';
 import './anti-abuse-field.js';
+import '../extension/slot-outlet.js';
+
+export { loadOptionalSections } from './optional-sections.js';
+
+/**
+ * The runtime of the generic extension pool, imported from this chunk so
+ * the code it shares with the application stays here.
+ */
+export const loadExtensionRuntime = (): Promise<typeof import('../extension/runtime.js')> =>
+    import('../extension/runtime.js');
 
 /** The `lg` breakpoint of the stylesheet: the summary is a rail from here on. */
 const WIDE_LAYOUT_QUERY = '(min-width: 1024px)';
@@ -95,6 +116,7 @@ export class CheckoutApp extends SignalWatcher(LitElement) {
                         ${isLoggedIn
                             ? html`<p class="text-sm text-muted">${store.email.get()}</p>`
                             : html`<checkout-email class="block" @login-request=${this._onLoginRequest}></checkout-email>`}
+                        <hc-slot-outlet name="after-email"></hc-slot-outlet>
                     </section>
                     ${isVirtual
                         ? null
@@ -113,8 +135,10 @@ export class CheckoutApp extends SignalWatcher(LitElement) {
                         </h2>
                         <checkout-payment class="block"></checkout-payment>
                         <checkout-agreements></checkout-agreements>
+                        <hc-slot-outlet name="after-agreements"></hc-slot-outlet>
                         <hc-recaptcha-badge></hc-recaptcha-badge>
                         <hc-order-captcha></hc-order-captcha>
+                        <hc-slot-outlet name="before-place-order"></hc-slot-outlet>
                         <hc-section-status section="order"></hc-section-status>
                         <div class="sticky bottom-0 z-10 -mx-4 -mb-4 space-y-3 rounded-b-card border-t border-subtle bg-surface px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:static lg:z-auto lg:mx-0 lg:mb-0 lg:rounded-none lg:px-0 lg:pb-0"
                              data-hyperion-place-order-bar>

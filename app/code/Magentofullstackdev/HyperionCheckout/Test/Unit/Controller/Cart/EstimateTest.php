@@ -12,6 +12,7 @@ use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Controller\Result\RedirectFactory;
 use Magento\Framework\Data\Form\FormKey\Validator as FormKeyValidator;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Message\ManagerInterface as MessageManagerInterface;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
@@ -143,9 +144,49 @@ class EstimateTest extends TestCase
     }
 
     /**
+     * The saved destination is recorded as the session's own (the estimator
+     * of a restored persistent cart shows it back), only once the quote is saved.
+     */
+    public function testTheSavedDestinationIsRecordedForTheSession(): void
+    {
+        $this->messageManager->expects(self::never())->method('addErrorMessage');
+        $this->quoteRepository->expects(self::once())->method('save');
+        $destination = $this->createMock(EstimateDestination::class);
+        $entered = ['country_id' => 'US', 'region_id' => '33', 'region' => '', 'postcode' => '48201'];
+        $destination->expects(self::once())->method('takeEntered')->willReturn($entered);
+        $destination->expects(self::once())
+            ->method('rememberEntered')
+            ->with(self::isInstanceOf(Quote::class), $entered);
+
+        $this->controller(['estimate_method' => 'flatrate_flatrate'], $destination)->execute();
+    }
+
+    public function testNothingIsRecordedWhenTheQuoteIsNotSaved(): void
+    {
+        $this->messageManager->expects(self::once())->method('addErrorMessage')->with('Please select a country.');
+        $this->quoteRepository->expects(self::never())->method('save');
+        $destination = $this->createMock(EstimateDestination::class);
+        $destination->expects(self::never())->method('rememberEntered');
+
+        $this->controller(['country_id' => ''], $destination)->execute();
+    }
+
+    public function testNothingIsRecordedWhenTheSaveFails(): void
+    {
+        $this->messageManager->expects(self::once())->method('addErrorMessage')->with('refused');
+        $this->quoteRepository->expects(self::once())
+            ->method('save')
+            ->willThrowException(new LocalizedException(__('refused')));
+        $destination = $this->createMock(EstimateDestination::class);
+        $destination->expects(self::never())->method('rememberEntered');
+
+        $this->controller([], $destination)->execute();
+    }
+
+    /**
      * @param array<string, string> $post fields posted on top of the destination
      */
-    private function controller(array $post): Estimate
+    private function controller(array $post, ?EstimateDestination $destination = null): Estimate
     {
         $post += ['country_id' => 'US', 'region_id' => '33', 'postcode' => '48201'];
         $request = $this->createStub(HttpRequest::class);
@@ -179,7 +220,7 @@ class EstimateTest extends TestCase
             $this->createStub(NotificationRenderer::class),
             $this->createStub(FragmentRenderer::class),
             $this->createStub(LoggerInterface::class),
-            $this->createStub(EstimateDestination::class)
+            $destination ?? $this->createStub(EstimateDestination::class)
         );
     }
 

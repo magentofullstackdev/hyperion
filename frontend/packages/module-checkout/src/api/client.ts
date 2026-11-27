@@ -405,6 +405,8 @@ export async function apiFetch<T>(
 }
 
 export interface StorefrontPostOptions {
+    /** `GET` reads the controller without a body; `POST` by default. */
+    method?: 'GET' | 'POST';
     /** Cancels the request. */
     signal?: AbortSignal;
     /** Time limit; `WRITE_TIMEOUT_MS` when unset. */
@@ -422,7 +424,8 @@ export interface StorefrontPostOptions {
  * given (reCAPTCHA observers read `getParam()`). Same time limit and same
  * errors as `apiFetch()`: non-2xx answers and bodies that are not JSON
  * become `MagentoApiError`, transport failures `NetworkError`. Never
- * retried.
+ * retried. `options.method` `GET` reads the controller instead, without a
+ * body and with the time limit of a read.
  */
 export async function storefrontPostJson<T>(
     path: string,
@@ -436,23 +439,34 @@ export async function storefrontPostJson<T>(
     for (const [key, value] of Object.entries(query ?? {})) {
         url.searchParams.set(key, value);
     }
+    const method = options.method ?? 'POST';
     const headers = new Headers(options.headers);
-    headers.set('Content-Type', 'application/json');
+    if (method === 'POST') headers.set('Content-Type', 'application/json');
     headers.set('Accept', 'application/json');
     headers.set('X-Requested-With', 'XMLHttpRequest');
-    const init: RequestInit = {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify(body),
-    };
+    const init: RequestInit = { method, headers, credentials: 'same-origin' };
+    if (method === 'POST') init.body = JSON.stringify(body);
     try {
-        const answer = await exchange(cfg, url.toString(), init, options.signal, options.timeoutMs ?? WRITE_TIMEOUT_MS);
+        const limit = options.timeoutMs ?? (method === 'GET' ? READ_TIMEOUT_MS : WRITE_TIMEOUT_MS);
+        const answer = await exchange(cfg, url.toString(), init, options.signal, limit);
         return unwrapResponse<T>(answer.res, answer.body);
     } catch (err) {
-        if (err instanceof MagentoApiError) err.kind = classifyError(err, { path, method: 'POST' }).kind;
+        if (err instanceof MagentoApiError) err.kind = classifyError(err, { path, method }).kind;
         throw err;
     }
+}
+
+/**
+ * GET a storefront controller on the configured base URL and read its JSON
+ * answer: the read twin of `storefrontPostJson()`, with the same headers,
+ * time limit and errors. Never retried.
+ */
+export function storefrontGetJson<T>(
+    path: string,
+    query?: Readonly<Record<string, string>>,
+    options: StorefrontPostOptions = {}
+): Promise<T> {
+    return storefrontPostJson<T>(path, undefined, query, { ...options, method: 'GET' });
 }
 
 // Re-export the error types so callers only need one import.

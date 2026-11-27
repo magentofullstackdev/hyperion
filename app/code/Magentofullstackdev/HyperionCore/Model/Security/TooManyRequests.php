@@ -12,7 +12,9 @@ use Magento\Framework\Controller\Result\RawFactory;
  * The answer of a rate limited request: HTTP 429, Retry-After of one window,
  * never cached (a shared cache must not serve the refusal to other clients)
  * and never indexed. A Raw result, because the Hyperion fragment controllers
- * declare `execute(): Raw` and an around plugin must honour that type.
+ * declare `execute(): Raw` and an around plugin must honor that type.
+ *
+ * @internal
  */
 class TooManyRequests
 {

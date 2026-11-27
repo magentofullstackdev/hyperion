@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Item price renderers of the storefront order pages (view, invoice, credit
+    memo, prints, customer and guest). Core's Weee templates carry a RequireJS
+    tax toggle; the theme renders the FPT lines expanded instead. The same core
+    templates stay on the cart renderers and the emails use their own handle.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceBlock name="item_unit_price" template="Magento_Weee::item/price/order-price.phtml">
+            <arguments>
+                <argument name="hyperion_price_kind" xsi:type="string">unit</argument>
+            </arguments>
+        </referenceBlock>
+        <referenceBlock name="item_row_total" template="Magento_Weee::item/price/order-price.phtml">
+            <arguments>
+                <argument name="hyperion_price_kind" xsi:type="string">row</argument>
+            </arguments>
+        </referenceBlock>
+    </body>
+</page>

@@ -8,9 +8,14 @@ declare(strict_types=1);
  * (Magento_LoginAsCustomerFrontendUi::html/notices.phtml). The block
  * renders nothing unless the session is an admin impersonation.
  *
+ * The children of `login-as-customer-notice-links` (declared in the
+ * `hyperion_customer_lac_notice` handle) print before the "Close Session"
+ * form; the wrapper is left out when they print nothing.
+ *
  * @var \Magentofullstackdev\HyperionCustomer\Block\LoginAsCustomer\Notice $block
  * @var \Magento\Framework\Escaper $escaper
  */
+$links = trim((string) $block->getChildHtml('login-as-customer-notice-links'));
 ?>
 <div id="hyperion-lac-notice"
      <?= $block->getData('oob') ? 'hx-swap-oob="outerHTML"' : '' ?>
@@ -32,6 +37,11 @@ declare(strict_types=1);
                 ), ['b']) ?>
             </span>
         </p>
+        <?php if ($links !== ''): ?>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2" data-hyperion-lac-notice-links>
+                <?= /* @noEscape */ $links ?>
+            </div>
+        <?php endif; ?>
         <form action="<?= $escaper->escapeUrl($block->getLogoutUrl()) ?>" method="post" class="shrink-0">
             <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
             <button type="submit"

@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
  *      headers AND PHP's internal header() buffer).
  *   2. Writes the single authoritative Cache-Control + Pragma: cache pair.
  *   3. Strips the internal marker so it never leaks to the client.
+ *
+ * @internal
  */
 class PublicRouteCacheHeadersPlugin
 {

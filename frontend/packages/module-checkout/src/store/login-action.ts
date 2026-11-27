@@ -26,7 +26,7 @@ import { loadCaptchaState } from '../api/captcha.js';
 import { loginOnStorefront } from '../api/cart.js';
 import { MagentoApiError } from '../api/client.js';
 import { isCaptchaMessage } from '../api/error-kinds.js';
-import { executeRecaptcha } from '../components/hyperion-recaptcha.js';
+import { executeRecaptcha } from '../components/recaptcha-client.js';
 import { t } from '../utils/i18n.js';
 import {
     captchaAnswer,

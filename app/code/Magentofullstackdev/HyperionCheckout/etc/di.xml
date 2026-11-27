@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Console commands are registered in the global scope, where core declares CommandListInterface::$commands. -->
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="hyperion_checkout_payments" xsi:type="object">Magentofullstackdev\HyperionCheckout\Console\Command\PaymentsDiagnoseCommand</item>
+            </argument>
+        </arguments>
+    </type>
+    <!-- Order comment and newsletter opt-in sent with the payment information (REST, webapi_rest area). -->
+    <type name="Magento\Checkout\Api\PaymentInformationManagementInterface">
+        <plugin name="hyperion_checkout_capture_order_extras"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Checkout\CaptureOrderExtras"/>
+    </type>
+    <type name="Magento\Checkout\Api\GuestPaymentInformationManagementInterface">
+        <plugin name="hyperion_checkout_capture_order_extras"
+                type="Magentofullstackdev\HyperionCheckout\Plugin\Checkout\CaptureOrderExtras"/>
+    </type>
+</config>

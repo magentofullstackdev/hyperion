@@ -65,7 +65,6 @@ export interface CheckoutState {
     // Payment
     availablePaymentMethods: readonly PaymentMethodConfig[];
     selectedPaymentMethod: string | null;
-    paymentMethodData: Readonly<Record<string, Record<string, unknown>>>;
 
     // Coupon
     appliedCoupon: string | null;

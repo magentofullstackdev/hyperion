@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../store/flow-actions.js', () => ({
     flowActions: vi.fn(),
 }));
-vi.mock('../hyperion-recaptcha.js', () => ({
+vi.mock('../recaptcha-client.js', () => ({
     mountRecaptchaCheckbox: vi.fn().mockResolvedValue(undefined),
     unmountRecaptchaCheckbox: vi.fn(),
 }));
@@ -24,14 +24,15 @@ import { flowActions } from '../../store/flow-actions.js';
 import { createStore, setStoreForTests, type Store } from '../../store/index.js';
 import type { RecaptchaConfig } from '../../types/captcha.js';
 import type { CheckoutConfig } from '../../types/config.js';
-import { registerPaymentRenderer } from '../payment-renderers/registry.js';
+import { patchEntry } from '../payment-host/row-state.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import { resetInteractionForTests, type AntiAbuseField } from '../anti-abuse-field.js';
 // The page defines the field before the mount when a form requires it from the start.
 import '../captcha-field.js';
 import type { CaptchaField } from '../captcha-field.js';
 import type { CouponForm } from '../coupon-form.js';
 import '../coupon-form.js';
-import { mountRecaptchaCheckbox, unmountRecaptchaCheckbox } from '../hyperion-recaptcha.js';
+import { mountRecaptchaCheckbox, unmountRecaptchaCheckbox } from '../recaptcha-client.js';
 
 const REQUIRED = { isRequired: true, isCaseSensitive: true, imageHeight: 50, imageWidth: 200 };
 const REFRESH_URL = 'https://store.test/captcha/refresh/';
@@ -39,6 +40,7 @@ const REFRESH_URL = 'https://store.test/captcha/refresh/';
 function configure(recaptcha?: RecaptchaConfig): void {
     setCheckoutConfig({
         hyperion: {
+            paymentRenderers,
             captcha: { refreshUrl: REFRESH_URL, sectionUrl: '', forms: {} },
             ...(recaptcha ? { recaptcha } : {}),
         },
@@ -203,8 +205,9 @@ describe('security check elements', () => {
                 place_order: { type: 'v2-checkbox', siteKey: 'key-order' },
                 braintree: { type: 'v2-checkbox', siteKey: 'key-braintree' },
             });
-            registerPaymentRenderer({ code: 'braintree', component: 'payment-fixture', recaptchaAction: () => 'braintree' });
-            registerPaymentRenderer({ code: 'braintree_paypal', component: 'payment-fixture', recaptchaAction: () => null });
+            // What the element classes of the two entries answer once loaded.
+            patchEntry('braintree_card', { load: 'ready', recaptchaAction: () => 'braintree' });
+            patchEntry('braintree_paypal', { load: 'ready', recaptchaAction: () => null });
             document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
             store.selectedPaymentMethod.set('checkmo');
             const el = await place('hc-order-captcha');

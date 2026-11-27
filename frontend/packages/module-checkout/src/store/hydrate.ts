@@ -29,6 +29,10 @@
  *     entered on its own in the same request.
  *   - What the shopper typed and the quote does not carry yet is put back
  *     last (`restoreDraft()`).
+ *   - The values a quote address holds for the address fields the store
+ *     declares (`hyperion.addressFields`: custom attributes, extension
+ *     attributes) stay on the address; the check of those fields is a chunk
+ *     of its own, imported here when the list is not empty.
  *
  * Pure with respect to the DOM and the network: `bootstrap.ts` calls it and
  * the unit tests exercise it with `createStore()`.
@@ -182,11 +186,25 @@ function hydrateCustomer(store: Store, config: CheckoutConfig): QuoteMatch {
  * saved to the address book unless the quote says otherwise. Null when the
  * quote has no address, or one whose saved address is gone.
  */
+/**
+ * A quote address as the store keeps it, with the values it holds for the
+ * declared address fields, passed through as the server emits them: for the
+ * declared codes only and only when there is one, `custom_attributes` as a
+ * list of `{ attribute_code, value }`, `extension_attributes` as a map.
+ */
+function storeAddressOf(raw: QuoteAddressConfig | null | undefined): Address | null {
+    const address = normaliseQuoteAddress(raw);
+    const { custom_attributes, extension_attributes } = (raw ?? {}) as Partial<Address>;
+    if (address !== null && custom_attributes) address.custom_attributes = custom_attributes;
+    if (address !== null && extension_attributes) address.extension_attributes = extension_attributes;
+    return address;
+}
+
 function quoteAddressOf(
     raw: QuoteAddressConfig | null,
     findSaved: (id: unknown) => Address | null
 ): { address: Address; matches: boolean } | null {
-    const typed = normaliseQuoteAddress(raw);
+    const typed = storeAddressOf(raw);
     if (!raw || !typed) return null;
     const id = raw['customer_address_id'];
     const hasId = (typeof id === 'string' || typeof id === 'number') && String(id).trim() !== '' && Number(id) !== 0;
@@ -237,8 +255,8 @@ function hydrateGuest(store: Store, config: CheckoutConfig): QuoteMatch {
     if (guest.email) {
         store.email.set(guest.email);
     }
-    const shipping = store.isVirtual.get() ? null : normaliseQuoteAddress(guest.shippingAddress);
-    const billing = normaliseQuoteAddress(guest.billingAddress);
+    const shipping = store.isVirtual.get() ? null : storeAddressOf(guest.shippingAddress);
+    const billing = storeAddressOf(guest.billingAddress);
     // A guest address is never saved to an address book: the flag is set
     // explicitly so the address is complete for `<address-form>`, which
     // otherwise adds the default and emits the address again at mount (an

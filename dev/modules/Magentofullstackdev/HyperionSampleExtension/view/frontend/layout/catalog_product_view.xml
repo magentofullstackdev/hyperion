@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Product page containers. hyperion.product.view is block cached and the
+    page is edge cached: a child is session agnostic and never
+    cacheable="false". The tab block carries the `title` argument the tab
+    list reads.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="hyperion.product.media.after">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.media.after"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.media.after</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.info.top">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.info.top"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.info.top</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.info.after_price">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.info.after.price"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.info.after_price</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.info.before_addtocart">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.info.before.addtocart"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.info.before_addtocart</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.form.additional">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.form.additional"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.form.additional</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.info.after_addtocart">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.info.after.addtocart"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.info.after_addtocart</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.info.extra">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.info.extra"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.info.extra</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceContainer name="hyperion.product.tabs">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.product.tab"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">hyperion.product.tabs</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                    <argument name="title" xsi:type="string" translate="true">Sample tab</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+    </body>
+</page>

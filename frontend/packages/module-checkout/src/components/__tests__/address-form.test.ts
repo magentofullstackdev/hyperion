@@ -9,6 +9,7 @@ import { setCheckoutConfig } from '../../bootstrap-config.js';
 import type { Address } from '../../types/address.js';
 import type { CheckoutConfig, NameFieldsConfig } from '../../types/config.js';
 import { requestValidation, resetValidationRequestsForTests } from '../../store/validation-request.js';
+import { isAddressComplete } from '../../utils/address-validation.js';
 import { setActiveCatalogForTests, t } from '../../utils/i18n.js';
 import '../address-form.js';
 import type { AddressForm } from '../address-form.js';
@@ -108,12 +109,12 @@ describe('<address-form> name prefix / middle name / suffix', () => {
         expect(suffix.required).toBe(true);
     });
 
-    it('holds address-valid back until a required prefix is chosen and emits it in the address', async () => {
+    it('keeps the emitted address incomplete until a required prefix is chosen and emits it in the address', async () => {
         installConfig({ prefix: { show: 'req', options: ['Mr', 'Mrs'] }, middlename: { show: 'no' }, suffix: { show: 'no' } });
         const el = await mount();
         const valid: boolean[] = [];
         const addresses: Address[] = [];
-        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+        el.addEventListener('address-change', (e) => valid.push(isAddressComplete((e as CustomEvent<Address>).detail)));
         el.addEventListener('address-change', (e) => addresses.push((e as CustomEvent<Address>).detail));
 
         el.value = BASE_ADDRESS;
@@ -270,7 +271,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
     it('a postcode outside the country patterns is a warning after blur: described, not invalid, the address stays valid', async () => {
         const el = await mount(BASE_ADDRESS);
         const valid: boolean[] = [];
-        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+        el.addEventListener('address-change', (e) => valid.push(isAddressComplete((e as CustomEvent<Address>).detail)));
 
         const postcode = field(el, 'postcode') as HTMLInputElement;
         postcode.value = 'ABCDE';
@@ -300,7 +301,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
     it('an empty required postcode stays an error and a corrected value clears both the error and the warning', async () => {
         const el = await mount(BASE_ADDRESS);
         const valid: boolean[] = [];
-        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+        el.addEventListener('address-change', (e) => valid.push(isAddressComplete((e as CustomEvent<Address>).detail)));
 
         const postcode = field(el, 'postcode') as HTMLInputElement;
         postcode.value = 'ABCDE';
@@ -332,7 +333,7 @@ describe('<address-form> postcode errors and the "show what is missing" request'
         setCheckoutConfig({ ...(guestFixture as unknown as CheckoutConfig), optionalZipCountries: ['IE'] });
         const el = await mount({ ...BASE_ADDRESS, country_id: 'IE', region_id: null, postcode: '' });
         const valid: boolean[] = [];
-        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+        el.addEventListener('address-change', (e) => valid.push(isAddressComplete((e as CustomEvent<Address>).detail)));
 
         const postcode = field(el, 'postcode') as HTMLInputElement;
         expect(postcode.required).toBe(false);
@@ -500,7 +501,7 @@ describe('<address-form> order, ids and attributes', () => {
     it('a country that lists regions without requiring one shows no asterisk and no error', async () => {
         const el = await mountMode('shipping', { ...BASE_ADDRESS, country_id: 'DE', region_id: null, postcode: '10117' });
         const valid: boolean[] = [];
-        el.addEventListener('address-valid', (e) => valid.push((e as CustomEvent<boolean>).detail));
+        el.addEventListener('address-change', (e) => valid.push(isAddressComplete((e as CustomEvent<Address>).detail)));
 
         const region = field(el, 'region_id') as HTMLSelectElement;
         expect(region.tagName).toBe('SELECT');

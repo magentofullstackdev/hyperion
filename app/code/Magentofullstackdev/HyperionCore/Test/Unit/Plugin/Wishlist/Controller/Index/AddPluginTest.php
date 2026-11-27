@@ -11,10 +11,13 @@ use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\App\Response\Http as HttpResponse;
 use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\Result\RawFactory;
+use Magento\Framework\Event\ManagerInterface as EventManagerInterface;
 use Magento\Framework\Url\EncoderInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Wishlist\Controller\Index\Add;
 use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\EventTransport;
 use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
 use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
@@ -23,6 +26,7 @@ use Magentofullstackdev\HyperionCore\Plugin\Wishlist\Controller\Index\AddPlugin;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 /**
  * The HTMX answer of the wish list add: a guest is sent to the login page
@@ -133,8 +137,16 @@ class AddPluginTest extends TestCase
             $this->urlBuilder,
             $encoder,
             $context,
-            $scopeConfig
+            $scopeConfig,
+            $this->actionResponse()
         );
+    }
+
+    private function actionResponse(): ActionResponse
+    {
+        $logger = $this->createStub(LoggerInterface::class);
+
+        return new ActionResponse($this->createStub(EventManagerInterface::class), new EventTransport($logger), $logger);
     }
 
     private function htmxRequest(): HttpRequest

@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
 import type { CartItem } from '../../../../types/quote.js';
 import type { Totals } from '../../../../types/totals.js';
-import { setActiveCatalogForTests } from '../../../../utils/i18n.js';
 import { buildGooglePayDisplayItems, buildPayPalLineItems } from '../line-items.js';
 import type { PayPalLineItem } from '../types.js';
 
@@ -194,27 +192,23 @@ describe('buildPayPalLineItems', () => {
 });
 
 describe('buildGooglePayDisplayItems', () => {
-    beforeEach(() => {
-        setActiveCatalogForTests(enUS);
-    });
-
-    it('shows base currency row amounts next to the base totals', () => {
-        expect(buildGooglePayDisplayItems(ITEMS, totals(), false)).toEqual([
+    it('shows base currency row amounts next to the base totals, labels through the translator it is given', () => {
+        expect(buildGooglePayDisplayItems(ITEMS, totals(), false, (source) => source)).toEqual([
             { type: 'LINE_ITEM', label: 'Chaz Kangeroo Hoodie-S-Black', price: '104.00' },
             { type: 'LINE_ITEM', label: 'Joust Duffle Bag', price: '34.00' },
-            { type: 'LINE_ITEM', label: enUS['Hyperion_Checkout::braintree_line_discount'], price: '-10.00' },
-            { type: 'LINE_ITEM', label: enUS['Hyperion_Checkout::shipping_heading'], price: '5.00' },
-            { type: 'LINE_ITEM', label: enUS['Hyperion_Checkout::braintree_line_tax'], price: '11.80' },
+            { type: 'LINE_ITEM', label: 'Discount', price: '-10.00' },
+            { type: 'LINE_ITEM', label: 'Shipping', price: '5.00' },
+            { type: 'LINE_ITEM', label: 'Tax', price: '11.80' },
         ]);
     });
 
     it('uses the tax inclusive base prices when the catalog prices include tax', () => {
-        const rows = buildGooglePayDisplayItems(ITEMS, totals(), true);
+        const rows = buildGooglePayDisplayItems(ITEMS, totals(), true, (source) => source);
         expect(rows.map((row) => row.price)).toEqual(['112.58', '36.81', '-10.00', '5.41']);
         expect(rows.reduce((acc, row) => acc + Math.round(parseFloat(row.price) * 100), 0)).toBe(14480);
     });
 
     it('shows no rows when a quote item lacks its base price', () => {
-        expect(buildGooglePayDisplayItems([item({ base_price: '' })], totals(), false)).toEqual([]);
+        expect(buildGooglePayDisplayItems([item({ base_price: '' })], totals(), false, (source) => source)).toEqual([]);
     });
 });

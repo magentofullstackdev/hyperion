@@ -103,6 +103,46 @@
         </referenceContainer>
 
         <!--
+            Extension points of the product page. Core's product.info.* containers are
+            removed above (their core children are RequireJS widgets); these containers stand
+            in for them. Add a block with <referenceContainer name="hyperion.product.info.extra">,
+            or re-home a known-good block with <move element="vendor.block"
+            destination="hyperion.product.info.extra"/>. No htmlTag: an empty container prints
+            nothing, the template adds no wrapper.
+
+            Cache contract: hyperion.product.view is block cached (1800 s, the HTTP context vary
+            string in its key) and the page is edge cached. A child must be session agnostic and
+            must NOT be cacheable="false" (that would make every product page uncacheable). Content
+            that depends on the visitor renders client side or through an htmx fragment.
+
+            hyperion.product.form.additional prints inside #product_addtocart_form (its inputs post
+            with the cart add). hyperion.express.product (express checkout buttons) and
+            hyperion.product.info.after_addtocart print under the Add to Cart button, not on the
+            cart line edit page. A child of hyperion.product.tabs becomes a tab when it has a `title`
+            argument (translate="true") and prints something.
+        -->
+        <referenceBlock name="hyperion.product.view">
+            <container name="hyperion.product.media.after" as="media_after" label="Product Page: Under the Gallery"/>
+            <container name="hyperion.product.info.top" as="info_top" label="Product Page: Under the Title"/>
+            <container name="hyperion.product.info.after_price" as="info_after_price" label="Product Page: Under the Price"/>
+            <container name="hyperion.product.info.before_addtocart" as="info_before_addtocart" label="Product Page: Above Add to Cart"/>
+            <container name="hyperion.product.form.additional" as="form_additional" label="Product Page: Inside the Add to Cart Form"/>
+            <container name="hyperion.express.product" as="express" label="Product Page: Express Checkout">
+                <!-- The buttons of ExpressButtonPool (placement product); prints nothing without one. -->
+                <block class="Magento\Framework\View\Element\Template"
+                       name="hyperion.express.product.slot"
+                       template="Magentofullstackdev_HyperionCheckout::express/slot.phtml">
+                    <arguments>
+                        <argument name="placement" xsi:type="string">product</argument>
+                    </arguments>
+                </block>
+            </container>
+            <container name="hyperion.product.info.after_addtocart" as="info_after_addtocart" label="Product Page: Under Add to Cart"/>
+            <container name="hyperion.product.info.extra" as="info_extra" label="Product Page: End of the Info Column"/>
+            <container name="hyperion.product.tabs" as="tabs" label="Product Page: Extra Tabs"/>
+        </referenceBlock>
+
+        <!--
             Declare the Related + Upsell carousels inside the Hyperion
             PDP view block directly. Magento's native declaration
             attaches them to `content.aside` which Hyperion's page

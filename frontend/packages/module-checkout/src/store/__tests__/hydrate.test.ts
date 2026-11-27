@@ -25,7 +25,7 @@ vi.mock('../../api/coupon.js', () => ({
     removeGuestCoupon: vi.fn(),
     removeCustomerCoupon: vi.fn(),
 }));
-vi.mock('../../components/hyperion-recaptcha.js', () => ({
+vi.mock('../../components/recaptcha-client.js', () => ({
     executeRecaptcha: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('../drafts.js', async (importOriginal) => ({
@@ -40,6 +40,7 @@ import guestFixture from '../../fixtures/checkoutConfig.guest.json' with { type:
 import customerFixture from '../../fixtures/checkoutConfig.customer.json' with { type: 'json' };
 import initialFixture from '../../fixtures/hyperion.initial.json' with { type: 'json' };
 import { setCheckoutConfig } from '../../bootstrap-config.js';
+import paymentRenderers from '../../fixtures/payment-renderers.json' with { type: 'json' };
 import type { CheckoutConfig, GuestQuoteConfig, InitialStateConfig } from '../../types/config.js';
 import type { CustomerDataAuthenticated } from '../../types/customer.js';
 import type { ShippingMethod } from '../../types/shipping.js';
@@ -49,6 +50,12 @@ import { createFlowActions, type FlowActions } from '../flow-actions.js';
 import { hydrateStore, startInitialRequests } from '../hydrate.js';
 import { createStore, setStoreForTests, type Store } from '../index.js';
 import { createSelectors, expectedAgreements } from '../selectors.js';
+
+/** The configuration with the bundle's payment renderer entries, as the server emits them. */
+function withPaymentRenderers(config: CheckoutConfig | null): CheckoutConfig {
+    const base = (config ?? {}) as unknown as { hyperion?: Record<string, unknown> };
+    return { ...base, hyperion: { ...(base.hyperion ?? {}), paymentRenderers } } as unknown as CheckoutConfig;
+}
 
 const shippingMocks = vi.mocked(shippingApi);
 const restoreDraftMock = vi.mocked(restoreDraft);
@@ -104,7 +111,6 @@ function fakeFlow(): FlowActions & { estimateShipping: ReturnType<typeof vi.fn>;
         saveShippingAndEstimateTotals: vi.fn(),
         applyCoupon: vi.fn(),
         removeCoupon: vi.fn(),
-        placeOrder: vi.fn(),
         savePaymentInformation: vi.fn(),
         refreshPaymentInformation: vi.fn(),
         invalidateBillingSync: vi.fn(),
@@ -176,7 +182,7 @@ describe('store hydration from checkoutConfig', () => {
             { email: 'guest@example.com', shippingAddress: SHIPPING, billingAddress: null },
             { selectedShippingMethod: { carrier_code: 'flatrate', method_code: 'flatrate', amount: 5 } }
         );
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
         setStoreForTests(store);
         const flow = createFlowActions();
@@ -341,7 +347,7 @@ describe('hydration from the state the quote already holds', () => {
 
     /** Hydrate like the boot does: config, store, then the flow built on the hydrated store. */
     function boot(config: CheckoutConfig): { flow: FlowActions; selectors: ReturnType<typeof createSelectors> } {
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
         setStoreForTests(store);
         const flow = createFlowActions();
@@ -538,7 +544,7 @@ describe('hydration from the state the quote already holds', () => {
                 shipping: { ...SECOND_ON_QUOTE, same_as_billing: '0' },
                 billing: {
                     firstname: 'Veronica', lastname: 'Costello', street: ['6146 Honey Bluff Parkway'], city: 'Calder',
-                    region: 'Michigan', region_code: 'MI', region_id: '97', postcode: '49628-7978', country_id: 'US',
+                    region: 'Michigan', region_code: 'MI', region_id: '33', postcode: '49628-7978', country_id: 'US',
                     telephone: '(555) 229-3326', customer_address_id: '1',
                 },
                 billingSameAsShipping: false,
@@ -598,7 +604,7 @@ describe('hydration from the state the quote already holds', () => {
                 billingSameAsShipping: true,
             },
         }));
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
 
         expect(store.selectedShippingAddressId.get()).toBe('1');
@@ -613,7 +619,7 @@ describe('hydration from the state the quote already holds', () => {
         ['is an error row', { shippingMethods: [{ ...rate('flatrate', 'flatrate'), available: false }] }],
     ])('a confirmed method that %s is ignored', (_title, extra) => {
         const config = guestWithInitial(initialState(extra as Partial<InitialStateConfig>));
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
 
         expect(store.estimateState.get()).toBe('idle');
@@ -628,7 +634,7 @@ describe('hydration from the state the quote already holds', () => {
             initialState(),
             { email: 'guest@example.com', shippingAddress: { ...SHIPPING, city: null }, billingAddress: null }
         );
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
 
         expect(store.estimateState.get()).toBe('idle');
@@ -642,7 +648,7 @@ describe('hydration from the state the quote already holds', () => {
             target.shippingDirty.set(true);
         });
         const config = guestWithInitial(initialState());
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
 
         expect(restoreDraftMock).toHaveBeenCalledWith(store, config);
@@ -660,7 +666,7 @@ describe('hydration from the state the quote already holds', () => {
             target.shippingDirty.set(true);
         });
         const config = guestWithInitial(initialState());
-        setCheckoutConfig(config);
+        setCheckoutConfig(withPaymentRenderers(config));
         hydrateStore(store, config);
 
         expect(store.estimateState.get()).toBe('ready');

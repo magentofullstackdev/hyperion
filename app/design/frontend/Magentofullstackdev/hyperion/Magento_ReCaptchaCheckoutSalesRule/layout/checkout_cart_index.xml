@@ -11,8 +11,8 @@
     Knockout cart tree (checkout_cart_index.xml of Magento_Checkout), so it
     never reached the Hyperion coupon block. This file, loaded only while
     Magento_ReCaptchaCheckoutSalesRule is enabled, adds the same block to
-    hyperion.cart.coupon; cart/coupon.phtml renders the children inside a
-    <template> that <hyperion-coupon-form> moves into its form. The same
+    hyperion.cart.coupon; cart/coupon.phtml renders the children inside its
+    server-rendered form, and <hyperion-coupon-form> moves them into its own. The same
     child is declared for both the page and the HTMX fragment handle so the
     answer of CouponPostPlugin carries it again. Keep the two files in sync.
 -->

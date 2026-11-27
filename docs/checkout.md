@@ -115,9 +115,11 @@ Place Order never sends an order the server has not confirmed the inputs of:
 - **An HTML error body is never shown.** A response that is not JSON (a
   proxy or web server error page) is neither data nor a message; the
   checkout prints its own text for the kind of failure.
-- **Wallets use the same gate.** PayPal Express, Braintree PayPal and Google
-  Pay check what the checkout's own button checks before they start
-  (`payment-renderers/checkout-gate.ts`). The PayPal buttons wait for the
+- **Wallets use the same gate.** PayPal Express and Google Pay check what
+  the checkout's own button checks before they start
+  (`requestCheckoutValidation()` of the payment context), and their orders
+  go through the same order pipeline as the button
+  ([Extending Hyperion](./extensions.md#the-order-pipeline)). The PayPal buttons wait for the
   pending saves inside the click. A Google Pay sheet can only open inside
   the click itself, so when an edit was still being saved the click saves
   it and says so, and the next click pays.
@@ -216,7 +218,7 @@ shopper entered is cleared by a failure.
 | The device is offline | "You appear to be offline. Check your connection and try again." | Nothing is lost. When the connection is back the note goes away and the saves that failed are sent again without a click. |
 | The store cannot be reached (connection dropped) | "We could not reach the store. Please try again." with "Try again" | The request was already repeated automatically (see the time limits above). The button repeats it; a background save is sent again when the connection comes back. |
 | The store takes too long | "The store is taking too long to answer. Please try again." with "Try again" | As above. |
-| The customer session expired | A dialog: "Your session has expired. Sign in again to continue. What you entered has been kept." | The dialog cannot be dismissed. "Sign in again" opens the sign-in page, which returns to the checkout, where the typed address is put back from the draft. If an order request was under way the dialog says the outcome is not known yet. |
+| The customer session expired | A dialog: "Your session has expired. Sign in again to continue. What you entered has been kept." | The dialog cannot be dismissed. "Sign in again" opens the sign-in page, which returns to the checkout, where the typed address is put back from the draft, for the same customer only. If an order request was under way the dialog says the outcome is not known yet. |
 | The cart changed or expired (ordered in another tab, removed by the store) | Either the page moves on (see the two-tab case below) or "Your cart has changed or expired." with "Return to cart" | The checkout stops sending requests. Nothing is reloaded by itself. |
 | Too many requests (HTTP 429) | "Too many requests. Please wait N seconds." (the wait the store asked for) | A request the checkout made on its own is sent again once after the wait. For a request the shopper started, "Try again" becomes usable after the wait. |
 | The store is unavailable (a 5xx answer, a proxy error page) | "The store is temporarily unavailable. Please try again in a moment." with "Try again" | The body of the error page is never shown. |
@@ -285,7 +287,14 @@ store's privacy notice should say so where that is required.
   fax, VAT number) or, for a saved address of a customer, only its id; the
   "same as shipping" choice; the selected shipping method; the code of the
   selected payment method; a coupon code typed but not applied; gift
-  message texts not saved yet.
+  message texts not saved yet. While a shipping extension (a pickup point)
+  replaces the shipping address, a fingerprint of that address (country,
+  postcode, city, street, company) is kept next to the draft, under
+  `hyperion.checkout.override.v1:<store>:<cart>`: after a reload it tells
+  the checkout that the address on the cart is the point's, so the typed
+  address comes back when the shopper chooses another rate. It has the
+  draft's lifetime, goes with the draft and with the override, and is not
+  written while drafts are off.
 - **What is never stored:** a password; anything of a payment (card or bank
   data, nonces, tokens, device data, a purchase order number, a stored card
   or account selection); a CAPTCHA or reCAPTCHA answer; the accepted terms;
@@ -293,12 +302,23 @@ store's privacy notice should say so where that is required.
 - **Where and for how long:** `sessionStorage`, so it is per tab, is not
   sent to the server and goes away with the tab. One entry per store view
   and cart, removed 60 minutes after its last change, when the order is
-  placed, and when the shopper leaves for the cart from a notice of the
-  checkout. Entries of other carts are cleaned up at the next visit.
-- **Sign-in:** a sign-in replaces the guest cart with the customer's, so
-  the draft is copied to a second entry first, accepted once within 10
-  minutes by the checkout of the same store view. An address restored that
-  way is saved to the cart before an order can be placed.
+  placed, when the shopper leaves for the cart from a notice of the
+  checkout, and when the shopper signs out: the sign-out page removes every
+  `hyperion.checkout.*` entry of the tab (a child theme that overrides
+  `Magento_Customer::logout.phtml` keeps the `data-hyperion-signed-out`
+  attribute on an element of that page). Entries of other carts are cleaned
+  up at the next visit.
+- **Sign-in:** a sign-in replaces the guest cart with the customer's, so the
+  draft is copied to a second entry first, with who wrote it: the signed-in
+  customer, or nobody. The next checkout of the same store view takes that
+  entry once within 10 minutes and puts it back only for the same shopper:
+  the customer who wrote it (an expired session, signed in again), a
+  checkout where nobody is signed in when nobody was, or the customer whose
+  account has the email a guest typed before signing in from the checkout.
+  Any other checkout (a remembered, not signed-in visitor of a persistent
+  cart, a guest after a customer, another customer) removes it without
+  reading it. An address restored that way is saved to the cart before an
+  order can be placed.
 
 ## Inline sign-in
 
@@ -351,7 +371,14 @@ others, `baseUrl`, `locale`, `translations`, `errorPhrases`, `rateFields`,
 `totalsSort` (the store's totals sort order, so the summary lists the rows
 in the cart's order), `loginUrl`, `cartUrl`, `guestQuote`, `initial` (the state the page starts
 with, see [The flow engine](#the-flow-engine)), `nameFields`, `paypalExpress`,
-`recaptcha` and `captcha`.
+`recaptcha` and `captcha`, and the extension configuration: `extensionApi`,
+`staticOrigins`, `debug`, `paymentRenderers`, `shippingExtensions`,
+`extensions` and `addressFields` ([Extending Hyperion](./extensions.md)).
+`expressButtons` is reserved for a row of express buttons inside the
+application and is an empty list in this release: the `checkout-top`
+buttons above the checkout are printed by the page through the express
+slot, like every other placement
+([Express buttons](./extensions.md#express-buttons)).
 
 The page itself is server rendered first: `checkout.phtml` prints a skeleton
 with the geometry of the application (the contact card, the shipping card,
@@ -365,28 +392,36 @@ note says the checkout needs it and links back to the cart.
 
 | Method code | Renderer | Status |
 |---|---|---|
-| `checkmo`, `banktransfer`, `cashondelivery`, `free` | `payment-offline`: the method's instructions (`banktransfer`, `cashondelivery`), and for `checkmo` the "Make Check payable to" and "Send Check to" details | orders verified as a guest and as a customer; the instructions under the selected method and on the order pages verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9) |
-| `purchaseorder` | `payment-offline` with a required PO number field; the number travels as `paymentMethod.po_number` | verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9): Place Order stays closed without the number, a guest order is placed and the order carries the typed number |
-| `paypal_express`, in-context (`payment/paypal_express/in_context = 1`) | `payment-paypal-express`: smart button, Pay Later message, owns Place Order | verified with real sandbox payments (guest, customer, from the cart, mini-cart and product page) on a platform now in "Previously tested" ([Compatibility](./compatibility.md#previously-tested)) |
+| `checkmo`, `banktransfer`, `cashondelivery`, `free` | the built-in `offline` renderer: the method's instructions (`banktransfer`, `cashondelivery`), and for `checkmo` the "Make Check payable to" and "Send Check to" details | orders verified as a guest and as a customer; the instructions under the selected method and on the order pages verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9) |
+| `purchaseorder` | a renderer of the generic `form` type with a required PO number field; the number travels as `paymentMethod.po_number` | verified by `pw-orders-widgets-ga4.mjs` on 2026-11-11 (Magento 2.4.9): Place Order stays closed without the number, a guest order is placed and the order carries the typed number |
+| `paypal_express`, in-context (`payment/paypal_express/in_context = 1`) | the built-in `paypal-express` renderer: smart button, Pay Later message, owns Place Order | verified with real sandbox payments (guest, customer, from the cart, mini-cart and product page) on a platform now in "Previously tested" ([Compatibility](./compatibility.md#previously-tested)) |
 | `paypal_express` redirect flow (`in_context = 0`), `payflow_express` | same renderer, redirect flow | reaches PayPal with the token; completion of the payment not verified; `payflow_express` unit tested only |
 | `braintree`, `braintree_cc_vault`, `braintree_paypal`, `braintree_paypal_vault`, `braintree_googlepay`, `braintree_googlepay_vault` | the Braintree renderers | see [Braintree](#braintree) below |
-| any other code | `payment-generic` | listed disabled with "Not supported by this checkout yet" |
+| any other code | none, unless a module registers one ([Extending Hyperion](./extensions.md#payment-renderers)) | not shown to shoppers ([Methods without a renderer](./extensions.md#methods-without-a-renderer)) |
 
-The renderers are exactly the rows above: the offline methods, PayPal
-Express (`paypal_express`, `payflow_express`), Braintree card, Braintree
-PayPal, Braintree Google Pay and the three Braintree vault codes
-(`braintree_cc_vault`, `braintree_paypal_vault`, `braintree_googlepay_vault`).
-Nothing else has a renderer: Hosted Pro, Payflow Pro / Link / Advanced,
-PayPal billing agreements, Payment Services (Adobe), Apple Pay, Venmo, ACH
-and local payment methods are listed as not supported when a store enables
-them. Google Pay is supported through Braintree only. With Hosted Pro active, `payment/hosted_pro/display_ec`
+Hyperion's own renderers are exactly the rows above, declared as entries
+of `Model\Payment\RendererPool` in `HyperionCheckout/etc/frontend/di.xml`:
+the offline methods, the purchase order, PayPal Express (`paypal_express`,
+`payflow_express`), Braintree card, Braintree PayPal, Braintree Google Pay
+and the three Braintree vault codes (`braintree_cc_vault`,
+`braintree_paypal_vault`, `braintree_googlepay_vault`). Nothing else has a
+renderer out of the box: Hosted Pro, Payflow Pro / Link / Advanced, PayPal
+billing agreements, Payment Services (Adobe), Apple Pay, Venmo, ACH and
+local payment methods are hidden from shoppers when a store enables them,
+until a module registers a renderer for them; developer mode,
+`?hyperion_debug_payments=1`, `bin/magento hyperion:checkout:payments` and
+an admin message show what is hidden. Google Pay is supported through
+Braintree only. With Hosted Pro active, `payment/hosted_pro/display_ec`
 must be 1 for PayPal Express to be offered at all (core rule).
 
-Gateway renderers are loaded on demand: the offline renderer ships in the
-main bundle, a gateway module is imported the first time its method code
-appears in the available payment methods, and the gateway SDK (Braintree,
-PayPal) is fetched only after the shopper selects the method. A store
-without PayPal never downloads a byte of PayPal code.
+Renderers are loaded on demand: the payment host (the offline renderer,
+the generic types and the order pipeline) is a chunk of its own, loaded
+before the first render when a method is already selected (and preloaded
+when the server knows it) and otherwise on idle after the mount; a gateway
+renderer is imported the first time its method code appears in the
+available payment methods, and the gateway SDK (Braintree, PayPal) is
+fetched only after the shopper selects the method. A store without PayPal
+never downloads a byte of PayPal code.
 
 When the store offers no payment method for the cart, the list says so
 ("No payment method is available for this order. Please contact us.")
@@ -419,11 +454,11 @@ request to the store's public URL.
 
 | Method code | Renderer | Last sandbox record |
 |---|---|---|
-| `braintree` | `payment-braintree-card`: hosted fields, device data, 3D Secure (frictionless and challenge), the `braintree` reCAPTCHA form when the store protects it | 2026-11-18, Magento 2.4.9, SDK 3.123.1: card order placed as a guest and as a customer with 3D Secure off; with 3D Secure on, the challenge completed and the order placed (guest, and customer with "save card"). A frictionless 3D Secure authentication was not seen in that run (both test cards were challenged), a declined card was not tried. |
-| `braintree_cc_vault` | `payment-braintree-vault`: the stored cards (`vault-tokens.ts`), the hosted CVV field when "CVV re-verification" is on, a nonce per order, 3D Secure under the rules of a new card | 2026-11-18, Magento 2.4.9: a card stored at a 3D Secure order, then an order with it and CVV re-verification on, and one with it off (3D Secure challenge instead); 2026-11-19: an order with a stored card, CVV re-verification on, 3D Secure off |
-| `braintree_paypal` | `payment-braintree-paypal`: PayPal button, approval kept until Place Order, dropped when the total or the shipping address changes; line items in the base currency when the method is configured to send them | 2026-11-18, Magento 2.4.9: approved in PayPal's window and order placed as a guest and as a customer; with a display currency other than the base one the amount and the lines were sent in the base currency and the lines summed to the charged amount; a virtual cart (no shipping address sent); after an approval, a change of the shipping address withdrew it and locked Place Order; 2026-11-19: a guest order again on the final build |
+| `braintree` | the built-in `braintree-card` renderer: hosted fields, device data, 3D Secure (frictionless and challenge), the `braintree` reCAPTCHA form when the store protects it | 2026-11-18, Magento 2.4.9, SDK 3.123.1: card order placed as a guest and as a customer with 3D Secure off; with 3D Secure on, the challenge completed and the order placed (guest, and customer with "save card"). A frictionless 3D Secure authentication was not seen in that run (both test cards were challenged), a declined card was not tried. |
+| `braintree_cc_vault` | the built-in `braintree-vault` renderer: the stored cards, the hosted CVV field when "CVV re-verification" is on, a nonce per order, 3D Secure under the rules of a new card | 2026-11-18, Magento 2.4.9: a card stored at a 3D Secure order, then an order with it and CVV re-verification on, and one with it off (3D Secure challenge instead); 2026-11-19: an order with a stored card, CVV re-verification on, 3D Secure off |
+| `braintree_paypal` | the built-in `braintree-paypal` renderer: PayPal button, approval kept until Place Order, dropped when the total or the shipping address changes; line items in the base currency when the method is configured to send them | 2026-11-18, Magento 2.4.9: approved in PayPal's window and order placed as a guest and as a customer; with a display currency other than the base one the amount and the lines were sent in the base currency and the lines summed to the charged amount; a virtual cart (no shipping address sent); after an approval, a change of the shipping address withdrew it and locked Place Order; 2026-11-19: a guest order again on the final build |
 | `braintree_paypal_vault` | the default vault flow (a nonce for the stored account) | not completed on 2026-11-18: saving the account (billing agreement with the purchase) ended on the PayPal sandbox's own error page after the consent step, with a physical and with a virtual cart; no order with a stored account |
-| `braintree_googlepay` | `payment-braintree-googlepay`: Google Pay button (Braintree `google-payment` + Google's `pay.js`, loaded on selection), owns Place Order, 3D Secure for cards that are not network tokenized, vault choice | 2026-11-18, Magento 2.4.9: the row loads its scripts after selection without a Content Security Policy violation, the button renders and a click opens Google's window, the request is in the base currency also with another display currency; a Google Pay payment was not made (it needs a Google account in a real browser) |
+| `braintree_googlepay` | the built-in `braintree-googlepay` renderer: Google Pay button (Braintree `google-payment` + Google's `pay.js`, loaded on selection), owns Place Order, 3D Secure for cards that are not network tokenized, vault choice | 2026-11-18, Magento 2.4.9: the row loads its scripts after selection without a Content Security Policy violation, the button renders and a click opens Google's window, the request is in the base currency also with another display currency; a Google Pay payment was not made (it needs a Google account in a real browser) |
 | `braintree_googlepay_vault` | the card vault adapter without the CVV step (a card stored through Google Pay has no CVV to type; the module's own script asks for none) | not verified in the sandbox for this release |
 
 Stored PayPal, Venmo and ACH Direct Debit accounts of Braintree are listed
@@ -435,81 +470,33 @@ works.
 
 ## Writing a payment renderer
 
-The registry is `src/components/payment-renderers/registry.ts` in
-`@magentofullstackdev/hyperion-checkout`. A renderer is a plain object
-registered by method code:
+A payment method of another module is rendered by an entry of
+`Model\Payment\RendererPool` in that module's `etc/frontend/di.xml`: a
+custom element of its own (loaded from the module's static files), a
+redirect to a page of the module, or declared form fields. The checkout
+bundle is not rebuilt for it. Express buttons, shipping options, checkout
+fields, gates and request filters work the same way. The contract, the
+order pipeline, the failure rules and worked examples are in
+[Extending Hyperion](./extensions.md).
 
-```ts
-export interface PaymentRenderer {
-    code: string;
-    component: string;
-    isAvailable?: (cfg: PaymentMethodConfig) => boolean;
-    beforePlaceOrder?: () => Promise<Record<string, unknown>>;
-    isReady?: () => boolean;
-    afterPlaceOrderFailed?: () => void;
-    notReadyMessage?: () => string;
-    ownsPlaceOrder?: () => boolean;
-    placeOrder?: () => Promise<string | null>;
-    recaptchaAction?: () => RecaptchaAction | null;
-    savesOnSelection?: boolean;
-}
+**Optional chunks.** The gift options editor, the agreements list, the
+image CAPTCHA field and the reCAPTCHA client are separate chunks
+(`checkout-gift-message`, `checkout-agreements`, `captcha-field`,
+`hyperion-recaptcha`): the page loads and preloads each one only when the
+store's settings use it, and the application waits for them before its first
+render. A store without reCAPTCHA keys for the checkout forms never downloads
+the reCAPTCHA client. The order overlay and the dialog of an expired session
+are a chunk of their own too, requested right after the mount without
+holding it; a failed load is tried again when an order starts or the
+session ends. The address fields of other modules, the shipping extensions
+and the generic extensions are chunks a store without such entries never
+loads.
 
-registerPaymentRenderer(renderer);
-```
-
-| Hook | When it runs | Contract |
-|---|---|---|
-| `code` | | Magento method code (`checkoutConfig.paymentMethods[].method`). |
-| `component` | selection | Tag of the custom element rendered inside `<payment-method-row>` when the method is selected. Light DOM, Tailwind classes available. |
-| `isAvailable(cfg)` | listing | Optional runtime gate on top of the method appearing in the available methods (for example "no saved agreements"). Omitted = available. |
-| `isReady()` | continuously | Optional gate read by the `canPlaceOrder` selector. It must read signals only, so the Place Order button follows it (PayPal stays locked until the shopper authorized the payment). |
-| `beforePlaceOrder()` | after every pending edit is on the quote and the gate is open, before the order request | Returns the `additional_data` object for the payment (nonce, device data, PO number). It sees the settled totals, so a tokenization or a 3D Secure challenge runs for the final amount. A rejection gives the order latch back and its (translated) message lands in the global error banner. Runs even when `placeOrder` is set. |
-| `notReadyMessage()` | while `isReady()` is false | Optional text for the Place Order hint (the purchase order renderer names its missing number); without it the hint is the generic payment one. |
-| `afterPlaceOrderFailed()` | after a failed order POST | For renderers holding single-use gateway state (a consumed nonce) that must be reset before a retry. |
-| `ownsPlaceOrder()` | render | `true` when the renderer completes the order with a control of its own (the PayPal smart button). The checkout's Place Order button is not rendered while that method is selected. |
-| `placeOrder()` | instead of the order POST | For methods whose order is placed elsewhere (redirect gateways). Resolves with the same-origin URL the shopper continues on, or `null` when it failed and already reported why in the global error. Redirect targets are validated against the store origin (`safe-redirect.ts`). |
-| `recaptchaAction()` | at the order request | Which reCAPTCHA form protects the order of this method: `place_order` when the hook is absent, another form (`braintree` for the Braintree card) or `null` for none (wallets whose order is confirmed by the gateway). |
-| `savesOnSelection` | selection | `false` when the method must not be saved on the quote at the moment the shopper selects it (a method that cannot be saved without its payment data). Omitted = saved on selection. |
-
-**The order pipeline and the queue.** A renderer never writes to the quote
-on its own. The checkout's button runs `prepareOrder()` (the latch, every
-pending edit on the quote, the gate), then the renderer's `beforePlaceOrder`,
-then `submitOrder()` or the renderer's `placeOrder`. A renderer that owns
-Place Order calls `prepareCheckout()` of `payment-renderers/checkout-gate.ts`
-from its click handler, which does the first step and answers with the
-translated reason when something is missing, and `getCheckoutBlocker()` for
-rendering. A renderer whose order is placed by an endpoint of its own and
-gets no answer calls `flowActions().resolveLostOrder()`, which runs the
-check of [When the answer to the order is lost](#when-the-answer-to-the-order-is-lost).
-A failed save is reported in its section; read it with `failureMessage()`
-of `store/section-status.ts` instead of printing a second message.
-
-Methods with no renderer fall through to `payment-generic`. Only the codes
-in `SAFE_FOR_GENERIC` (`checkmo`, `banktransfer`, `cashondelivery`, `free`)
-may be placed that way; every other unregistered code shows the "not yet
-supported" banner and cannot be selected, so a missing renderer never sends
-an order to a gateway without its data.
-
-**Optional chunks.** The gift options editor, the agreements list and the
-image CAPTCHA field are separate chunks (`checkout-gift-message`,
-`checkout-agreements`, `captcha-field`): the page loads and preloads each one
-only when the store's settings use it.
-
-**Lazy loading.** `lazy-renderers.ts` maps method codes to dynamic imports:
-
-```ts
-const LOADERS = {
-    braintree: () => import('./braintree/payment-braintree-card.js'),
-    paypal_express: () => import('./paypal/payment-paypal-express.js'),
-    // ...
-};
-```
-
-`ensureRenderersFor(codes)` is called with the available method codes; each
-module registers itself on import and bumps the `renderersVersion` signal so
-the method list re-renders. Add your module to `LOADERS` to get the same
-on-demand behavior; a renderer imported statically in `main.ts` works too
-but ships in the main bundle.
+**Size budget.** `pnpm --filter @magentofullstackdev/hyperion-checkout budget`
+(`scripts/bundle-budget.mjs`) sums the gzip size of what every checkout page
+downloads before it mounts (the entry, the application chunk and their static
+imports) and fails above `baselineGzip + allowance` of `bundle-budget.json`;
+`--record` writes the measured size as the new baseline.
 
 **Configuration from PHP.** Put server-side values under
 `checkoutConfig.hyperion.<yourKey>` with a `ConfigProviderInterface`
@@ -519,19 +506,20 @@ module's `etc/frontend/di.xml`, the way
 `hyperion.paypalExpress` and `NameFieldsConfigProvider` adds
 `hyperion.nameFields`. Per-method values that core already provides
 (`checkoutConfig.payment[<code>]`, for example Braintree's client token or
-the offline instructions) are read from there. Read them through
-`getCheckoutConfig()` from `bootstrap-config.ts`; validate the shape, the
-PHP side serializes an empty array as `[]` and a filled one as an object.
+the offline instructions) are read from there; a payment element receives
+its slice as its `config` property and its entry's options as `options`.
+Validate the shape: the PHP side serializes an empty array as `[]` and a
+filled one as an object.
 
 **Shipping it.** The checkout is one bundle. `HyperionCheckout\Block\Checkout`
-resolves the hashed files from Vite's manifest, read from the deployed
-static directory of the Hyperion theme
-(`pub/static/frontend/Magentofullstackdev/hyperion/Magentofullstackdev_HyperionCheckout/.vite/manifest.json`)
-or from the module's `view/frontend/web/.vite/manifest.json`. A custom
-renderer is therefore built into the bundle from the package source (a fork
-or a copy of this repository, `pnpm --filter @magentofullstackdev/hyperion-checkout build`)
-and shipped as the module's `view/frontend/web/` output; it is not something
-a child theme file can add. The build first runs `scripts/sync-i18n.mjs`,
+resolves the hashed files from Vite's manifest, read only from the module's
+`view/frontend/web/.vite/manifest.json` (a missing manifest is an error that
+names that path; the deployed static directory is never read for it). A change to
+the checkout itself is built from the package source (a fork or a copy of
+this repository, `pnpm --filter @magentofullstackdev/hyperion-checkout build`)
+and shipped as the module's `view/frontend/web/` output; a renderer or an
+extension of another module needs no rebuild (see
+[Extending Hyperion](./extensions.md)). The build first runs `scripts/sync-i18n.mjs`,
 which writes every string of the bundle's `src/i18n/en_US.json` into the
 module's `i18n/en_US.csv` (and the Italian texts into `it_IT.csv`); the
 other eleven locale CSVs of the module are translated by hand from the
@@ -554,11 +542,9 @@ in the translation.
 A new string is added to `en_US.json` with a `Hyperion_Checkout::` key, the
 build syncs it into the CSV.
 
-Reference implementations to copy: `payment-offline.ts` (simplest, with
-the PO number example of `beforePlaceOrder`), `paypal/payment-paypal-express.ts`
-(`ownsPlaceOrder`, `placeOrder`, `isReady`), `braintree/payment-braintree-card.ts`
-(SDK loading, hosted fields, 3D Secure, `afterPlaceOrderFailed`). Each has
-unit tests next to it in `__tests__/`.
+Reference implementations to copy are the two sample modules under
+`dev/modules/Magentofullstackdev/`, written against the public contract only
+([Extending Hyperion](./extensions.md#testing-and-the-sample-modules)).
 
 ## Gift messages
 
@@ -576,6 +562,73 @@ initial values. The order view shows them. Core registers its gift message
 config provider on a composite of its own that only the Luma checkout reads,
 so Hyperion's `ConfigProvider` relays the `giftMessage` and
 `is*LevelGiftOptionsEnabled` keys itself when the module is installed.
+
+## Order comment and newsletter opt-in
+
+Two optional fields of the checkout, both off by default (Stores >
+Configuration > Hyperion Theme > Checkout):
+
+| Group | Field | Path | Default | Meaning |
+|---|---|---|---|---|
+| Order Comment | Let Shoppers Add a Comment | `hyperion_checkout/order_comment/enabled` | 0 | A text field above Place Order. The comment is added to the order history, visible to the customer on the order view; the customer is not notified. |
+| Order Comment | Maximum Length | `hyperion_checkout/order_comment/max_length` | 500 | 1 to 5000 characters; the field counts down, the server cuts a longer text. The comment is plain text: tags are stripped. |
+| Newsletter Opt-in | Offer the Newsletter at Checkout | `hyperion_checkout/newsletter/enabled` | 0 | A checkbox at the end of the contact step. Needs `Magento_Newsletter` with the newsletter active. A signed-in customer who is already subscribed never sees it; a shopper who is not signed in sees it only when guests may subscribe (`newsletter/subscription/allow_guest_subscribe`). After the order the customer account, or for a guest order the order email, is subscribed; a newsletter failure is logged and never fails the order. |
+| Newsletter Opt-in | Ticked by Default | `hyperion_checkout/newsletter/checked_by_default` | 0 | A box ticked in advance is not valid consent under the GDPR: keep No unless your market allows it. |
+
+Both values travel with the order request as payment extension attributes
+(`paymentMethod.extension_attributes.hyperion_order_comment` and
+`hyperion_newsletter_subscribe`), for guests and customers. They are
+first-party entries of the generic extension pool
+([Extending Hyperion](./extensions.md#checkout-extensions-and-slots)), so a
+store with both off loads nothing for them.
+
+## Persistent shopping cart
+
+With Persistent Shopping Cart on (`persistent/options/enabled`), a visitor
+whom the persistent cookie remembers, but who is not signed in, gets the
+remembered customer's cart back and checks out on it as a guest. For such
+a visitor:
+
+- The checkout page carries none of the customer's personal data: no email,
+  name, date of birth, customer id or address of the customer or of the
+  cart. The checkout starts like a guest checkout on the remembered cart
+  (`Plugin\Checkout\PersistentCartPrivacy`). The cart's gift messages keep
+  their sender, recipient and text, which are cart content; the checkout
+  configuration never carries the id of the customer who wrote a message,
+  for any shopper.
+- A guest cart read of a cart that belongs to a customer answers without the
+  customer record, the email or any address, over REST (`GET
+  /V1/guest-carts/:cartId`, `GET /V1/guest-carts/:cartId/billing-address`)
+  and over SOAP (`quoteGuestCartRepositoryV1Get`,
+  `quoteGuestBillingAddressManagementV1Get`) alike
+  (`Plugin\Quote\GuestCartPrivacy`, `GuestBillingAddressPrivacy`, declared
+  for the `webapi_rest` and `webapi_soap` areas). This holds for any
+  customer cart whose masked id is known, whatever made it known, on every
+  store view. A guest's own cart is answered as core builds it. A headless
+  client reads a customer's cart with that customer's token
+  (`/V1/carts/mine`).
+- Core's GraphQL endpoint (`/graphql`) treats the visitor as a guest: in the
+  `graphql` area the session identifies a customer only while that customer
+  is signed in (`Plugin\Customer\SessionUserContextPrivacy`), so `customer`,
+  `customerCart` and every query that needs a signed-in customer are
+  refused, and a customer's cart is answered to that customer only. Core has
+  this guard for REST and SOAP, not for GraphQL. A customer signed in on the
+  storefront keeps the session in GraphQL, and clients that send a customer
+  token are not affected.
+- The cart summary of the express buttons (`hyperion/cart/summary`) treats
+  the visitor as a guest and answers the masked cart id, never an email or
+  an address.
+- The shipping estimator of the cart page starts like a guest's, from the
+  store's default country with no rate and no selected method, instead of
+  the destination the customer left on the cart; once the visitor estimates
+  a destination, the estimator shows that destination and its rates
+  (`Model\Cart\EstimateDestination`).
+- A typed address the customer's checkout kept in the tab is never put into
+  this visitor's checkout
+  ([Drafts](#drafts-typed-data-kept-in-the-browser), "Sign-in").
+
+What stays readable with the cart id is listed in
+[Known limitations](./known-limitations.md#should-have-features-missing-for-10).
 
 ## Cart page
 
@@ -623,8 +676,10 @@ Configuration > Sales > Checkout Totals Sort Order (`sales/totals_sort/*`).
 Subtotal, Fixed Product Tax, discount, shipping, tax and grand total have a
 row renderer each; any other total, such as one a third party module
 collects, prints as a plain row with its title and value. To give a total a
-row of your own, register a `Model\Cart\TotalRow\RendererInterface` for its
-code in the `renderers` argument of `TotalRowPool` (`etc/frontend/di.xml`).
+row of your own, register a class implementing
+`Api\Cart\TotalRowRendererInterface` for its code in the `renderers`
+argument of `TotalRowPool` (`etc/frontend/di.xml`, the class name as an
+`xsi:type="string"` item; see [Extending Hyperion](./extensions.md#total-rows)).
 The discount row names what gave the discount: the description core builds
 from the price rules (their labels, or the coupon code for a rule without a
 label). Fixed Product Tax lines render under the items (mini-cart, cart,
@@ -650,8 +705,15 @@ below the amount closes Place Order with the reason.
 link stays at the bottom of the screen for the height of the cart, in the
 same state as the card's link.
 
-**Coupon.** A refused code keeps the form open with the code in the field
-and the message under it. The form carries the `coupon_code` reCAPTCHA and
+**Coupon.** The server renders the form in its three states: closed (no
+code), open with the applied code read-only and Cancel Coupon, and, as the
+answer to a refused code, open with the code in the field and the message
+under it. That markup is a working form without JavaScript (a plain POST to
+`checkout/cart/couponPost`); `<hyperion-coupon-form>` takes it over with the
+same boxes, keeping what the shopper already opened, typed or focused. The
+open form keeps room for the message (two lines on a phone, one from the
+`sm` breakpoint), so a refusal moves nothing, and every answer of the coupon
+action (apply, cancel, refusal) keeps it open. The form carries the `coupon_code` reCAPTCHA and
 the image CAPTCHA of the form `sales_rule_coupon_request` when the store
 enables them (see [reCAPTCHA and CAPTCHA](#recaptcha-and-captcha)).
 
@@ -720,7 +782,9 @@ The token travels as the `X-ReCaptcha` header of the REST request (as
 Nothing from Google loads
 with the page: the script is requested by the first token or, for a
 checkbox, at the shopper's first interaction with the page; the checkbox
-has its space reserved, so nothing moves when it arrives. With a v2
+has its space reserved, so nothing moves when it arrives (on the forms of
+the theme, the cart coupon form included, `<hyperion-recaptcha>` reserves
+78 px for the checkbox, 144 px for the compact size). With a v2
 checkbox an unticked box closes the action with a hint ("Please confirm you
 are not a robot."), and a token is single use: after a refused order the
 shopper ticks the box again. Wallets whose order is confirmed by the

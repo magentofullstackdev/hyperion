@@ -27,7 +27,9 @@
  * grand total is marked provisional; so is it while a change is on its way
  * to the server. The one live region of the checkout's grand total lives
  * here: it stays empty until the confirmed total changes, so the amount is
- * read once in the list and announced only when it moves.
+ * read once in the list and announced only when it moved and the change
+ * settled ("Order summary updated." and the new grand total), whatever
+ * caused it: a shipping method, an address, a coupon, a payment method.
  */
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
@@ -38,6 +40,7 @@ import { getPriceFormat, getCheckoutConfig } from '../bootstrap-config.js';
 import { formatMoney } from '../utils/currency.js';
 import { getIntlLocale, t } from '../utils/i18n.js';
 import { buildTotalsRows, type TotalsLabels, type TotalsRow } from '../utils/totals-rows.js';
+import { shippingExtensionView } from './shipping-extension-view.js';
 
 export interface GrandTotalView {
     /** The title of the grand total as the store names it. */
@@ -144,7 +147,8 @@ export class SummaryTotals extends SignalWatcher(LitElement) {
             : buildTotalsRows(confirmed, cfg, labels, options);
         const grandRow = confirmed === null ? undefined : announced.find((r) => r.kind === 'grand');
         this._trackAnnouncement(
-            grandRow ? `${grandRow.label} ${formatMoney(grandRow.value, fmt)}` : null
+            grandRow ? `${grandRow.label} ${formatMoney(grandRow.value, fmt)}` : null,
+            store.optimisticTotals.get() === null && !settling
         );
 
         const baseNotice = this._baseChargeNotice(totals.base_currency_code, totals.quote_currency_code, totals.base_grand_total);
@@ -164,6 +168,7 @@ export class SummaryTotals extends SignalWatcher(LitElement) {
                                 ${row.text ?? formatMoney(row.value, fmt)}
                             </dd>
                         </div>
+                        ${row.code === 'shipping' ? shippingExtensionView.get()?.summary() : nothing}
                     `;
                 })}
             </dl>
@@ -177,10 +182,20 @@ export class SummaryTotals extends SignalWatcher(LitElement) {
         `;
     }
 
-    /** The first confirmed total is only remembered; a later, different one is announced. */
-    private _trackAnnouncement(grandLabel: string | null): void {
+    /**
+     * The first confirmed total is only remembered. A later, different one
+     * is announced once the change has settled (no write of the queue in
+     * flight, no expected totals on screen), so a chain of answers that
+     * recompute the totals on the way says only where it ended.
+     */
+    private _trackAnnouncement(grandLabel: string | null, settled: boolean): void {
         if (grandLabel === null || grandLabel === this._seenGrand) return;
-        if (this._seenGrand !== null) this._announcement = grandLabel;
+        if (this._seenGrand === null) {
+            this._seenGrand = grandLabel;
+            return;
+        }
+        if (!settled) return;
+        this._announcement = t('Hyperion_Checkout::summary_updated', { total: grandLabel });
         this._seenGrand = grandLabel;
     }
 

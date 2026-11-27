@@ -27,11 +27,23 @@
                 <rate_fields>country_id,region,postcode</rate_fields>
                 <preselect>cheapest</preselect>
             </shipping>
+            <order_comment>
+                <enabled>0</enabled>
+                <max_length>500</max_length>
+            </order_comment>
+            <newsletter>
+                <enabled>0</enabled>
+                <checked_by_default>0</checked_by_default>
+            </newsletter>
         </hyperion_checkout>
-        <!-- Requests per 10 seconds and client for the cart shipping estimator (0 = no limit). -->
+        <!--
+            Requests per 10 seconds and client for the cart shipping estimator and for the cart
+            summary of the express buttons (0 = no limit).
+        -->
         <hyperion>
             <security>
                 <cart_estimate_limit>10</cart_estimate_limit>
+                <cart_summary_limit>20</cart_summary_limit>
             </security>
         </hyperion>
         <!--

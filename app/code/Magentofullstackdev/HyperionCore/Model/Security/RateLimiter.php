@@ -20,6 +20,15 @@ use Magento\Store\Model\ScopeInterface;
  * counter is read and written back without a lock, so under heavy
  * concurrency a client may get a few requests past the limit; the purpose
  * is to bound the load of a flood, not to account requests exactly.
+ *
+ * Public contract: the `groups` argument (etc/frontend/di.xml, route group
+ * => configuration path of its limit in requests per window) and `hit()`,
+ * which a module calls from its own plugin for a route whose budget depends
+ * on the request content. Whole routes are mapped through the `routes`
+ * argument of Plugin\Framework\App\Action\RateLimitPlugin.
+ *
+ * @api
+ * @since 0.9.0
  */
 class RateLimiter
 {

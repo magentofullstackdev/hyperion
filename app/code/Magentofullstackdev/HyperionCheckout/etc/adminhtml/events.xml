@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Admin area events of Magentofullstackdev_HyperionCheckout: a saved payment
+    methods configuration makes the stored report of hidden payment methods
+    unknown, so it is forgotten and rebuilt by the next checkout render or by
+    `bin/magento hyperion:checkout:payments`.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="admin_system_config_changed_section_payment">
+        <observer name="hyperion_checkout_reset_unsupported_payment_methods"
+                  instance="Magentofullstackdev\HyperionCheckout\Model\Payment\Observer\ResetUnsupportedMethodsReport"/>
+    </event>
+</config>

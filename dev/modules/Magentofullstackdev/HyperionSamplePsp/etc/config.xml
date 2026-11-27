@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion_sample>
+            <general>
+                <!-- Master switch: while 0 no method is available and every controller answers 404. -->
+                <enabled>0</enabled>
+            </general>
+            <express>
+                <!-- Express button; it also needs payment/hyperion_sample_redirect/active. -->
+                <enabled>0</enabled>
+            </express>
+        </hyperion_sample>
+        <payment>
+            <hyperion_sample_card>
+                <active>0</active>
+                <model>HyperionSampleCardFacade</model>
+                <title>Sample card</title>
+                <payment_action>authorize</payment_action>
+                <order_status>processing</order_status>
+                <is_gateway>1</is_gateway>
+                <can_use_checkout>1</can_use_checkout>
+                <can_use_internal>0</can_use_internal>
+                <can_authorize>1</can_authorize>
+                <can_capture>1</can_capture>
+                <can_capture_partial>0</can_capture_partial>
+                <can_authorize_vault>1</can_authorize_vault>
+                <can_capture_vault>1</can_capture_vault>
+                <can_void>0</can_void>
+                <can_refund>0</can_refund>
+                <allowspecific>0</allowspecific>
+                <sort_order>900</sort_order>
+            </hyperion_sample_card>
+            <hyperion_sample_card_vault>
+                <active>0</active>
+                <model>HyperionSampleCardVaultFacade</model>
+                <title>Stored sample card</title>
+            </hyperion_sample_card_vault>
+            <hyperion_sample_redirect>
+                <active>0</active>
+                <model>HyperionSampleRedirectFacade</model>
+                <title>Sample hosted payment</title>
+                <order_status>pending</order_status>
+                <is_gateway>0</is_gateway>
+                <can_use_checkout>1</can_use_checkout>
+                <can_use_internal>0</can_use_internal>
+                <allowspecific>0</allowspecific>
+                <sort_order>910</sort_order>
+            </hyperion_sample_redirect>
+            <hyperion_sample_form>
+                <active>0</active>
+                <model>HyperionSampleFormFacade</model>
+                <title>Sample invoice reference</title>
+                <order_status>pending</order_status>
+                <is_gateway>0</is_gateway>
+                <can_use_checkout>1</can_use_checkout>
+                <can_use_internal>0</can_use_internal>
+                <allowspecific>0</allowspecific>
+                <sort_order>920</sort_order>
+            </hyperion_sample_form>
+        </payment>
+    </default>
+</config>

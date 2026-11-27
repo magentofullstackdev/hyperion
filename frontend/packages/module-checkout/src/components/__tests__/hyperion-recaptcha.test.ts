@@ -152,6 +152,42 @@ describe('checkout reCAPTCHA', () => {
             await expect(second).resolves.toBe('second-token');
         });
 
+        it('loads the script deferred, with the CSP nonce of the page', async () => {
+            const own = document.createElement('script');
+            own.type = 'module';
+            own.setAttribute('nonce', 'page-nonce');
+            document.body.appendChild(own);
+            try {
+                void executeRecaptcha('place_order').catch(() => undefined);
+                expect(scripts()[0]!.nonce).toBe('page-nonce');
+                expect(scripts()[0]!.defer).toBe(true);
+                expect(scripts()[0]!.async).toBe(true);
+            } finally {
+                own.remove();
+            }
+        });
+
+        it('a script that does not answer in time is dropped so the next call loads it again', async () => {
+            vi.useFakeTimers();
+            try {
+                const first = executeRecaptcha('place_order');
+                const settled = expect(first).rejects.toMatchObject({ reason: 'failed' });
+                await vi.advanceTimersByTimeAsync(15001);
+                await settled;
+                expect(scripts()).toHaveLength(0);
+
+                const { api } = fakeApi();
+                api.execute.mockResolvedValue('after-timeout');
+                const second = executeRecaptcha('place_order');
+                expect(scripts()).toHaveLength(1);
+                window.grecaptcha = api;
+                scripts()[0]!.dispatchEvent(new Event('load'));
+                await expect(second).resolves.toBe('after-timeout');
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
         it('requests the script once for every later token', async () => {
             const { api } = fakeApi();
             api.execute.mockResolvedValue('token-fixture');

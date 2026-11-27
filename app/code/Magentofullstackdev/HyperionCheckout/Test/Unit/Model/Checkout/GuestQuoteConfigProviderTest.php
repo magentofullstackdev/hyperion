@@ -9,6 +9,7 @@ use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address;
+use Magentofullstackdev\HyperionCheckout\Model\Checkout\AddressFieldsValues;
 use Magentofullstackdev\HyperionCheckout\Model\Checkout\GuestQuoteConfigProvider;
 use Magentofullstackdev\HyperionCheckout\Model\Checkout\QuoteAddressExporter;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -73,6 +74,19 @@ class GuestQuoteConfigProviderTest extends TestCase
         return $quote;
     }
 
+    /**
+     * Declared field values read from a `fiscal_code` value of the address data, none without it.
+     */
+    private function declaredValues(): AddressFieldsValues
+    {
+        $values = $this->createStub(AddressFieldsValues::class);
+        $values->method('export')->willReturnCallback(static function (Address $address): array {
+            $code = $address->getData('fiscal_code');
+            return $code === null ? [] : ['custom_attributes' => [['attribute_code' => 'fiscal_code', 'value' => $code]]];
+        });
+        return $values;
+    }
+
     private function provider(Quote $quote, bool $loggedIn = false): GuestQuoteConfigProvider
     {
         $checkoutSession = $this->createStub(CheckoutSession::class);
@@ -83,7 +97,8 @@ class GuestQuoteConfigProviderTest extends TestCase
             $checkoutSession,
             $customerSession,
             $this->createStub(LoggerInterface::class),
-            new QuoteAddressExporter()
+            new QuoteAddressExporter(),
+            $this->declaredValues()
         );
     }
 
@@ -150,6 +165,32 @@ class GuestQuoteConfigProviderTest extends TestCase
 
         self::assertNull($guest['shippingAddress']);
         self::assertSame('Austin', $guest['billingAddress']['city']);
+    }
+
+    public function testABillingAddressThatDiffersOnlyByADeclaredFieldStaysASeparateBillingAddress(): void
+    {
+        $shipping = $this->address(self::SHIPPING);
+        $billing = $this->address(['fiscal_code' => 'RSSMRA80A01H501U'] + self::SHIPPING);
+        $guest = $this->provider($this->quote($shipping, $billing))->getConfig()['hyperion']['guestQuote'];
+
+        self::assertArrayNotHasKey('custom_attributes', $guest['shippingAddress']);
+        self::assertSame(
+            [['attribute_code' => 'fiscal_code', 'value' => 'RSSMRA80A01H501U']],
+            $guest['billingAddress']['custom_attributes']
+        );
+    }
+
+    public function testEqualDeclaredValuesStillCollapseToSameAsShipping(): void
+    {
+        $shipping = $this->address(['fiscal_code' => 'RSSMRA80A01H501U'] + self::SHIPPING);
+        $billing = $this->address(['fiscal_code' => 'RSSMRA80A01H501U'] + self::SHIPPING);
+        $guest = $this->provider($this->quote($shipping, $billing))->getConfig()['hyperion']['guestQuote'];
+
+        self::assertNull($guest['billingAddress']);
+        self::assertSame(
+            [['attribute_code' => 'fiscal_code', 'value' => 'RSSMRA80A01H501U']],
+            $guest['shippingAddress']['custom_attributes']
+        );
     }
 
     #[DataProvider('blankCountries')]

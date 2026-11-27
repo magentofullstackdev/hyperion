@@ -31,6 +31,11 @@
  *
  * Nothing from Google loads with the page: the script is requested by the
  * first token or the first mounted checkbox.
+ *
+ * This module is a chunk of its own, loaded before the mount only by a
+ * store that protects an action (`optional-sections.ts`); it registers its
+ * functions with `recaptcha-client.ts`, through which the rest of the
+ * checkout reaches it.
  */
 import { LitElement, html, nothing } from 'lit';
 import { SignalWatcher } from '@lit-labs/signals';
@@ -42,8 +47,11 @@ import {
 } from '../store/captcha-state.js';
 import type { RecaptchaAction, RecaptchaActionConfig } from '../types/captcha.js';
 import { t } from '../utils/i18n.js';
+import { forgetScript, loadScript, resetScriptLoaderForTests } from '../extension/load-script.js';
+import { RecaptchaError, registerRecaptchaClient } from './recaptcha-client.js';
 
 export type { RecaptchaAction };
+export { RecaptchaError };
 
 type RenderParameters = Record<string, string | ((token: string) => void) | (() => void)>;
 
@@ -58,21 +66,6 @@ interface GreCaptcha {
 declare global {
     interface Window {
         grecaptcha?: GreCaptcha;
-    }
-}
-
-/**
- * Why a token could not be had: the check failed, or the shopper has to
- * tick the checkbox first. The message is written for the shopper, so the
- * error keeps the name of a plain `Error`: that is what the checkout's
- * error classification shows as it is.
- */
-export class RecaptchaError extends Error {
-    public readonly reason: 'failed' | 'required';
-
-    public constructor(reason: 'failed' | 'required') {
-        super(t(reason === 'required' ? 'Hyperion_Checkout::recaptcha_required' : 'Hyperion_Checkout::recaptcha_failed'));
-        this.reason = reason;
     }
 }
 
@@ -127,25 +120,27 @@ function loadApi(config: RecaptchaActionConfig): Promise<GreCaptcha> {
             return;
         }
         const foreign = pageScripts()[0] ?? null;
-        const script = foreign ?? document.createElement('script');
+        const url = scriptUrl(config);
         const giveUp = (reason: string): void => {
             clearTimeout(timer);
-            if (foreign === null) script.remove();
+            if (foreign === null) forgetScript(url);
             reject(new Error(reason));
         };
         const timer = setTimeout(() => giveUp('reCAPTCHA API timed out'), SCRIPT_TIMEOUT_MS);
-        script.addEventListener('load', () => {
-            clearTimeout(timer);
-            if (!window.grecaptcha && foreign === null) script.remove();
-            whenReady();
-        }, { once: true });
-        script.addEventListener('error', () => giveUp('reCAPTCHA API failed to load'), { once: true });
-        if (foreign === null) {
-            script.src = scriptUrl(config);
-            script.async = true;
-            script.defer = true;
-            document.head.appendChild(script);
+        if (foreign !== null) {
+            foreign.addEventListener('load', () => {
+                clearTimeout(timer);
+                whenReady();
+            }, { once: true });
+            foreign.addEventListener('error', () => giveUp('reCAPTCHA API failed to load'), { once: true });
+            return;
         }
+        // The checkout's one script loader: once per URL, with the page's CSP nonce.
+        loadScript(url, { defer: '' }).then(() => {
+            clearTimeout(timer);
+            if (!window.grecaptcha) forgetScript(url);
+            whenReady();
+        }, () => giveUp('reCAPTCHA API failed to load'));
     });
     scriptPromise = promise;
     promise.catch(() => {
@@ -355,6 +350,7 @@ export async function executeRecaptcha(action: RecaptchaAction): Promise<string 
 
 export function resetRecaptchaLoaderForTests(): void {
     scriptPromise = null;
+    resetScriptLoaderForTests();
     invisibleWidgets.clear();
     checkboxHosts.clear();
     checkboxWidgets.clear();
@@ -389,6 +385,8 @@ export class HyperionRecaptcha extends SignalWatcher(LitElement) {
         `;
     }
 }
+
+registerRecaptchaClient({ executeRecaptcha, mountRecaptchaCheckbox, unmountRecaptchaCheckbox });
 
 if (!customElements.get('hc-recaptcha-badge')) {
     customElements.define('hc-recaptcha-badge', HyperionRecaptcha);

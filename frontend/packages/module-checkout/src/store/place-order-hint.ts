@@ -8,7 +8,9 @@
  * `placeOrderBlocker()` names the first missing piece as a code,
  * `placeOrderHint()` gives its message.
  */
-import { getPaymentRenderer } from '../components/payment-renderers/registry.js';
+import { selectedRowKey } from '../components/payment-host/payment-rows.js';
+import { rowState } from '../components/payment-host/row-state.js';
+import { extensionGateMessage, shippingExtensionsValid } from '../extension/gates.js';
 import { t } from '../utils/i18n.js';
 import { antiAbuseBlocker } from './anti-abuse.js';
 import type { Store } from './index.js';
@@ -39,7 +41,9 @@ export type PlaceOrderBlocker =
     /** The visible reCAPTCHA checkbox of the order is not ticked. */
     | 'recaptcha'
     | 'minimum-order'
-    | 'totals';
+    | 'totals'
+    /** An extension of the checkout holds the order back (its gate names why). */
+    | 'extension';
 
 /** The message shown while the quote is catching up with the form. */
 export function checkoutUpdatingMessage(): string {
@@ -49,7 +53,8 @@ export function checkoutUpdatingMessage(): string {
 /**
  * The first thing that keeps the order from being placed; null when
  * nothing is missing. Same order as the checkout reads: contact, shipping,
- * billing, payment, agreements, security checks, totals. A piece the server still has to
+ * billing, payment, agreements, security checks, totals, and last the gates
+ * of the checkout's extensions (`extension/gates.ts`). A piece the server still has to
  * confirm (the form is ahead of the quote, an estimate, a write or the
  * totals read is on its way) is `updating`; a piece the shopper has to
  * supply is named. The latch of an order being placed is not part of it.
@@ -68,6 +73,8 @@ export function placeOrderBlocker(
     }
     if (!selectors.billingAddressValid.get()) return 'billing-address';
     if (!selectors.shippingReady.get()) {
+        // The rate waits for its delivery option (its save is held): its gate says what is missing.
+        if (shippingExtensionsValid.get() !== null) return 'extension';
         const updating = busy
             || store.shippingDirty.get()
             || store.isLoadingShippingMethods.get()
@@ -87,6 +94,7 @@ export function placeOrderBlocker(
     if (securityCheck !== null) return securityCheck;
     if (store.minimumOrderError.get() !== null) return 'minimum-order';
     if (store.totals.get() === null) return 'totals';
+    if (extensionGateMessage() !== null) return 'extension';
     return null;
 }
 
@@ -107,8 +115,9 @@ export function placeOrderBlockerMessage(store: Store, blocker: PlaceOrderBlocke
             return t('Hyperion_Checkout::checkout_incomplete_payment_method');
         case 'payment-not-ready': {
             const code = store.selectedPaymentMethod.get();
-            const renderer = code === null ? null : getPaymentRenderer(code);
-            return renderer?.notReadyMessage?.() ?? t('Hyperion_Checkout::checkout_incomplete_payment_method');
+            const key = selectedRowKey(code);
+            const reported = key === null ? null : rowState(key).message;
+            return reported ?? t('Hyperion_Checkout::checkout_incomplete_payment_method');
         }
         case 'agreements':
             return t('Hyperion_Checkout::checkout_incomplete_agreements');
@@ -120,6 +129,8 @@ export function placeOrderBlockerMessage(store: Store, blocker: PlaceOrderBlocke
             return store.minimumOrderError.get() ?? t('Hyperion_Checkout::checkout_incomplete_totals');
         case 'totals':
             return t('Hyperion_Checkout::checkout_incomplete_totals');
+        case 'extension':
+            return extensionGateMessage() ?? t('Hyperion_Checkout::extension_blocked');
     }
 }
 

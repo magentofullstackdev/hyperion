@@ -1,0 +1,65 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+
+/**
+ * The express buttons of one placement (`<hyperion-express-slot>`).
+ *
+ * Block data:
+ *   placement  `product` | `cart` | `minicart` | `checkout-top`
+ *
+ * The buttons come from Model\Payment\ExpressButtonPool through
+ * ViewModel\ExpressButtons, which also applies the purchase rules: with no
+ * button (none registered, none available, or a visitor who may not buy)
+ * nothing is printed at all. Otherwise the express slot and one box per button carry
+ * their final height from the first paint, so a button that renders later
+ * never moves the page. The configuration travels in an attribute: the cart
+ * and the mini-cart arrive through htmx swaps, which drop `<script>` elements.
+ *
+ * On the product placement the block is a child of the cached product view:
+ * the buttons depend on configuration and the product only.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
+ */
+$placement = (string) $block->getData('placement');
+$product = null;
+if ($placement === 'product') {
+    // The block may sit in a container: the product comes from the nearest ancestor block that has one.
+    $layout = $block->getLayout();
+    $name = (string) $block->getNameInLayout();
+    while ($product === null && $name !== '' && ($name = (string) $layout->getParentName($name)) !== '') {
+        $ancestor = $layout->getBlock($name);
+        if ($ancestor && method_exists($ancestor, 'getProduct')) {
+            $product = $ancestor->getProduct();
+        }
+    }
+    if (!$product instanceof \Magento\Catalog\Api\Data\ProductInterface) {
+        return;
+    }
+}
+
+/** @var \Magentofullstackdev\HyperionCheckout\ViewModel\ExpressButtons $express */
+$express = $viewModels->require(\Magentofullstackdev\HyperionCheckout\ViewModel\ExpressButtons::class);
+$slot = $express->getSlot($placement, $product);
+if ($slot['buttons'] === []) {
+    return;
+}
+?>
+<hyperion-express-slot class="block mt-3 space-y-2"
+    placement="<?= $escaper->escapeHtmlAttr($placement) ?>"
+    style="min-height: <?= (int) $slot['reservedHeight'] ?>px"
+    data-hyperion-express="<?= $escaper->escapeHtmlAttr($slot['json']) ?>"
+    base-url="<?= $escaper->escapeUrl($block->getBaseUrl()) ?>"
+    options-message="<?= $escaper->escapeHtmlAttr(__('You need to choose options for your item.')) ?>"
+    error-message="<?= $escaper->escapeHtmlAttr(__('Something went wrong with your request. Please try again later.')) ?>"
+    <?php if ($placement === 'product'): ?>
+        form="#product_addtocart_form"
+    <?php endif; ?>>
+    <?php foreach ($slot['buttons'] as $button): ?>
+        <div data-hyperion-express-button="<?= $escaper->escapeHtmlAttr((string) $button['id']) ?>"
+             style="min-height: <?= (int) $button['reservedHeight'] ?>px"></div>
+    <?php endforeach; ?>
+</hyperion-express-slot>

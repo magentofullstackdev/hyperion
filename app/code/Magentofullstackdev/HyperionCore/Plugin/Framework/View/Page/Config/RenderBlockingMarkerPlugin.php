@@ -18,7 +18,7 @@ use Psr\Log\LoggerInterface;
  * Such a page (`critical_css_type` on the `hyperion.head.scripts` block,
  * see head/scripts.phtml) loads the theme stylesheet without blocking, so
  * nothing keeps the browser from painting the document while it is still
- * streaming in: a frame with half a header (the centred top menu and the
+ * streaming in: a frame with half a header (the centered top menu and the
  * action bar moved as their siblings arrived) or half a grid counts as a
  * layout shift. `<link rel="expect" href="#<marker>" blocking="render">`
  * tells the browser to wait for that element before the first paint. The
@@ -31,8 +31,10 @@ use Psr\Log\LoggerInterface;
  * A browser without `rel=expect` paints progressively, a page without the
  * marker element is unblocked when parsing ends.
  *
- * Appended to the head content from here because the link is honoured in
+ * Appended to the head content from here because the link is honored in
  * `<head>` only and the head scripts block renders at the top of the body.
+ *
+ * @internal
  */
 class RenderBlockingMarkerPlugin
 {

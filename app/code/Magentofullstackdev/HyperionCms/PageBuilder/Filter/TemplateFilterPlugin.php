@@ -6,11 +6,8 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCms\PageBuilder\Filter;
 
 use Magentofullstackdev\HyperionCms\PageBuilder\ContentTypePool;
-use Magento\Framework\App\Area;
-use Magento\Framework\App\State as AppState;
-use Magento\Framework\Exception\LocalizedException;
+use Magentofullstackdev\HyperionCore\Model\Design\ThemeScope;
 use Magento\Framework\Filter\Template as FrameworkTemplateFilter;
-use Magento\Framework\View\DesignInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -18,7 +15,9 @@ use Psr\Log\LoggerInterface;
  * filter ran. It only acts on storefront requests rendered by one of the
  * enabled themes (the Hyperion theme and its children by default): any other
  * theme, the admin, emails rendered outside the storefront and the web API
- * keep PageBuilder's own markup.
+ * keep PageBuilder's own markup. The theme check is
+ * Magentofullstackdev\HyperionCore\Model\Design\ThemeScope, asked with this
+ * plugin's own `enabledThemes` list.
  */
 class TemplateFilterPlugin
 {
@@ -30,16 +29,14 @@ class TemplateFilterPlugin
     /**
      * @param ContentTypePool $pool
      * @param LoggerInterface $logger
-     * @param DesignInterface $design
-     * @param AppState $appState
+     * @param ThemeScope $themeScope
      * @param string[] $enabledThemes theme paths (Vendor/theme) whose rendering may be rewritten
      */
     public function __construct(
         private readonly ContentTypePool $pool,
         private readonly LoggerInterface $logger,
-        private readonly DesignInterface $design,
-        private readonly AppState $appState,
-        private readonly array $enabledThemes = ['Magentofullstackdev/hyperion']
+        private readonly ThemeScope $themeScope,
+        private readonly array $enabledThemes = [ThemeScope::HYPERION_THEME]
     ) {
     }
 
@@ -75,22 +72,7 @@ class TemplateFilterPlugin
      */
     private function isEnabledForCurrentDesign(): bool
     {
-        try {
-            if ($this->appState->getAreaCode() !== Area::AREA_FRONTEND) {
-                return false;
-            }
-        } catch (LocalizedException $e) {
-            return false;
-        }
-
-        $theme = $this->design->getDesignTheme();
-        foreach ($theme->getInheritedThemes() as $inherited) {
-            if (in_array((string) $inherited->getThemePath(), $this->enabledThemes, true)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->themeScope->matchesCurrentTheme($this->enabledThemes);
     }
 
     /**

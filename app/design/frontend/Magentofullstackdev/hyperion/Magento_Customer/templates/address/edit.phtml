@@ -108,8 +108,25 @@ $required = '<span class="text-error" aria-hidden="true">*</span>';
                 <?php endif; ?>
             </div>
 
-            <?php /* Custom address attributes, when a module schedules the block (Commerce, extensions). */ ?>
-            <?= $block->getChildHtml('customer_form_address_user_attributes') ?>
+            <?php /* Custom address attributes: the block a module schedules under the core alias
+                     (Commerce, extensions) wins; otherwise the generic renderer prints the
+                     user-defined attributes of the form. */ ?>
+            <?php $userAttributesHtml = (string) $block->getChildHtml('customer_form_address_user_attributes'); ?>
+            <?= /* @noEscape */ $userAttributesHtml ?>
+            <?php if (trim($userAttributesHtml) === ''): ?>
+                <?php $userAttributesBlock = $block->getLayout()->createBlock(\Magento\Framework\View\Element\Template::class); ?>
+                <?php if ($userAttributesBlock instanceof \Magento\Framework\View\Element\Template): ?>
+                    <?= $userAttributesBlock
+                        ->setTemplate('Magentofullstackdev_HyperionCustomer::form/user-attributes.phtml')
+                        ->setData([
+                            'entity_type' => 'customer_address',
+                            'form_code' => 'customer_address_edit',
+                            'entity' => $address,
+                            'id_prefix' => 'address-attribute-',
+                        ])
+                        ->toHtml() ?>
+                <?php endif; ?>
+            <?php endif; ?>
         </section>
 
         <?php /* -- Address ---------------------------------------- */ ?>

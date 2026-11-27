@@ -15,6 +15,8 @@ use Magento\Framework\App\Response\Http as HttpResponse;
  * setPublicHeaders() does not work, Magento calls it from the layout
  * generation plugin before any block has rendered, so the body is empty
  * and the header never appears.)
+ *
+ * @internal
  */
 class EsiMarkerPlugin
 {

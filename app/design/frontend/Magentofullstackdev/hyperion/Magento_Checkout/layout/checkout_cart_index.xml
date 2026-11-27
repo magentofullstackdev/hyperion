@@ -53,6 +53,9 @@
     <head>
         <title>Shopping Cart</title>
     </head>
+    <!-- Extension points of the summary card, shared with the htmx cart fragment
+         (HyperionCheckout view/frontend/layout/hyperion_cart_extensions.xml). -->
+    <update handle="hyperion_cart_extensions"/>
     <body>
         <!-- Remove legacy Luma/KO-dependent block sub-tree. -->
         <referenceBlock name="page.main.title" remove="true"/>

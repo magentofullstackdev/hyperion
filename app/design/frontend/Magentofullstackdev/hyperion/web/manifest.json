@@ -22,6 +22,14 @@
       "_lit-element.CGWggwb8.js"
     ]
   },
+  "_express-context.CiUdDZLX.js": {
+    "file": "assets/express-context.CiUdDZLX.js",
+    "name": "express-context",
+    "imports": [
+      "_sanitize.DP7-Q_DW.js",
+      "_paypal-sdk.C1iJCTWN.js"
+    ]
+  },
   "_form-key.CQFbBtk5.js": {
     "file": "assets/form-key.CQFbBtk5.js",
     "name": "form-key"
@@ -38,8 +46,8 @@
     "file": "assets/lit-element.CGWggwb8.js",
     "name": "lit-element"
   },
-  "_paypal-sdk.B769dtKR.js": {
-    "file": "assets/paypal-sdk.B769dtKR.js",
+  "_paypal-sdk.C1iJCTWN.js": {
+    "file": "assets/paypal-sdk.C1iJCTWN.js",
     "name": "paypal-sdk",
     "imports": [
       "_sanitize.DP7-Q_DW.js"
@@ -77,17 +85,17 @@
     "name": "video-embed"
   },
   "src/css/critical/category.css": {
-    "file": "assets/critical-category.BH897FDq.css",
+    "file": "assets/critical-category.B3wXG45P.css",
     "src": "src/css/critical/category.css",
     "isEntry": true
   },
   "src/css/critical/cms.css": {
-    "file": "assets/critical-cms.DYgCL3tA.css",
+    "file": "assets/critical-cms.DG2PI-l9.css",
     "src": "src/css/critical/cms.css",
     "isEntry": true
   },
   "src/css/critical/product.css": {
-    "file": "assets/critical-product.BwyaNxxg.css",
+    "file": "assets/critical-product.D5RSZzfj.css",
     "src": "src/css/critical/product.css",
     "isEntry": true
   },
@@ -190,7 +198,7 @@
     ]
   },
   "src/js/components/hyperion-coupon-form.js": {
-    "file": "assets/hyperion-coupon-form.BEkWLy57.js",
+    "file": "assets/hyperion-coupon-form.DvPEZQ4p.js",
     "name": "hyperion-coupon-form",
     "src": "src/js/components/hyperion-coupon-form.js",
     "isEntry": true,
@@ -219,6 +227,24 @@
       "_lit-element.CGWggwb8.js",
       "_scroll-lock.Ok7HH6hu.js",
       "src/js/components/hyperion-notification.js"
+    ]
+  },
+  "src/js/components/hyperion-express-slot.js": {
+    "file": "assets/hyperion-express-slot.Dkfo2x-M.js",
+    "name": "hyperion-express-slot",
+    "src": "src/js/components/hyperion-express-slot.js",
+    "isEntry": true,
+    "isDynamicEntry": true,
+    "imports": [
+      "_preload-helper.Dp1pzeXC.js",
+      "_HyperionLightElement.CshfoQhS.js",
+      "_paypal-sdk.C1iJCTWN.js",
+      "_express-context.CiUdDZLX.js",
+      "_lit-element.CGWggwb8.js",
+      "_sanitize.DP7-Q_DW.js"
+    ],
+    "dynamicImports": [
+      "src/js/components/hyperion-paypal-buttons.js"
     ]
   },
   "src/js/components/hyperion-filter-accordion.js": {
@@ -332,7 +358,7 @@
     ]
   },
   "src/js/components/hyperion-paypal-buttons.js": {
-    "file": "assets/hyperion-paypal-buttons.BhVLQM4F.js",
+    "file": "assets/hyperion-paypal-buttons.Di0l4zXm.js",
     "name": "hyperion-paypal-buttons",
     "src": "src/js/components/hyperion-paypal-buttons.js",
     "isEntry": true,
@@ -340,12 +366,13 @@
     "imports": [
       "_lit-element.CGWggwb8.js",
       "_HyperionLightElement.CshfoQhS.js",
-      "_paypal-sdk.B769dtKR.js",
+      "_paypal-sdk.C1iJCTWN.js",
+      "_express-context.CiUdDZLX.js",
       "_sanitize.DP7-Q_DW.js"
     ]
   },
   "src/js/components/hyperion-paypal-message.js": {
-    "file": "assets/hyperion-paypal-message.DAs1yZ6j.js",
+    "file": "assets/hyperion-paypal-message.cNEF0Vn2.js",
     "name": "hyperion-paypal-message",
     "src": "src/js/components/hyperion-paypal-message.js",
     "isEntry": true,
@@ -353,7 +380,7 @@
     "imports": [
       "_lit-element.CGWggwb8.js",
       "_HyperionLightElement.CshfoQhS.js",
-      "_paypal-sdk.B769dtKR.js",
+      "_paypal-sdk.C1iJCTWN.js",
       "_sanitize.DP7-Q_DW.js"
     ]
   },
@@ -379,7 +406,7 @@
     ]
   },
   "src/js/components/hyperion-recaptcha.js": {
-    "file": "assets/hyperion-recaptcha.BWIksnzH.js",
+    "file": "assets/hyperion-recaptcha.BhtbcEgr.js",
     "name": "hyperion-recaptcha",
     "src": "src/js/components/hyperion-recaptcha.js",
     "isEntry": true,
@@ -459,7 +486,7 @@
     ]
   },
   "src/js/entry.js": {
-    "file": "assets/entry.CRTTxEeH.js",
+    "file": "assets/entry.BKqtJqis.js",
     "name": "entry",
     "src": "src/js/entry.js",
     "isEntry": true,
@@ -497,7 +524,7 @@
       "src/js/components/hyperion-msrp-popup.js",
       "src/js/lib/pagebuilder.js",
       "src/js/lib/sendfriend.js",
-      "src/js/components/hyperion-paypal-buttons.js",
+      "src/js/components/hyperion-express-slot.js",
       "src/js/components/hyperion-paypal-message.js",
       "src/js/components/hyperion-paypal-review.js",
       "src/js/components/hyperion-wishlist-sidebar.js",
@@ -507,7 +534,7 @@
       "src/js/components/hyperion-captcha.js"
     ],
     "css": [
-      "assets/entry.DZ7Tddx3.css"
+      "assets/entry.Cd17VKBg.css"
     ]
   },
   "src/js/lib/pagebuilder.js": {

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <hyperion_sample_extension>
+            <general>
+                <!-- Master switch of the module. -->
+                <enabled>0</enabled>
+                <!-- Marker blocks in the storefront containers, header and footer links, event markers. -->
+                <markers>0</markers>
+                <!-- The hyperion_sample_fee quote total (1.00 in the base currency). -->
+                <sample_fee>0</sample_fee>
+            </general>
+        </hyperion_sample_extension>
+        <carriers>
+            <hyperionlocker>
+                <active>0</active>
+                <model>Magentofullstackdev\HyperionSampleExtension\Model\Carrier\Locker</model>
+                <title>Sample Lockers</title>
+                <name>Pickup locker</name>
+                <price>4.00</price>
+                <sallowspecific>0</sallowspecific>
+                <showmethod>0</showmethod>
+                <sort_order>900</sort_order>
+            </hyperionlocker>
+        </carriers>
+    </default>
+</config>

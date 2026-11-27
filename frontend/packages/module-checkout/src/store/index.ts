@@ -14,6 +14,7 @@
  */
 import { Signal } from 'signal-polyfill';
 
+import type { ShippingAddressOverride, ShippingExtensionState } from '../extension/address-override.js';
 import type { Address } from '../types/address.js';
 import type { CaptchaStateMap } from '../types/captcha.js';
 import type {
@@ -79,6 +80,15 @@ export interface Store {
     shippingDirty: Signal.State<boolean>;
     /** Where the rate list stands for the address in the form. */
     estimateState: Signal.State<EstimateState>;
+    /**
+     * The address a shipping extension puts in place of the typed one
+     * (a pickup point); null when the typed address is the one shipped to.
+     * Written by the shipping extension host only; the requests and the
+     * extension snapshot read it through `effectiveShippingAddress()`.
+     */
+    shippingAddressOverride: Signal.State<ShippingAddressOverride | null>;
+    /** The value, validity and message of each shipping extension, by extension id. */
+    shippingExtensionData: Signal.State<Readonly<Record<string, ShippingExtensionState>>>;
 
     // Billing (only meaningful when the billing address is entered on its
     // own: virtual quote, or "same as shipping" unchecked). `billingSynced`
@@ -104,7 +114,6 @@ export interface Store {
     // Payment
     availablePaymentMethods: Signal.State<readonly PaymentMethodConfig[]>;
     selectedPaymentMethod: Signal.State<string | null>;
-    paymentMethodData: Signal.State<Readonly<Record<string, Record<string, unknown>>>>;
 
     // Coupon
     appliedCoupon: Signal.State<string | null>;
@@ -185,6 +194,8 @@ export function createStore(): Store {
         isSavingShipping: new Signal.State<boolean>(false),
         shippingDirty: new Signal.State<boolean>(false),
         estimateState: new Signal.State<EstimateState>('idle'),
+        shippingAddressOverride: new Signal.State<ShippingAddressOverride | null>(null),
+        shippingExtensionData: new Signal.State<Readonly<Record<string, ShippingExtensionState>>>({}),
 
         isSavingBilling: new Signal.State<boolean>(false),
         billingSynced: new Signal.State<boolean>(false),
@@ -195,7 +206,6 @@ export function createStore(): Store {
 
         availablePaymentMethods: new Signal.State<readonly PaymentMethodConfig[]>([]),
         selectedPaymentMethod: new Signal.State<string | null>(null),
-        paymentMethodData: new Signal.State<Readonly<Record<string, Record<string, unknown>>>>({}),
 
         appliedCoupon: new Signal.State<string | null>(null),
         couponError: new Signal.State<string | null>(null),

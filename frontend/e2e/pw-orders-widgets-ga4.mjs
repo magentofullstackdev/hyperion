@@ -208,7 +208,7 @@ try {
 
         if (await page.locator('#hc-pay-checkmo').count()) {
             await page.locator('#hc-pay-checkmo').click();
-            const payee = await page.locator('payment-offline [data-payment-check-payable-to]').first().textContent({ timeout: 10000 }).catch(() => '');
+            const payee = await page.locator('hc-payment-offline [data-payment-check-payable-to]').first().textContent({ timeout: 10000 }).catch(() => '');
             check('checkout: the check payee is visible when Check / Money order is selected', (payee || '').trim() === PAYEE, payee || '(none)');
         } else {
             console.log('SKIP  checkout: check payee (Check / Money order is not offered on this install)');
@@ -216,7 +216,7 @@ try {
 
         check('checkout: purchase order offered', await page.locator('#hc-pay-purchaseorder').count() === 1);
         await page.locator('#hc-pay-purchaseorder').click();
-        await page.waitForSelector('payment-offline input[name="po_number"]', { timeout: 10000 }).catch(() => {});
+        await page.waitForSelector('hc-payment-form input[name="po_number"]', { timeout: 10000 }).catch(() => {});
         await page.waitForTimeout(1500);
         let state = await placeOrderState(page);
         check('purchase order: Place Order is soft disabled while the number is empty', state.softDisabled && !state.disabled, JSON.stringify(state));
@@ -227,11 +227,11 @@ try {
             /purchase order number/i.test(state.hint) && !page.url().includes('success') && orderBodies.length === 0, state.hint || '(no hint)');
         check('purchase order: the empty field is marked invalid with its message',
             await page.evaluate(() => {
-                const input = document.querySelector('payment-offline input[name="po_number"]');
+                const input = document.querySelector('hc-payment-form input[name="po_number"]');
                 return input?.getAttribute('aria-invalid') === 'true' && /purchase order number/i.test(input.closest('hc-text-input')?.textContent || '');
             }));
 
-        await page.locator('payment-offline input[name="po_number"]').fill(PO_NUMBER);
+        await page.locator('hc-payment-form input[name="po_number"]').fill(PO_NUMBER);
         await page.waitForFunction(() => document.querySelector('place-order-button button')?.getAttribute('aria-disabled') !== 'true', null, { timeout: 15000 }).catch(() => {});
         state = await placeOrderState(page);
         check('purchase order: Place Order opens once the number is typed', !state.softDisabled && !state.disabled, JSON.stringify(state));
@@ -286,7 +286,7 @@ try {
         await page.waitForSelector('#hc-pay-banktransfer', { timeout: 40000 }).catch(() => {});
         check('checkout: bank transfer offered', await page.locator('#hc-pay-banktransfer').count() === 1);
         await page.locator('#hc-pay-banktransfer').click();
-        const shownInstructions = await page.locator('payment-offline [data-payment-instructions]').first().textContent({ timeout: 10000 }).catch(() => '');
+        const shownInstructions = await page.locator('hc-payment-offline [data-payment-instructions]').first().textContent({ timeout: 10000 }).catch(() => '');
         check('checkout: bank transfer instructions shown for the selected method before the order',
             (shownInstructions || '').includes('IBAN IT60X0542811101000000123456') && !page.url().includes('success'), (shownInstructions || '(none)').slice(0, 100));
         await page.waitForTimeout(1500);

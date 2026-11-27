@@ -5,10 +5,11 @@ declare(strict_types=1);
 
 namespace Magentofullstackdev\HyperionCore\Plugin\Checkout\Controller\Cart;
 
-use Magentofullstackdev\HyperionCore\Model\CacheHeaders;
-use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRenderer;
+use Magentofullstackdev\HyperionCore\Model\CacheHeadersInterface;
+use Magentofullstackdev\HyperionCore\Model\Htmx\ActionResponse;
+use Magentofullstackdev\HyperionCore\Model\Htmx\FragmentRendererInterface;
 use Magentofullstackdev\HyperionCore\Model\Htmx\MessageCollector;
-use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRenderer;
+use Magentofullstackdev\HyperionCore\Model\Htmx\NotificationRendererInterface;
 use Magento\Framework\App\Request\Http as HttpRequest;
 use Magento\Framework\Controller\Result\RawFactory;
 
@@ -27,6 +28,10 @@ use Magento\Framework\Controller\Result\RawFactory;
  *      right after a removal and, through the badge observer in
  *      hyperion-mini-cart.js, refreshes an open drawer.
  *   3. OOB `#hyperion-notification` toast.
+ *
+ * The body goes through ActionResponse (event `hyperion_htmx_action_response`).
+ *
+ * @internal
  */
 abstract class AbstractCartMutationPlugin
 {
@@ -36,15 +41,32 @@ abstract class AbstractCartMutationPlugin
     private const COUNT_HANDLE = 'hyperion_checkout_minicart_count';
     private const COUNT_BLOCK = 'hyperion.minicart.count';
 
+    /**
+     * @param HttpRequest $request
+     * @param RawFactory $resultRawFactory
+     * @param CacheHeadersInterface $cacheHeaders
+     * @param MessageCollector $messageCollector
+     * @param NotificationRendererInterface $notificationRenderer
+     * @param FragmentRendererInterface $fragmentRenderer
+     * @param ActionResponse $actionResponse
+     */
     public function __construct(
         private readonly HttpRequest $request,
         private readonly RawFactory $resultRawFactory,
-        private readonly CacheHeaders $cacheHeaders,
+        private readonly CacheHeadersInterface $cacheHeaders,
         private readonly MessageCollector $messageCollector,
-        private readonly NotificationRenderer $notificationRenderer,
-        private readonly FragmentRenderer $fragmentRenderer
+        private readonly NotificationRendererInterface $notificationRenderer,
+        private readonly FragmentRendererInterface $fragmentRenderer,
+        private readonly ActionResponse $actionResponse
     ) {
     }
+
+    /**
+     * The action name of the `hyperion_htmx_action_response` event (ActionResponse::ACTION_*).
+     *
+     * @return string
+     */
+    abstract protected function actionName(): string;
 
     /**
      * @param mixed $result
@@ -62,17 +84,21 @@ abstract class AbstractCartMutationPlugin
             $messages['html'] = trim($messages['html'] . ' ' . implode(' ', $errors));
             $messages['has_error'] = true;
         }
-        $tone = $messages['has_error'] ? NotificationRenderer::TONE_ERROR : NotificationRenderer::TONE_SUCCESS;
+        $tone = $messages['has_error']
+            ? NotificationRendererInterface::TONE_ERROR
+            : NotificationRendererInterface::TONE_SUCCESS;
 
         $response = $this->resultRawFactory->create();
         $response->setHeader('Content-Type', 'text/html; charset=UTF-8', true);
-        $response->setContents(
+        $response->setContents($this->actionResponse->build(
+            $this->actionName(),
+            $messages,
             $this->fragmentRenderer->render(self::CART_HANDLE, self::CART_BLOCK)
             . "\n"
             . $this->fragmentRenderer->render(self::COUNT_HANDLE, self::COUNT_BLOCK, ['oob' => true])
             . "\n"
             . $this->notificationRenderer->render($messages['html'], $tone, true)
-        );
+        ));
 
         return $this->cacheHeaders->applyPrivate($response);
     }

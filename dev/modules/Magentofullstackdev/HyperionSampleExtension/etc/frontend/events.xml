@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The two Hyperion events: each observer appends an out of band marker
+    fragment to the answer when the markers are on.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="hyperion_header_state_render_after">
+        <observer name="hyperion_sample_header_state_marker"
+                  instance="Magentofullstackdev\HyperionSampleExtension\Observer\HeaderStateMarker"/>
+    </event>
+    <event name="hyperion_htmx_action_response">
+        <observer name="hyperion_sample_action_response_marker"
+                  instance="Magentofullstackdev\HyperionSampleExtension\Observer\ActionResponseMarker"/>
+    </event>
+</config>

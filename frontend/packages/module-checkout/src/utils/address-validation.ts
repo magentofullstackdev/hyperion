@@ -16,12 +16,46 @@
  * examples) and lets the shopper continue. `postcodeWarning()` is that
  * descriptive hint; `isAddressComplete()` never reads it, so a postcode of
  * an unexpected format is sent to Magento unchanged.
+ *
+ * The fields a store declares on top of the built-in ones
+ * (`hyperion.addressFields`) join the same predicate: their check lives in
+ * the address field chunk (`components/address-fields.ts`), loaded before
+ * the mount only when the list is not empty (`optional-sections.ts`), which
+ * installs its check and its form renderer here (`installDeclaredFields()`).
+ * Until then nothing is added and the forms show the built-in fields only.
  */
+import { Signal } from 'signal-polyfill';
+
 import type { Address } from '../types/address.js';
 import type { FieldVisibility, PostcodePattern } from '../types/config.js';
 import { peekCheckoutConfig } from '../bootstrap-config.js';
 import { hasRequiredNameFields, missingRequiredNameFields } from './name-fields.js';
 import { regionListForCountry } from './region.js';
+
+/** The form an address is checked for; without one the declared field check decides from the address. */
+export type AddressFormMode = 'shipping' | 'billing';
+
+/** What `<address-form>` hands the renderer of the declared fields. */
+export interface DeclaredFieldsHost {
+    readonly mode: AddressFormMode;
+    readonly idPrefix: string;
+    readonly address: Partial<Address>;
+    /** The field's error may show (it lost the focus, or a validation was requested). */
+    isTouched(code: string): boolean;
+    touch(code: string): void;
+    change(next: Partial<Address>): void;
+}
+
+/** What the address field chunk installs. */
+export interface DeclaredFields {
+    /** The codes of the declared fields an address still needs, in form order. */
+    missing(addr: Partial<Address>, form: AddressFormMode | undefined): readonly string[];
+    /** The controls of the declared fields of an address form. */
+    render(host: DeclaredFieldsHost): unknown;
+}
+
+/** The installed declared fields; null until the chunk arrived. A signal: forms and selectors follow it. */
+export const declaredFields = new Signal.State<DeclaredFields | null>(null);
 
 export type PostcodePatterns = Readonly<Record<string, readonly PostcodePattern[]>>;
 
@@ -215,11 +249,13 @@ export function isRegionMissing(
  * controls): the always-required fields, the configured required fields,
  * a postcode where the country requires one (its format is a warning, see
  * `postcodeWarning()`), a region where the country requires one and the
- * required name fields. Empty for an address that is complete.
+ * required name fields, then the declared fields of `form` (by their code).
+ * Empty for an address that is complete. Reads a signal.
  */
 export function missingAddressFields(
     addr: Partial<Address> | null | undefined,
-    cfg: AddressFieldConfig = readAddressFieldConfig()
+    cfg: AddressFieldConfig = readAddressFieldConfig(),
+    form?: AddressFormMode
 ): readonly string[] {
     const a: Partial<Address> = addr ?? {};
     const missing: string[] = [];
@@ -234,14 +270,17 @@ export function missingAddressFields(
     if (isRegionMissing(a, cfg)) missing.push('region');
     if (cfg.showTelephone === 'req' && !filled(a.telephone)) missing.push('telephone');
     if (cfg.showFax === 'req' && !filled(a.fax)) missing.push('fax');
+    const declared = declaredFields.get();
+    if (declared !== null) missing.push(...declared.missing(a, form));
     return missing;
 }
 
 /** Whether the address can be sent to Magento: nothing of `missingAddressFields()` is missing. */
 export function isAddressComplete(
     addr: Partial<Address> | null | undefined,
-    cfg: AddressFieldConfig = readAddressFieldConfig()
+    cfg: AddressFieldConfig = readAddressFieldConfig(),
+    form?: AddressFormMode
 ): addr is Address {
     if (!addr) return false;
-    return missingAddressFields(addr, cfg).length === 0;
+    return missingAddressFields(addr, cfg, form).length === 0;
 }

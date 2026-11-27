@@ -148,7 +148,7 @@
 "Order Summary","Resumen del pedido"
 "Order items","Artículos del pedido"
 "Order status","Estado del pedido"
-"Out of Stock","Agotado"
+"Out of stock","Agotado"
 "Pagination","Paginación"
 "Payment Method","Forma de pago"
 "Personal information","Información personal"
@@ -318,3 +318,4 @@
 "Bank Routing Number","Número de ruta bancaria"
 "Are you sure you want to delete this ACH Direct Debit account number ending in: %1?","¿Seguro que desea eliminar esta cuenta de débito directo ACH cuyo número termina en: %1?"
 "Shopping cart, items: %1","Carrito de compras, artículos: %1"
+"There are no feeds available.","No hay feeds disponibles."

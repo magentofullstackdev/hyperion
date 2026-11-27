@@ -40,6 +40,19 @@ use Psr\Log\LoggerInterface;
 class LogoResolver
 {
     /**
+     * Height in pixels the header and footer draw the logo at (`h-10`).
+     */
+    public const RENDERED_HEIGHT = 40;
+
+    /**
+     * Width of the logo box when the store configures no logo size.
+     */
+    public const DEFAULT_WIDTH = 140;
+
+    private const XML_PATH_LOGO_WIDTH = 'design/header/logo_width';
+    private const XML_PATH_LOGO_HEIGHT = 'design/header/logo_height';
+
+    /**
      * @param StoreManagerInterface $storeManager
      * @param ScopeConfigInterface $scopeConfig
      * @param AssetRepository $assetRepo
@@ -101,6 +114,38 @@ class LogoResolver
         } catch (\Throwable $e) {
             $this->logger->error('Hyperion LogoResolver: failed to get logo alt: ' . $e->getMessage());
             return $this->getStoreName();
+        }
+    }
+
+    /**
+     * The `width` / `height` attributes of the logo image: the box the header and footer draw.
+     *
+     * The templates draw the logo RENDERED_HEIGHT pixels high with an automatic width, so
+     * before the image arrives the browser sizes the box from these attributes. The
+     * configured logo width and height (Design > Header) give the image's aspect ratio,
+     * scaled here to the drawn height, so the attributes are the drawn size and the box
+     * does not change when the image loads. Without both values the box is
+     * DEFAULT_WIDTH x RENDERED_HEIGHT.
+     *
+     * @return array{width: int, height: int}
+     */
+    public function getLogoDimensions(): array
+    {
+        $fallback = ['width' => self::DEFAULT_WIDTH, 'height' => self::RENDERED_HEIGHT];
+        try {
+            $width = (int) $this->scopeConfig->getValue(self::XML_PATH_LOGO_WIDTH, ScopeInterface::SCOPE_STORE);
+            $height = (int) $this->scopeConfig->getValue(self::XML_PATH_LOGO_HEIGHT, ScopeInterface::SCOPE_STORE);
+            if ($width <= 0 || $height <= 0) {
+                return $fallback;
+            }
+
+            return [
+                'width' => max(1, (int) round(self::RENDERED_HEIGHT * $width / $height)),
+                'height' => self::RENDERED_HEIGHT,
+            ];
+        } catch (\Throwable $e) {
+            $this->logger->error('Hyperion LogoResolver: failed to get logo size: ' . $e->getMessage());
+            return $fallback;
         }
     }
 

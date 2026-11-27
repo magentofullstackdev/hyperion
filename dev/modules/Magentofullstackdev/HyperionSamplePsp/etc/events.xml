@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Copies what the storefront sends in paymentMethod.additional_data onto
+    the payment (global: the order is placed through REST). The "save card"
+    flag (is_active_payment_token_enabler) is copied by core's vault observer.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="payment_method_assign_data_hyperion_sample_card">
+        <observer name="hyperion_sample_card_data_assign"
+                  instance="Magentofullstackdev\HyperionSamplePsp\Observer\CardDataAssignObserver"/>
+    </event>
+    <event name="payment_method_assign_data_hyperion_sample_form">
+        <observer name="hyperion_sample_form_data_assign"
+                  instance="Magentofullstackdev\HyperionSamplePsp\Observer\FormDataAssignObserver"/>
+    </event>
+</config>

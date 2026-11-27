@@ -148,7 +148,7 @@
 "Order Summary","Bestillingssammendrag"
 "Order items","Bestilte varer"
 "Order status","Bestillingsstatus"
-"Out of Stock","Ikke på lager"
+"Out of stock","Ikke på lager"
 "Pagination","Sidenavigering"
 "Payment Method","Betalingsmåte"
 "Personal information","Personlig informasjon"
@@ -318,3 +318,4 @@
 "Bank Routing Number","Bankens rutingnummer"
 "Are you sure you want to delete this ACH Direct Debit account number ending in: %1?","Er du sikker på at du vil slette denne ACH-direktebelastningskontoen med kontonummer som slutter på: %1?"
 "Shopping cart, items: %1","Handlekurv, varer: %1"
+"There are no feeds available.","Det finnes ingen tilgjengelige feeder."

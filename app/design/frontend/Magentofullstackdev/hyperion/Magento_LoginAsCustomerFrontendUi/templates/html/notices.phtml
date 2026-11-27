@@ -11,7 +11,10 @@ declare(strict_types=1);
  * header-state request (`hyperion/header/state`) fills it out-of-band
  * with the banner when the session is an admin impersonation (fragment
  * `hyperion_customer_lac_notice` of Magentofullstackdev_HyperionCustomer).
- * No Knockout, no customer-data sections, no `x-magento-init`.
+ * No Knockout, no customer-data sections, no `x-magento-init`. Core's
+ * `login-as-customer-notice-links` children are not printed here (they would
+ * be cached for every visitor): the banner fragment has a container of the
+ * same name.
  *
  * @var \Magento\Framework\View\Element\Template $block
  * @var \Magento\Framework\Escaper $escaper

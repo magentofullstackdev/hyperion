@@ -18,6 +18,7 @@ use Magento\Quote\Model\Quote\Address;
 use Magento\Quote\Model\Quote\Address\Rate;
 use Magento\Quote\Model\ResourceModel\Quote\Address\Collection as AddressCollection;
 use Magento\Quote\Model\ResourceModel\Quote\Address\CollectionFactory as AddressCollectionFactory;
+use Magentofullstackdev\HyperionCheckout\Model\Checkout\AddressFieldsValues;
 use Magentofullstackdev\HyperionCheckout\Model\Checkout\InitialStateConfigProvider;
 use Magentofullstackdev\HyperionCheckout\Model\Checkout\QuoteAddressExporter;
 use Magentofullstackdev\HyperionCheckout\Model\Config\Source\RateFields;
@@ -154,6 +155,19 @@ class InitialStateConfigProviderTest extends TestCase
     }
 
     /**
+     * Declared field values read from a `fiscal_code` value of the address data, none without it.
+     */
+    private function declaredValues(): AddressFieldsValues
+    {
+        $values = $this->createStub(AddressFieldsValues::class);
+        $values->method('export')->willReturnCallback(static function (Address $address): array {
+            $code = $address->getData('fiscal_code');
+            return $code === null ? [] : ['custom_attributes' => [['attribute_code' => 'fiscal_code', 'value' => $code]]];
+        });
+        return $values;
+    }
+
+    /**
      * @param Address[] $storedAddresses
      * @param string|null $rateFields
      */
@@ -224,7 +238,8 @@ class InitialStateConfigProviderTest extends TestCase
             new QuoteAddressExporter(),
             new RateFields(),
             $scopeConfig,
-            $logger ?? $this->createStub(LoggerInterface::class)
+            $logger ?? $this->createStub(LoggerInterface::class),
+            $this->declaredValues()
         );
     }
 
@@ -480,6 +495,45 @@ class InitialStateConfigProviderTest extends TestCase
 
         self::assertSame(13, $addresses['billing']['customer_address_id']);
         self::assertFalse($addresses['billingSameAsShipping']);
+    }
+
+    public function testACustomerBillingAddressThatDiffersOnlyByADeclaredFieldStaysSeparate(): void
+    {
+        $shipping = $this->address(['customer_address_id' => 12] + self::ADDRESS, [self::FLAT_RATE]);
+        $billing = $this->address(
+            ['address_type' => 'billing', 'customer_address_id' => 12, 'fiscal_code' => 'RSSMRA80A01H501U']
+            + self::ADDRESS
+        );
+        $provider = $this->provider($this->quote(['customer_id' => 7]), [$shipping, $billing], true);
+        $addresses = $this->initial($provider->getConfig())['quoteAddresses'] ?? null;
+
+        self::assertFalse($addresses['billingSameAsShipping']);
+        self::assertArrayNotHasKey('custom_attributes', $addresses['shipping']);
+        self::assertSame(
+            [['attribute_code' => 'fiscal_code', 'value' => 'RSSMRA80A01H501U']],
+            $addresses['billing']['custom_attributes']
+        );
+    }
+
+    public function testACustomerWithEqualDeclaredValuesStillBillsToTheShippingAddress(): void
+    {
+        $shipping = $this->address(
+            ['customer_address_id' => 12, 'fiscal_code' => 'RSSMRA80A01H501U'] + self::ADDRESS,
+            [self::FLAT_RATE]
+        );
+        $billing = $this->address(
+            ['address_type' => 'billing', 'customer_address_id' => 12, 'fiscal_code' => 'RSSMRA80A01H501U']
+            + self::ADDRESS
+        );
+        $provider = $this->provider($this->quote(['customer_id' => 7]), [$shipping, $billing], true);
+        $addresses = $this->initial($provider->getConfig())['quoteAddresses'] ?? null;
+
+        self::assertNull($addresses['billing']);
+        self::assertTrue($addresses['billingSameAsShipping']);
+        self::assertSame(
+            [['attribute_code' => 'fiscal_code', 'value' => 'RSSMRA80A01H501U']],
+            $addresses['shipping']['custom_attributes']
+        );
     }
 
     public function testACustomerWithoutAStoredBillingAddressBillsToTheShippingAddress(): void

@@ -27,6 +27,8 @@ use Psr\Log\LoggerInterface;
  * answered with a null vary string and deleted the cookie the currency or
  * store switch had just set, and the next page came out of the full page
  * cache in the default currency. Same rules as core's updateContext().
+ *
+ * @internal
  */
 class StoreContextPlugin
 {

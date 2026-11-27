@@ -26,7 +26,6 @@
  */
 import type { CartItem } from '../../../types/quote.js';
 import type { Totals } from '../../../types/totals.js';
-import { t } from '../../../utils/i18n.js';
 import { formatAmount } from './quote.js';
 import type { GooglePayDisplayItem, PayPalLineItem } from './types.js';
 
@@ -148,7 +147,8 @@ function displayItem(label: string, amount: number): GooglePayDisplayItem {
 export function buildGooglePayDisplayItems(
     items: readonly CartItem[],
     totals: Totals | null,
-    priceIncludesTax: boolean
+    priceIncludesTax: boolean,
+    t: (source: string) => string
 ): GooglePayDisplayItem[] {
     if (!totals) return [];
     const priced = baseItems(items, priceIncludesTax);
@@ -161,8 +161,8 @@ export function buildGooglePayDisplayItems(
     const shipping = toNumber(priceIncludesTax ? totals['base_shipping_incl_tax'] : totals['base_shipping_amount'])
         || toNumber(totals['base_shipping_amount']);
     const tax = toNumber(totals['base_tax_amount']);
-    if (discount > 0) lines.push(displayItem(t('Hyperion_Checkout::braintree_line_discount'), -discount));
-    if (shipping > 0) lines.push(displayItem(t('Hyperion_Checkout::shipping_heading'), shipping));
-    if (!priceIncludesTax && tax > 0) lines.push(displayItem(t('Hyperion_Checkout::braintree_line_tax'), tax));
+    if (discount > 0) lines.push(displayItem(t('Discount'), -discount));
+    if (shipping > 0) lines.push(displayItem(t('Shipping'), shipping));
+    if (!priceIncludesTax && tax > 0) lines.push(displayItem(t('Tax'), tax));
     return lines.length > MAX_LINE_ITEMS ? [] : lines;
 }

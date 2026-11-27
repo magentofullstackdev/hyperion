@@ -10,6 +10,9 @@
  * without the "an order is being placed" latch: what the order pipeline
  * evaluates after it took the latch itself.
  *
+ * The gates of the checkout's extensions (`extension/gates.ts`) come
+ * last, as in `placeOrderBlocker()`.
+ *
  * Agreements gate: if `expectedAgreements` is set by bootstrap
  * (from `checkoutConfig.checkoutAgreements`), every non-auto agreement
  * must appear in `acceptedAgreements`. When the admin has no active
@@ -18,7 +21,10 @@
  */
 import { Signal } from 'signal-polyfill';
 
-import { getPaymentRenderer } from '../components/payment-renderers/registry.js';
+import { selectedRowKey } from '../components/payment-host/payment-rows.js';
+import { rowState } from '../components/payment-host/row-state.js';
+import { billingFollowsShipping, effectiveShippingAddress } from '../extension/address-override.js';
+import { extensionGateMessage } from '../extension/gates.js';
 import { isAddressComplete } from '../utils/address-validation.js';
 import { offeredPaymentMethods } from '../utils/payment-offer.js';
 import { EMAIL_SHAPE } from '../validation/rules.js';
@@ -52,14 +58,14 @@ export function createSelectors(store: Store): {
 
     const shippingAddressValid = new Signal.Computed<boolean>(() => {
         if (store.isVirtual.get()) return true;
-        return isAddressComplete(store.shippingAddress.get());
+        return isAddressComplete(effectiveShippingAddress(store), undefined, 'shipping');
     });
 
     const billingAddressValid = new Signal.Computed<boolean>(() => {
-        if (store.billingSameAsShipping.get() && !store.isVirtual.get()) {
+        if (billingFollowsShipping(store) && !store.isVirtual.get()) {
             return shippingAddressValid.get();
         }
-        return isAddressComplete(store.billingAddress.get());
+        return isAddressComplete(store.billingAddress.get(), undefined, 'billing');
     });
 
     // A billing address entered on its own (virtual quote, or "same as
@@ -68,7 +74,7 @@ export function createSelectors(store: Store): {
     // waiting.
     const billingReady = new Signal.Computed<boolean>(() => {
         if (store.quoteWritesPending.get() > 0) return false;
-        if (store.billingSameAsShipping.get() && !store.isVirtual.get()) return true;
+        if (billingFollowsShipping(store) && !store.isVirtual.get()) return true;
         return !store.isSavingBilling.get() && store.billingSynced.get() && !store.billingDirty.get();
     });
 
@@ -115,13 +121,16 @@ export function createSelectors(store: Store): {
             .some((m) => m.code === code);
     });
 
-    // A renderer may hold Place Order back until the shopper finished a step
-    // inside it (PayPal authorization). `isReady` reads signals, so this
-    // computed follows it.
+    // A payment element may hold Place Order back until the shopper finished
+    // a step inside it (PayPal authorization, a required field): what its
+    // row last reported (`hyperion-payment:valid` / `:invalid`). A row whose
+    // element could not be set up or gave up is not ready either.
     const paymentMethodReady = new Signal.Computed<boolean>(() => {
         const code = store.selectedPaymentMethod.get();
         if (code === null) return false;
-        return getPaymentRenderer(code)?.isReady?.() ?? true;
+        const key = selectedRowKey(code);
+        const row = key === null ? null : rowState(key);
+        return row === null || (row.valid && !row.fatal && row.failure === null);
     });
 
     const agreementsAccepted = new Signal.Computed<boolean>(() => {
@@ -145,7 +154,8 @@ export function createSelectors(store: Store): {
             agreementsAccepted.get() &&
             store.minimumOrderError.get() === null &&
             !store.isSettlingTotals.get() &&
-            store.totals.get() !== null
+            store.totals.get() !== null &&
+            extensionGateMessage() === null
         );
     });
 

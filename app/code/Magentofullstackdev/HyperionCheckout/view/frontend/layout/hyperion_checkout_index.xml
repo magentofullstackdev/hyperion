@@ -61,6 +61,15 @@
                 Result\Page uncacheable (Varnish + built-in FPC both
                 honor it). Don't remove this attribute.
             -->
+            <!-- Express buttons above the checkout app (none registered by default). -->
+            <block class="Magento\Framework\View\Element\Template"
+                   name="hyperion.express.checkout"
+                   before="hyperion.checkout"
+                   template="Magentofullstackdev_HyperionCheckout::express/slot.phtml">
+                <arguments>
+                    <argument name="placement" xsi:type="string">checkout-top</argument>
+                </arguments>
+            </block>
             <block class="Magentofullstackdev\HyperionCheckout\Block\Checkout"
                    name="hyperion.checkout"
                    template="Magentofullstackdev_HyperionCheckout::checkout.phtml"

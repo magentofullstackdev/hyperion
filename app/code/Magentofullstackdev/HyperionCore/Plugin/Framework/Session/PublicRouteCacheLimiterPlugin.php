@@ -32,6 +32,8 @@ use Psr\Log\LoggerInterface;
  * The plugin is scoped to paths registered in PublicRouteRegistry so
  * session-specific routes (cart, customer, checkout) keep the strict
  * nocache semantics they require.
+ *
+ * @internal
  */
 class PublicRouteCacheLimiterPlugin
 {

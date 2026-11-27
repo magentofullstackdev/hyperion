@@ -159,6 +159,9 @@ export class HyperionRecaptcha extends LitElement {
     async _renderWidget() {
         if (this._widgetId !== null) return this._widgetId;
         const grecaptcha = await loadApi(this._apiUrl());
+        // A second call made while the script loaded (the element was moved
+        // into another form and observed again) finds the widget rendered.
+        if (this._widgetId !== null) return this._widgetId;
         const host = this.querySelector(WIDGET_SELECTOR);
         if (!host) throw new Error('reCAPTCHA widget host missing');
         this._widgetId = grecaptcha.render(host, {
@@ -217,17 +220,36 @@ export class HyperionRecaptcha extends LitElement {
                 return;
             }
             this._input.value = token;
-            this._form.requestSubmit(submitter);
+            this._resubmit(submitter);
         }).catch((err) => {
             this._report(err);
             // Do not strand the shopper: submit once without a token and let
             // the server report the reCAPTCHA failure.
             this._bypassOnce = true;
-            this._form.requestSubmit(submitter);
-            // The submit event is dispatched synchronously; a form that failed
-            // its validation dispatched none and must not keep the bypass.
-            this._bypassOnce = false;
+            try {
+                this._resubmit(submitter);
+            } catch (resubmitError) {
+                this._report(resubmitError);
+            } finally {
+                // The submit event is dispatched synchronously; a form that
+                // failed its validation (or a submission that threw) dispatched
+                // none and must not keep the bypass.
+                this._bypassOnce = false;
+            }
         });
+    }
+
+    /**
+     * Submit the form the element sits in NOW. While the token was minted the
+     * element may have been moved into another form (the cart coupon form
+     * takes its children out of the server rendered skeleton): that form is
+     * the one to submit, and the button pressed in the old one is not its
+     * submitter (`requestSubmit()` throws on a button of another form).
+     */
+    _resubmit(submitter) {
+        const form = this.isConnected ? this._form : null;
+        if (!form) return;
+        form.requestSubmit(submitter && submitter.form === form ? submitter : null);
     }
 
     _highlight() {

@@ -15,6 +15,11 @@
  *
  * `disabled` is the list being refreshed: the row keeps its look and its
  * selection, the radio cannot be changed.
+ *
+ * On a store with shipping extensions the selected row carries the host of
+ * the `below-method` slot under its label (`data-shipping-method-extension`,
+ * empty unless an extension matches the rate), never inside it: the
+ * controls of an extension are not part of the radio's label.
  */
 import { LitElement, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
@@ -43,6 +48,7 @@ export class ShippingMethodRow extends LitElement {
         if (!usable) return this._renderError(m);
         const id = `hc-ship-${m.carrier_code}-${m.method_code}`;
         const selected = this.selected;
+        const extended = selected && (getCheckoutConfig().hyperion?.shippingExtensions?.length ?? 0) > 0;
         return html`
             <label for=${id}
                    class="flex items-start justify-between gap-3 rounded-control border p-3 ${this.disabled ? 'cursor-default' : 'cursor-pointer'} ${selected ? 'border-accent bg-accent/5' : 'border-subtle hover:border-accent bg-surface'}">
@@ -66,6 +72,12 @@ export class ShippingMethodRow extends LitElement {
                     ${this._priceLabel(m)}
                 </span>
             </label>
+            ${extended
+                ? html`<shipping-extension-host placement="below-method"
+                                                data-shipping-method-extension
+                                                .carrier=${m.carrier_code}
+                                                .method=${m.method_code}></shipping-extension-host>`
+                : nothing}
         `;
     }
 

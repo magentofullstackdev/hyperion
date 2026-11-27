@@ -72,6 +72,17 @@ export function assignCustomerBillingAddress(req: BillingAddressRequest): Promis
 }
 
 /**
+ * The order id of a payment-information answer as a number. Some platform
+ * versions answer the id as a JSON string ("167"): read as it comes, such
+ * an order would reach the renderers without an id and skip their step
+ * after the order. An answer that is not an id is handed on unchanged.
+ */
+export function orderIdOf(answer: unknown): number {
+    if (typeof answer === 'string' && /^[1-9]\d*$/.test(answer.trim())) return Number(answer.trim());
+    return answer as number;
+}
+
+/**
  * POST payment-information: places the order. `headers` carries the
  * anti-abuse proof of the request (reCAPTCHA token, CAPTCHA answer). Never
  * retried: the quote is read instead to learn what a lost answer meant.
@@ -81,7 +92,7 @@ export function placeGuestOrder(
     req: PaymentInformationRequest,
     headers: Readonly<Record<string, string>> = {}
 ): Promise<number> {
-    return apiFetch<number>(
+    return apiFetch<unknown>(
         `guest-carts/${encodeURIComponent(maskedCartId)}/payment-information`,
         {
             method: 'POST',
@@ -91,14 +102,14 @@ export function placeGuestOrder(
             timeoutMs: PLACE_ORDER_TIMEOUT_MS,
             headers,
         }
-    );
+    ).then(orderIdOf);
 }
 
 export function placeCustomerOrder(
     req: PaymentInformationRequest,
     headers: Readonly<Record<string, string>> = {}
 ): Promise<number> {
-    return apiFetch<number>(
+    return apiFetch<unknown>(
         'carts/mine/payment-information',
         {
             method: 'POST',
@@ -108,7 +119,7 @@ export function placeCustomerOrder(
             timeoutMs: PLACE_ORDER_TIMEOUT_MS,
             headers,
         }
-    );
+    ).then(orderIdOf);
 }
 
 /**

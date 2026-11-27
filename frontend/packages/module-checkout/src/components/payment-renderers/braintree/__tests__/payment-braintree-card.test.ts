@@ -6,13 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Store } from '../../../../store/index.js';
 import { setActiveCatalogForTests, t } from '../../../../utils/i18n.js';
 import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
-import { getPaymentRenderer } from '../../registry.js';
 import { PaymentBraintreeCard, resolveAcceptedCardType } from '../payment-braintree-card.js';
 import {
     DEVICE_DATA,
     installBraintreeDouble,
     installCheckoutConfig,
     installStore,
+    mountBraintreeElement,
     setBaseGrandTotal,
     uninstallBraintreeDouble,
     type BraintreeDouble,
@@ -20,19 +20,28 @@ import {
 
 const TOKENIZED = { nonce: 'tokencc_fixture', details: { bin: '411111', lastFour: '1111' } };
 
+let mounted: { element: PaymentBraintreeCard; events: Array<{ type: string; detail: unknown }> } | null = null;
+
+function mountElement(): PaymentBraintreeCard {
+    mounted = mountBraintreeElement<PaymentBraintreeCard>('hc-payment-braintree-card', 'braintree', currentStore);
+    return mounted.element;
+}
+
 async function mountCard(sdk: BraintreeDouble): Promise<PaymentBraintreeCard> {
-    const el = document.createElement('payment-braintree-card');
-    document.body.appendChild(el);
+    const el = mountElement();
     await vi.waitFor(() => expect(sdk.hostedFields.on).toHaveBeenCalled());
     await el.updateComplete;
     return el;
 }
 
-function beforePlaceOrder(): Promise<Record<string, unknown>> {
-    const hook = getPaymentRenderer('braintree')?.beforePlaceOrder;
-    if (!hook) throw new Error('braintree renderer is not registered');
-    return hook();
+/** What Place Order collects: the `additional_data` of the element's payment data. */
+async function beforePlaceOrder(): Promise<Record<string, unknown>> {
+    if (mounted === null) throw new Error('no card element is mounted');
+    const data = await mounted.element.getPaymentData();
+    return { ...(data.additional_data ?? {}) };
 }
+
+let currentStore: Store;
 
 describe('<payment-braintree-card>', () => {
     let sdk: BraintreeDouble;
@@ -42,6 +51,8 @@ describe('<payment-braintree-card>', () => {
         setActiveCatalogForTests(enUS);
         installCheckoutConfig();
         store = installStore();
+        currentStore = store;
+        mounted = null;
         sdk = installBraintreeDouble();
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
@@ -51,9 +62,29 @@ describe('<payment-braintree-card>', () => {
         vi.restoreAllMocks();
     });
 
-    it('registers the renderer without touching the SDK', () => {
-        expect(getPaymentRenderer('braintree')?.component).toBe('payment-braintree-card');
+    it('declares its API version and is offered only with an active method and a client token, without touching the SDK', () => {
+        expect(PaymentBraintreeCard.hyperionApi).toBe('1');
+        expect(PaymentBraintreeCard.canMakePayment({ config: { isActive: true, clientToken: 'token' } })).toBe(true);
+        expect(PaymentBraintreeCard.canMakePayment({ config: { isActive: true, clientToken: '' } })).toBe(false);
+        expect(PaymentBraintreeCard.canMakePayment({ config: { isActive: false, clientToken: 'token' } })).toBe(false);
         expect(sdk.loader).not.toHaveBeenCalled();
+    });
+
+    it('names the Braintree reCAPTCHA form for its order when the store protects it', () => {
+        expect(PaymentBraintreeCard.hyperionRecaptchaAction({ hyperion: {} } as never)).toBe('place_order');
+        expect(PaymentBraintreeCard.hyperionRecaptchaAction({ hyperion: { recaptcha: { braintree: {} } } } as never)).toBe('braintree');
+    });
+
+    it('reports ready once the hosted fields are mounted, and busy around 3D Secure', async () => {
+        await mountCard(sdk);
+        expect(mounted?.events.map((event) => event.type)).toEqual(['ready']);
+        sdk.hostedFields.tokenize.mockResolvedValue(TOKENIZED);
+        sdk.threeDSecure.verifyCard.mockResolvedValue({ nonce: 'tokencc_3ds', liabilityShifted: true, liabilityShiftPossible: true });
+        await beforePlaceOrder();
+        expect(mounted?.events.slice(1)).toEqual([
+            { type: 'busy', detail: { busy: true } },
+            { type: 'busy', detail: { busy: false } },
+        ]);
     });
 
     it('mounts number, expiry and CVV hosted fields into its own containers', async () => {
@@ -202,7 +233,7 @@ describe('<payment-braintree-card>', () => {
             expect(sdk.threeDSecureCreate).toHaveBeenCalledWith(expect.objectContaining({ version: 2 }));
             const request = sdk.threeDSecure.verifyCard.mock.calls[0]?.[0];
             expect(request).toMatchObject({
-                amount: '56.29',
+                amount: '36.81',
                 nonce: 'tokencc_fixture',
                 bin: '411111',
                 email: 'roni_cost@example.com',
@@ -318,9 +349,10 @@ describe('<payment-braintree-card>', () => {
 
     it('shows a retry when the SDK cannot be loaded and blocks the order', async () => {
         sdk.loader.mockRejectedValue(new Error('network'));
-        const el = document.createElement('payment-braintree-card');
-        document.body.appendChild(el);
+        const el = mountElement();
         await vi.waitFor(() => expect(el.querySelector('[role="alert"]')).not.toBeNull());
+        // Shown with its own error instead of the placeholder.
+        expect(mounted?.events.map((event) => event.type)).toEqual(['ready']);
 
         expect(el.textContent).toContain(t('Hyperion_Checkout::braintree_init_failed'));
         await expect(beforePlaceOrder()).rejects.toThrow(t('Hyperion_Checkout::braintree_not_ready'));

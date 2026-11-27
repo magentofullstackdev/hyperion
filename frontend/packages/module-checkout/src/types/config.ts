@@ -10,6 +10,7 @@
  * stays untyped on purpose -- every future Magento patch or third-
  * party extension can add keys without invalidating this contract.
  */
+import type { HyperionExtensionConfig } from '../../extension-api.js';
 import type { CaptchaConfig, RecaptchaConfig } from './captcha.js';
 import type { CustomerData } from './customer.js';
 import type { ExtensionAttributes } from './common.js';
@@ -91,8 +92,14 @@ export interface AgreementsConfig {
 /**
  * Hyperion's own namespace (contributed by
  * `Hyperion\Checkout\Model\ConfigProvider`).
+ *
+ * The keys of the extension API (`HyperionExtensionConfig` of
+ * `extension-api.d.ts`) are optional here: a page rendered by an older
+ * module carries none of them. `normaliseCheckoutConfig()` fills every list
+ * with an empty one and the version with the bundle's own, so nothing past
+ * the boot has to test for their presence.
  */
-export interface HyperionConfig {
+export interface HyperionConfig extends Partial<HyperionExtensionConfig> {
     checkoutVersion: string;
     enabled: boolean;
     /**

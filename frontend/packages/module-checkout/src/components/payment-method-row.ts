@@ -2,132 +2,130 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * <payment-method-row> -- one selectable payment option.
+ * <payment-method-row> -- one selectable payment option, and the host of
+ * the payment element of its renderer entry.
  *
  * Usually one row per method. A vault method shows one row per stored token
- * instead: the list passes `token` and the row takes its title from the
- * provider's vault adapter (brand, last four, expiry).
+ * instead: the list passes the token and, once the payment host is there,
+ * the row takes its title from the entry's element class
+ * (`describeToken()`) or from the token details; the method title before.
+ *
+ * The selected row shows the element of its entry in its body: created once
+ * per row (`payment-host/mount.ts`), with its properties set before it is
+ * connected, and kept when the row is deselected, so a gateway that holds
+ * live state (hosted card fields, an authorization in progress) keeps it
+ * across a switch to another method and back. The body comes with the
+ * payment host (`payment-host/row-view.ts`): an entry that awaits its
+ * element's `ready` shows a placeholder of a fixed height until then, and
+ * an inline error with Retry when it does not come; a busy element is
+ * covered by a status line.
+ *
+ * A row whose entry module is still on its way (`pending`) holds its place
+ * and cannot be selected yet.
+ *
+ * `unsupported` turns the row into the diagnostic line of a method the
+ * checkout cannot render (shown only when the store asks for it): title,
+ * code, the reason and the module URL, never selectable; a module that
+ * failed to load offers Retry.
  */
 import { LitElement, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
+import { SignalWatcher } from '@lit-labs/signals';
 
-import type { PaymentMethodConfig } from '../types/payment.js';
-import { t } from '../utils/i18n.js';
-import { isRendererPending } from './payment-renderers/lazy-renderers.js';
-import { getPaymentRenderer, isSafeForGeneric } from './payment-renderers/registry.js';
-import { getVaultAdapter, type VaultToken } from './payment-renderers/vault-tokens.js';
-import './payment-renderers/payment-offline.js';
-import './payment-renderers/payment-generic.js';
-import './payment-renderers/payment-vault.js';
+import { loadEntry, loadPaymentHost, paymentHostNow } from './payment-host/host.js';
+import type { PaymentRow, UnsupportedRow } from './payment-host/payment-rows.js';
+import { rowKeyOf } from './payment-host/row-state.js';
 
-export class PaymentMethodRow extends LitElement {
-    @property({ type: Object }) public method!: PaymentMethodConfig;
-    @property({ attribute: false }) public token: VaultToken | null = null;
-    /** Changes when a lazily loaded renderer registered itself, so the row renders again. */
-    @property({ type: Number }) public renderersVersion = 0;
+export class PaymentMethodRow extends SignalWatcher(LitElement) {
+    @property({ attribute: false }) public row: PaymentRow | null = null;
+    @property({ attribute: false }) public unsupported: UnsupportedRow | null = null;
     @property({ type: Boolean }) public selected = false;
-
-    /**
-     * The renderer element of the selected row. It is kept across re-renders:
-     * gateway renderers hold live state (hosted card fields, a PayPal
-     * authorization in progress) that a fresh element would wipe whenever the
-     * method list is refreshed.
-     */
-    private _body: HTMLElement | null = null;
 
     public override createRenderRoot(): HTMLElement { return this; }
 
     public override render(): unknown {
-        const m = this.method;
-        const hasRenderer = getPaymentRenderer(m.code) !== null;
-        const safe = isSafeForGeneric(m.code);
-        const id = this.token ? `hc-pay-${this.token.key}` : `hc-pay-${m.code}`;
-        const title = this.token
-            ? getVaultAdapter(m.code)?.label(this.token) ?? m.title
-            : m.title;
-        // Not selectable: no renderer and the generic fallback cannot handle the method.
-        const disabled = !hasRenderer && !safe;
-        // A renderer on its way keeps the row at the height of a usable one:
-        // the "not supported" line is for a method that will stay disabled.
-        const unsupported = disabled && !isRendererPending(m.code);
+        const host = paymentHostNow();
+        if (this.unsupported !== null) {
+            if (host === null) return nothing;
+            return host.renderUnsupportedRow(this.unsupported, this._onRetryEntry);
+        }
+        const row = this.row;
+        if (row === null) return nothing;
+        const m = row.method;
+        const id = row.token ? `hc-pay-${row.token.key}` : `hc-pay-${m.code}`;
+        const title = row.token && host !== null ? host.tokenTitle(row) : m.title;
         return html`
-            <div class="rounded-md border ${this.selected ? 'border-accent bg-accent/5' : 'border-subtle bg-surface'} ${unsupported ? 'opacity-60' : ''}">
+            <div class="rounded-md border ${this.selected ? 'border-accent bg-accent/5' : 'border-subtle bg-surface'}">
                 <label for=${id}
-                       class="flex items-start gap-3 p-3 cursor-pointer ${disabled ? 'cursor-not-allowed' : ''}">
+                       class="flex items-start gap-3 p-3 cursor-pointer ${row.pending ? 'cursor-not-allowed' : ''}">
                     <input
                         id=${id}
                         type="radio"
                         name="payment_method"
                         class="mt-0.5 h-4 w-4 text-accent focus:ring-2 focus:ring-accent"
                         .checked=${this.selected}
-                        ?disabled=${disabled}
+                        ?disabled=${row.pending}
                         @change=${this._onSelect}
                     />
                     <span class="text-sm">
                         <span class="font-medium text-brand">${title}</span>
-                        ${unsupported
-                            ? html`<span class="block text-xs text-muted" data-payment-unsupported>
-                                  ${t('Hyperion_Checkout::payment_method_unsupported_hint')}
-                              </span>`
-                            : nothing}
                     </span>
                 </label>
-                ${this.selected ? this._renderSelectedBody() : this._dropBody()}
+                ${this.selected && host !== null ? host.renderRowBody(row, this._onRetryRow) : nothing}
             </div>
         `;
     }
 
-    private _renderSelectedBody(): unknown {
-        const renderer = getPaymentRenderer(this.method.code);
-        const safe = isSafeForGeneric(this.method.code);
-        if (renderer) {
-            return html`<div class="px-3 pb-3">
-                ${this._bodyElement(renderer.component, this.method.code)}
-            </div>`;
+    protected override updated(): void {
+        const row = this.row;
+        if (!this.selected || row === null || this.unsupported !== null) return;
+        const host = paymentHostNow();
+        if (host === null) {
+            void loadPaymentHost().then(() => this.requestUpdate(), (err: unknown) => {
+                console.error('[hyperion-checkout] the payment host could not be loaded', err);
+            });
+            return;
         }
-        this._body = null;
-        if (safe || isRendererPending(this.method.code)) {
-            // An offline method that needs nothing more, or a gateway whose
-            // module is on its way (a selection put back after a reload):
-            // nothing to show, and never the "not available" notice.
-            return null;
+        const body = this.querySelector<HTMLElement>('[data-payment-body]');
+        if (body === null) return;
+        const rowKey = rowKeyOf(row.method.code, row.token);
+        const element = host.elementFor({
+            rowKey,
+            entry: row.entry,
+            method: { code: row.method.code, title: row.method.title },
+            token: row.token as never,
+        });
+        if (element === null) {
+            void loadEntry(row.entry);
+            return;
         }
-        return html`<div class="px-3 pb-3">
-            <payment-generic code=${this.method.code}></payment-generic>
-        </div>`;
-    }
-
-    /**
-     * Render a custom element dynamically. `tag` is trusted because it comes
-     * from `getPaymentRenderer()`, which only returns registered (internal)
-     * tag names.
-     */
-    private _bodyElement(tag: string, code: string): HTMLElement {
-        const current = this._body;
-        if (current && current.localName === tag && current.getAttribute('code') === code) {
-            return current;
-        }
-        const el = document.createElement(tag);
-        el.setAttribute('code', code);
-        this._body = el;
-        return el;
-    }
-
-    private _dropBody(): null {
-        this._body = null;
-        return null;
+        host.attach(body, rowKey, element);
     }
 
     private _onSelect(): void {
+        const row = this.row;
+        if (row === null) return;
         this.dispatchEvent(new CustomEvent('payment-select', {
             detail: {
-                code: this.method.code,
-                ...(this.token ? { publicHash: this.token.publicHash } : {}),
+                code: row.method.code,
+                ...(row.token ? { publicHash: row.token.publicHash } : {}),
             },
             bubbles: true,
             composed: true,
         }));
     }
+
+    private _onRetryRow = (): void => {
+        const row = this.row;
+        if (row === null) return;
+        paymentHostNow()?.retryRow(rowKeyOf(row.method.code, row.token));
+        this.requestUpdate();
+    };
+
+    private _onRetryEntry = (): void => {
+        const entry = this.unsupported?.entry;
+        if (entry) void loadPaymentHost().then((host) => host.retryEntry(entry));
+    };
 }
 
 if (!customElements.get('payment-method-row')) {

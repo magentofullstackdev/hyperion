@@ -5,7 +5,13 @@ declare(strict_types=1);
 /**
  * @var \Magentofullstackdev\HyperionCustomer\Block\Wishlist\Fragment $block
  * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
  */
+// The cached header prints no wish list placeholder while the feature is off,
+// so an out-of-band fragment would have no target.
+if (!$viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\StoreOptions::class)->isWishlistEnabled()) {
+    return;
+}
 $itemMap = $block->getItemMap();
 $summaries = $block->getItemSummaries();
 $count = count($itemMap) ?: $block->getItemCount();

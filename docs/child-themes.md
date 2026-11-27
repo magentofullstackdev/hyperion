@@ -256,6 +256,14 @@ only. The aside hides itself through a `:has()` rule in the parent's
 `Magentofullstackdev_HyperionSearch::suggest.phtml` keeps those three
 attributes to keep the recent searches.
 
+**Print buttons.** A `<button>` or `<a>` that carries `data-hyperion-print`
+opens the browser's print dialog on a click (`lib/print.js`, one delegated
+listener; a disabled control is ignored and a link does not navigate). The
+compare page's "Print This Page" button uses it. The attribute only acts on
+buttons and links: the order print pages carry
+`data-hyperion-print="invoice|shipment|creditmemo"` on their content
+wrappers, which a click does not print.
+
 ## Overriding templates and layouts
 
 Templates: copy the parent file to the same path in your theme, for example
@@ -383,15 +391,18 @@ add a second one.
 
 All three are published as source (`src/`, `tailwind.config.ts`, README,
 LICENSE); a TypeScript-aware bundler such as Vite is required. Versions move
-together with the Composer packages (`0.9.0-beta.6`).
+together with the Composer packages (`0.9.0-beta.7`).
 
 | Package | Contents | Exports |
 |---|---|---|
-| `@magentofullstackdev/hyperion-shared` | design tokens, Tailwind preset, `HyperionLightElement`, HTML sanitizer | `.` (barrel), `./tokens/*` (`colors.css`, `spacing.css`, `typography.css`, `index.css`), `./tailwind/preset`, `./lit`, `./lit/*`, `./html`. Peer dependencies: `lit ^3.1.2`, `tailwindcss ^3.4.0` |
+| `@magentofullstackdev/hyperion-shared` | design tokens, Tailwind preset, `HyperionLightElement`, HTML sanitizer | `.` (barrel), `./tokens/*` (`colors.css`, `spacing.css`, `typography.css`, `index.css`), `./tailwind/preset`, `./lit`, `./lit/*`, `./html`, `./captcha` (the base class of the image CAPTCHA field). Dependency: `@tailwindcss/typography`. Peer dependencies: `lit ^3.1.2`, `tailwindcss ^3.4.0` |
 | `@magentofullstackdev/hyperion-theme` | theme entry, `hyperion-*` components, critical CSS sources, the `hyperion` CLI (`bin/hyperion.js`) | `main: ./src/js/entry.js`; bin `hyperion`. Dependencies: `hyperion-shared`, `lit`, `htmx.org`, `photoswipe` |
-| `@magentofullstackdev/hyperion-checkout` | the Lit checkout application (`<checkout-app>`), payment renderers, REST client, signal store | `main: ./src/main.ts`. Dependencies: `hyperion-shared`, `lit`, `@lit-labs/signals`, `signal-polyfill` |
+| `@magentofullstackdev/hyperion-checkout` | the Lit checkout application (`<checkout-app>`), payment renderers, REST client, signal store, the extension types and the testing kit | `main: ./src/main.ts`, `./extension-api` (types), `./testing`, `./testing/harness.html`, `./fixtures/*.json`, `./src/*`. Dependencies: `hyperion-shared`, `lit`, `@lit-labs/signals`, `signal-polyfill` |
 
 The scaffolded child theme depends on all three. Note that the checkout is a
-separate bundle served by the `HyperionCheckout` module, not by the theme:
-extending it (for example with a payment renderer) means rebuilding that
-bundle, see [Checkout](./checkout.md).
+separate bundle served by the `HyperionCheckout` module, not by the theme. A
+payment renderer, a shipping extension or a checkout field of another module
+needs no rebuild of that bundle: it is a pool entry plus a custom element in
+the module's own static files, see [Extending Hyperion](./extensions.md). A
+change to the checkout itself means rebuilding the bundle, see
+[Checkout](./checkout.md).

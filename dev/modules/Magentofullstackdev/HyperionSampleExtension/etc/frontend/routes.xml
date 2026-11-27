@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!-- /hyperionsample/locker/points, on the route the sample payment module declares too. -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <route id="hyperionsample" frontName="hyperionsample">
+            <module name="Magentofullstackdev_HyperionSampleExtension"/>
+        </route>
+    </router>
+</config>

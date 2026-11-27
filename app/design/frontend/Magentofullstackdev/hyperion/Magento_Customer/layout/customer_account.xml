@@ -45,8 +45,8 @@
             drags the Recently-Ordered / Wishlist-Sidebar / Compare-Sidebar
             Luma widgets into the account area. Hyperion owns the sidebar
             grid in shell-open.phtml: the legacy widgets and `sidebar.main`
-            are removed, and Hyperion's own wishlist / compare sidebars are
-            declared inside `hyperion.account.sidebar`,
+            are removed, and Hyperion's own wishlist / compare / reorder
+            sidebars are declared inside `hyperion.account.sidebar`,
             a container the navigation template prints UNDER the account
             menu, in the left column of the account grid (the page-layout
             wrapper of `sidebar.additional` is then empty and hidden).
@@ -76,7 +76,12 @@
                     <argument name="css_class" xsi:type="string">hyperion-account-nav</argument>
                 </arguments>
                 <!-- Printed by navigation.phtml under the menu (lg+ only, the
-                     header icons serve phones); collapses with every child hidden. -->
+                     header icons serve phones); collapses with every child hidden.
+                     Extension point: the stand-in for core's `sidebar.main` and
+                     `sidebar.additional` on the account pages (the account page layout
+                     renders no rail). Add a block with
+                     <referenceContainer name="hyperion.account.sidebar">. The account
+                     pages are private: a child may read the customer session. -->
                 <container name="hyperion.account.sidebar" htmlTag="div"
                            htmlClass="sidebar sidebar-additional hidden lg:block mt-6 empty:hidden">
                     <!-- Hyperion's wishlist / compare sidebars (declared per page type, see
@@ -90,6 +95,15 @@
                            name="hyperion.compare.sidebar"
                            template="Magento_Catalog::product/compare/sidebar.phtml"
                            after="hyperion.wishlist.sidebar"/>
+                    <!-- "Recently Ordered": rows read from the customer session,
+                         so the block is uncacheable and lives on the account
+                         pages only (core's sale.reorder.sidebar stays removed). -->
+                    <block class="Magentofullstackdev\HyperionCustomer\Block\Sidebar\Reorder"
+                           name="hyperion.reorder.sidebar"
+                           template="Magentofullstackdev_HyperionCustomer::sidebar/reorder.phtml"
+                           ifconfig="sales/reorder/allow"
+                           cacheable="false"
+                           after="hyperion.compare.sidebar"/>
                 </container>
 
                 <block class="Magento\Customer\Block\Account\SortLinkInterface"

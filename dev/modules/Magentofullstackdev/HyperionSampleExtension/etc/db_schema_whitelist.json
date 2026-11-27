@@ -1,0 +1,12 @@
+{
+    "quote_address": {
+        "column": {
+            "hyperion_sample_locker_id": true
+        }
+    },
+    "sales_order_address": {
+        "column": {
+            "hyperion_sample_locker_id": true
+        }
+    }
+}

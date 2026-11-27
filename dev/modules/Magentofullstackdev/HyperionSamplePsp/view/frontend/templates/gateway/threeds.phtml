@@ -1,0 +1,35 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * The fake 3D Secure challenge, framed in the card element's dialog.
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ * @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer
+ */
+?>
+<!doctype html>
+<html lang="<?= $escaper->escapeHtmlAttr((string) $block->getData('lang')) ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title><?= $escaper->escapeHtml(__('Card verification')) ?></title>
+<link rel="stylesheet" href="<?= $escaper->escapeUrl($block->getViewFileUrl('Magentofullstackdev_HyperionSamplePsp::css/gateway.css')) ?>">
+</head>
+<body class="sample-page">
+<main class="sample-page__main">
+    <h1 class="sample-page__title"><?= $escaper->escapeHtml(__('Card verification')) ?></h1>
+    <p><?= $escaper->escapeHtml(__('This is the sample bank. Approve or decline the payment.')) ?></p>
+    <div class="sample-page__actions">
+        <button type="button" class="sample-page__button" data-sample-threeds="approve"><?= $escaper->escapeHtml(__('Approve')) ?></button>
+        <button type="button" class="sample-page__button sample-page__button--secondary" data-sample-threeds="decline"><?= $escaper->escapeHtml(__('Decline')) ?></button>
+    </div>
+</main>
+<?= /* @noEscape */ $secureRenderer->renderTag('script', [
+    'type' => 'module',
+    'src' => $block->getViewFileUrl('Magentofullstackdev_HyperionSamplePsp::js/gateway/threeds.js'),
+], ' ', false) ?>
+</body>
+</html>

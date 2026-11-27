@@ -23,8 +23,8 @@
 import { loadCaptchaState } from '../api/captcha.js';
 import { isAbortError } from '../api/client.js';
 import { classifyError } from '../api/error-kinds.js';
-import { executeRecaptcha } from '../components/hyperion-recaptcha.js';
-import { getPaymentRenderer } from '../components/payment-renderers/registry.js';
+import { executeRecaptcha } from '../components/recaptcha-client.js';
+import { selectedRecaptchaAction } from '../components/payment-host/host.js';
 import type { CaptchaFormId, RecaptchaAction } from '../types/captcha.js';
 import {
     captchaAnswer,
@@ -66,13 +66,12 @@ const REQUEST_OF: Readonly<Record<AntiAbusePurpose, { path: string; method: stri
 
 /**
  * The reCAPTCHA action that protects the order of the selected payment
- * method. A renderer without the member falls under the place order
- * form; a renderer that answers null sends no token.
+ * method: what the element class of its renderer entry names
+ * (`payment-host/host.ts`), the place order form by default; null sends no
+ * token.
  */
 export function orderRecaptchaAction(store: Store): RecaptchaAction | null {
-    const code = store.selectedPaymentMethod.get();
-    const pick = code === null ? undefined : getPaymentRenderer(code)?.recaptchaAction;
-    return pick ? pick() : 'place_order';
+    return selectedRecaptchaAction(store.selectedPaymentMethod.get());
 }
 
 function recaptchaActionOf(store: Store, purpose: AntiAbusePurpose): RecaptchaAction | null {

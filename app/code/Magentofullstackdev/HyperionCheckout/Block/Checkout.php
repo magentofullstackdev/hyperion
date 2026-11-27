@@ -6,12 +6,9 @@ declare(strict_types=1);
 namespace Magentofullstackdev\HyperionCheckout\Block;
 
 use Magento\Checkout\Model\CompositeConfigProvider;
-use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Component\ComponentRegistrar;
 use Magento\Framework\Component\ComponentRegistrarInterface;
 use Magento\Framework\Exception\RuntimeException;
-use Magento\Framework\Filesystem;
-use Magento\Framework\Filesystem\Directory\ReadInterface;
 use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Locale\ResolverInterface as LocaleResolver;
 use Magento\Framework\Phrase;
@@ -31,13 +28,13 @@ use Magento\Framework\View\Element\Template;
  *      encoded is logged with the top-level key that fails and the
  *      template prints an error message instead of the application.
  *
- *   2. Resolve the hashed JS / CSS filenames via Vite's build manifest
- *      (`view/frontend/web/.vite/manifest.json`). The manifest is
- *      produced by `@hyperion/module-checkout`'s Vite build at
- *      `frontend/packages/module-checkout/` (workspace-driven), which
- *      writes its output directly into this module's
- *      `view/frontend/web/`. Throws `RuntimeException` on missing
- *      manifest -- never silently falls back to a fixed filename.
+ *   2. Resolve the hashed JS / CSS file names via Vite's build manifest
+ *      (`view/frontend/web/.vite/manifest.json` of this module). The
+ *      manifest is produced by the Vite build of
+ *      `frontend/packages/module-checkout/`, which writes its output
+ *      directly into this module's `view/frontend/web/`. Throws
+ *      `RuntimeException` on a missing manifest, never falls back to a
+ *      fixed file name.
  *
  *   3. Cache the resolved manifest on the class for the lifetime of
  *      the PHP request (static property). Re-reads only happen on a
@@ -48,7 +45,6 @@ use Magento\Framework\View\Element\Template;
  */
 class Checkout extends Template
 {
-    private const MANIFEST_PATH = 'frontend/Magentofullstackdev/hyperion/Magentofullstackdev_HyperionCheckout/.vite/manifest.json';
     private const ENTRY_KEY = 'src/main.ts';
 
     /**
@@ -59,6 +55,17 @@ class Checkout extends Template
         'gift-options' => 'src/components/checkout-gift-message.ts',
         'agreements' => 'src/components/checkout-agreements.ts',
         'captcha' => 'src/components/captcha-field.ts',
+        'recaptcha' => 'src/components/hyperion-recaptcha.ts',
+        'address-fields' => 'src/components/address-fields.ts',
+    ];
+
+    /**
+     * Sections whose chunk Vite keys by its hashed file name (a chunk other
+     * chunks import from has no source key): recognized by the file name
+     * the Vite configuration pins for it.
+     */
+    private const SECTION_FILE_PATTERNS = [
+        'payment-host' => '#^assets/payment-host-[A-Za-z0-9_-]+\.js$#',
     ];
 
     /**
@@ -82,7 +89,6 @@ class Checkout extends Template
         Template\Context $context,
         private readonly JsonSerializer $jsonSerializer,
         private readonly CompositeConfigProvider $compositeConfigProvider,
-        private readonly Filesystem $filesystem,
         private readonly ComponentRegistrarInterface $componentRegistrar,
         private readonly FileDriver $fileDriver,
         private readonly LocaleResolver $localeResolver,
@@ -149,8 +155,8 @@ class Checkout extends Template
      * one. The entry itself is the page's module script and is not listed.
      *
      * `$sections` names the optional sections this store shows (keys of
-     * SECTION_KEYS): each is a chunk the entry imports next to the
-     * application only when the store uses it, so it is preloaded on the same
+     * SECTION_KEYS): each is a chunk the application imports before it
+     * mounts only when the store uses it, so it is preloaded on the same
      * condition.
      *
      * A preload is an optimization: a manifest that cannot be read, or one
@@ -197,6 +203,78 @@ class Checkout extends Template
             $urls[] = $this->getViewFileUrl('Magentofullstackdev_HyperionCheckout::' . $file);
         }
         return $urls;
+    }
+
+    /**
+     * The chunks of the given sections (`SECTION_KEYS`) with their static
+     * imports, without what `getPreloadUrls()` already lists for the head
+     * (the entry, the application chunk and their imports): the preloads of
+     * the sections only the checkout configuration tells
+     * (`ViewModel\CheckoutSkeleton::getBodySections()`), printed by the body
+     * template ahead of the entry script.
+     *
+     * @param string[] $sections
+     * @return string[]
+     */
+    public function getSectionPreloadUrls(array $sections): array
+    {
+        if ($sections === []) {
+            return [];
+        }
+        try {
+            $manifest = $this->loadManifest();
+        } catch (\Throwable $e) {
+            $this->_logger->warning('Hyperion checkout: no section preloads, ' . $e->getMessage());
+            return [];
+        }
+        $entry = $manifest[self::ENTRY_KEY] ?? null;
+        $appKey = is_array($entry) ? $this->findAppChunkKey($manifest, $entry) : null;
+        if ($appKey === null) {
+            return [];
+        }
+        $visited = [];
+        $head = [];
+        foreach ([self::ENTRY_KEY, $appKey] as $root) {
+            $this->collectStaticImports($manifest, $root, $visited, $head);
+        }
+        $files = [];
+        foreach ($sections as $section) {
+            $sectionKey = $this->findSectionKey($manifest, (string) $section);
+            if ($sectionKey !== null) {
+                $this->collectStaticImports($manifest, $sectionKey, $visited, $files);
+            }
+        }
+        $urls = [];
+        foreach (array_unique($files) as $file) {
+            $urls[] = $this->getViewFileUrl('Magentofullstackdev_HyperionCheckout::' . $file);
+        }
+        return $urls;
+    }
+
+    /**
+     * Manifest key of a section's chunk: its source key, or the chunk whose
+     * file name matches the section's pattern; null when the build has none.
+     *
+     * @param array<string, mixed> $manifest
+     * @param string $section
+     * @return string|null
+     */
+    private function findSectionKey(array $manifest, string $section): ?string
+    {
+        $key = self::SECTION_KEYS[$section] ?? null;
+        if ($key !== null) {
+            return isset($manifest[$key]) ? $key : null;
+        }
+        $pattern = self::SECTION_FILE_PATTERNS[$section] ?? null;
+        if ($pattern === null) {
+            return null;
+        }
+        foreach ($manifest as $candidate => $chunk) {
+            if (is_array($chunk) && is_string($chunk['file'] ?? null) && preg_match($pattern, $chunk['file']) === 1) {
+                return (string) $candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -325,7 +403,7 @@ class Checkout extends Template
             throw new RuntimeException(
                 new Phrase(
                     'Magentofullstackdev_HyperionCheckout manifest is missing the "%1" entry. '
-                    . 'Run `npm run build:checkout` inside /frontend.',
+                    . 'Run `pnpm --filter @magentofullstackdev/hyperion-checkout build` inside /frontend.',
                     [self::ENTRY_KEY]
                 )
             );
@@ -360,13 +438,13 @@ class Checkout extends Template
     }
 
     /**
-     * Load the Vite manifest JSON. Cached per PHP request.
+     * Load the Vite manifest JSON of the module source. Cached per PHP request.
      *
-     * The manifest is a static asset -- Magento's static-content
-     * versioning copies it into `pub/static/version.../frontend/...`
-     * during deploy, but we read the source copy from the module tree
-     * because the PHP process isn't guaranteed to see the versioned
-     * copy before static:content:deploy runs.
+     * The build writes the manifest into the module's `view/frontend/web/.vite/`,
+     * a hidden directory static content deployment does not publish, so the
+     * module copy is the only one. It is resolved through the component
+     * registrar, which works whether the module sits under `app/code/` or
+     * `vendor/` and whatever theme (or child theme) renders the page.
      *
      * @return array<string, mixed>
      */
@@ -376,21 +454,6 @@ class Checkout extends Template
             return self::$cachedManifest;
         }
 
-        /** @var ReadInterface $staticDir */
-        $staticDir = $this->filesystem->getDirectoryRead(DirectoryList::STATIC_VIEW);
-        if ($staticDir->isFile(self::MANIFEST_PATH)) {
-            $raw = $staticDir->readFile(self::MANIFEST_PATH);
-            $parsed = $this->jsonSerializer->unserialize($raw);
-            if (is_array($parsed)) {
-                self::$cachedManifest = $parsed;
-                return $parsed;
-            }
-        }
-
-        // Fallback: read directly from the module source. Useful in dev
-        // when static:content:deploy hasn't run since the last build.
-        // Resolved via ComponentRegistrar so the lookup works regardless
-        // of whether the module is installed under app/code/ or vendor/.
         $modulePath = $this->componentRegistrar->getPath(
             ComponentRegistrar::MODULE,
             'Magentofullstackdev_HyperionCheckout'
@@ -409,10 +472,9 @@ class Checkout extends Template
 
         throw new RuntimeException(
             new Phrase(
-                'Magentofullstackdev_HyperionCheckout Vite manifest not found. Looked at: '
-                . '(a) pub/static/%1 (b) %2. Run `npm run build:checkout` '
-                . 'inside /frontend and `bin/magento setup:static-content:deploy -f`.',
-                [self::MANIFEST_PATH, $moduleManifest ?? '<module path unresolved>']
+                'Magentofullstackdev_HyperionCheckout Vite manifest not found at %1. Run '
+                . '`pnpm --filter @magentofullstackdev/hyperion-checkout build` inside /frontend.',
+                [$moduleManifest ?? '<module path unresolved>']
             )
         );
     }

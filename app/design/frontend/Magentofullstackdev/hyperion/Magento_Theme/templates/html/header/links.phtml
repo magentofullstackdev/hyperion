@@ -1,0 +1,35 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * Header links: core's `top.links` list, the extension point for header links.
+ *
+ * The theme removes core's own children of `top.links` (the account, register,
+ * sign in, wish list and compare links: the header renders those itself), so a
+ * store without a third-party link prints nothing here. A child is a link block
+ * (`Magento\Framework\View\Element\Html\Link` and its subclasses print one `<li>`)
+ * and must be session agnostic: the header is part of every edge cached page.
+ * header.phtml prints this list in the account dropdown and in the phone drawer.
+ *
+ * @var \Magento\Framework\View\Element\Html\Links $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+declare(strict_types=1);
+
+$items = [];
+foreach ($block->getLinks() as $link) {
+    $linkHtml = trim((string) $block->renderLink($link));
+    if ($linkHtml !== '') {
+        $items[] = $linkHtml;
+    }
+}
+if ($items === []) {
+    return;
+}
+?>
+<ul data-hyperion-header-links
+    class="flex flex-col gap-1 text-sm [&_a]:block [&_a]:rounded-lg [&_a]:px-3 [&_a]:py-2 [&_a]:font-medium [&_a]:text-secondary [&_a]:transition-colors [&_a:hover]:bg-primary/10 [&_a:hover]:text-primary [&_a:focus]:outline-none [&_a:focus]:ring-2 [&_a:focus]:ring-primary">
+    <?php foreach ($items as $linkHtml): ?>
+        <?= /* @noEscape -- rendered link blocks */ $linkHtml ?>
+    <?php endforeach; ?>
+</ul>

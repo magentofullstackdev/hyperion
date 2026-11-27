@@ -17,6 +17,9 @@ use Magento\Framework\Url\HostChecker;
  * "the current page": core's Customer\Model\Url did exactly that for the
  * Sign in link of the account menu and sent the customer to
  * /hyperion/header/state after the login.
+ *
+ * @api
+ * @since 0.9.0
  */
 class RequestContext
 {

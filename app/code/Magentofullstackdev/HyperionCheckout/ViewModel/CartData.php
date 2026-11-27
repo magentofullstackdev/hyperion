@@ -134,15 +134,17 @@ class CartData implements ArgumentInterface
      * shipping address already carries; while the quote has no destination
      * yet (no region, no postcode), a customer's default shipping address
      * (the address the tax row is already computed from); else the store's
-     * default country.
+     * default country. A customer's cart in a session that is not signed in
+     * (a persistent cart restored for a remembered visitor) starts from the
+     * store's default country, until this session enters a destination
+     * (`EstimateDestination::ofQuote()`).
      *
      * @return array{country_id: string, region_id: string, region: string, postcode: string}
      */
     public function getEstimateAddress(): array
     {
         try {
-            $address = $this->checkoutSession->getQuote()->getShippingAddress();
-            $estimate = $this->estimateDestination->ofAddress($address);
+            $estimate = $this->estimateDestination->ofQuote($this->checkoutSession->getQuote());
             if (!$this->estimateDestination->isSet($estimate)) {
                 $estimate = $this->estimateDestination->customerDefault() ?? $estimate;
             }
@@ -161,12 +163,18 @@ class CartData implements ArgumentInterface
     }
 
     /**
-     * The shipping method currently applied to the quote (`carrier_method`), empty when none.
+     * The shipping method currently applied to the quote (`carrier_method`),
+     * empty when none, or when the estimator does not show the quote's
+     * destination (`EstimateDestination::mayShow()`).
      */
     public function getSelectedShippingMethod(): string
     {
         try {
-            return (string) $this->checkoutSession->getQuote()->getShippingAddress()->getShippingMethod();
+            $quote = $this->checkoutSession->getQuote();
+            if (!$this->estimateDestination->mayShow($quote)) {
+                return '';
+            }
+            return (string) $quote->getShippingAddress()->getShippingMethod();
         } catch (\Throwable $e) {
             $this->loadFailed = true;
             $this->logger->error('CartData::getSelectedShippingMethod -- ' . $e->getMessage());
@@ -897,6 +905,8 @@ class CartData implements ArgumentInterface
      * (`formatted_price_excl` is set only when both are shown). A rate the
      * carrier answered with an error stays in the list as `available = false`
      * with its `error_message` and no price: it is information, not a choice.
+     * No rate is listed while the estimator does not show the quote's
+     * destination (`EstimateDestination::mayShow()`): the rates belong to it.
      *
      * @return array<int, array{
      *     code: string,
@@ -912,7 +922,7 @@ class CartData implements ArgumentInterface
     {
         try {
             $quote = $this->checkoutSession->getQuote();
-            if (!$quote->getId()) {
+            if (!$quote->getId() || !$this->estimateDestination->mayShow($quote)) {
                 return [];
             }
             $address = $quote->getShippingAddress();

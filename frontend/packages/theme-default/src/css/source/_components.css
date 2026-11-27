@@ -377,6 +377,45 @@ hyperion-list-toggle[active] button svg {
     content: ': ';
 }
 
+/* Item prices of the order tables, printed by core's tax price renderers
+   (`Magento_Tax::item/price/*.phtml`) and, with FPT, by the theme's
+   `Magento_Weee::item/price/order-price.phtml` (same class names as core).
+   With both tax displays on, each price is one line labeled from its
+   `data-label` ("Incl. Tax", "Excl. Tax"); a single price needs no label,
+   the column heading names it. The FPT details (`.cart-tax-info`, printed
+   expanded: there is no toggle here) are in small muted type, one line per
+   tax, then the total, each labeled from its `data-label`. A row renderer of
+   another module that follows Luma's `no-display` convention stays hidden. */
+.hyperion-order-table .no-display {
+    display: none;
+}
+
+.hyperion-order-table .price-including-tax,
+.hyperion-order-table .price-excluding-tax,
+.hyperion-order-table .cart-price,
+.hyperion-order-table .cart-tax-total,
+.hyperion-order-table .cart-tax-info,
+.hyperion-order-table .weee {
+    display: block;
+}
+
+.hyperion-order-table .price-including-tax + .price-excluding-tax {
+    margin-top: 0.25rem;
+}
+
+.hyperion-order-table .price-including-tax:has(+ .price-excluding-tax)::before,
+.hyperion-order-table .price-including-tax + .price-excluding-tax::before,
+.hyperion-order-table .weee[data-label]:not([data-label=""])::before {
+    content: attr(data-label) ': ';
+    font-size: 0.75rem;
+    color: rgb(var(--color-muted));
+}
+
+.hyperion-order-table .cart-tax-info {
+    font-size: 0.75rem;
+    color: rgb(var(--color-muted));
+}
+
 /* Order document tabs (Items Ordered / Invoices / Shipments / Refunds):
    core Html\Links markup, <li><a> or <li class="current"><strong>. */
 .hyperion-order-tabs {
@@ -567,6 +606,15 @@ hyperion-tabs:defined > [data-hyperion-tabs-skeleton] {
     display: none;
 }
 
+/* --- Coupon form skeleton (no layout shift) ------------------------- */
+/* cart/coupon.phtml ships the form <hyperion-coupon-form> renders, in the
+   state the server knows, as a plain form. The element removes it before
+   its first render; should both ever sit in the host together, only the
+   rendered form shows. */
+hyperion-coupon-form:defined > [data-hyperion-coupon-skeleton] {
+    display: none;
+}
+
 /* --- PayPal smart buttons placement (CLS) --------------------------- */
 /* The SDK renders `.paypal-buttons` as an inline-block: on the text baseline
    it adds a 6px descender gap under the iframe. A column flex container
@@ -588,7 +636,7 @@ hyperion-paypal-message {
     isolation: isolate;
 }
 
-/* --- reCAPTCHA v3 legal note (A06, contrast) ---------------------- */
+/* --- reCAPTCHA v3 legal note (contrast) --------------------------- */
 /* `Magento_ReCaptchaFrontendUi::recaptcha.phtml` prints the Google
    attribution at 12px wherever a protected form renders: on light surfaces
    (login, register, contact, checkout) and inside the dark footer newsletter
@@ -602,6 +650,20 @@ hyperion-paypal-message {
 
 .bg-inverted [data-hyperion-recaptcha-legal] {
     color: rgb(var(--color-on-inverted-muted));
+}
+
+/* --- reCAPTCHA v2 checkbox box (CLS) -------------------------------- */
+/* Google renders the visible checkbox into the empty widget host when the
+   form nears the viewport, at a fixed size (304x78, compact 164x144). The
+   host keeps that height from the first paint instead of collapsing until
+   the iframe arrives (it is `empty:hidden` for the invisible modes). */
+hyperion-recaptcha[type="v2-checkbox"] [data-hyperion-recaptcha-widget] {
+    display: block;
+    min-height: 78px;
+}
+
+hyperion-recaptcha[type="v2-checkbox"][size="compact"] [data-hyperion-recaptcha-widget] {
+    min-height: 144px;
 }
 
 /* --- Cart page: automatic quantity update and the phone checkout bar --- */

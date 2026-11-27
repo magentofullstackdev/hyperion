@@ -9,6 +9,12 @@
     <body>
         <!-- The account shell owns the heading; order/view.phtml renders date, status and actions -->
         <referenceBlock name="page.main.title" remove="true"/>
+        <!-- Core declares sales.order.info.buttons inside page.main.title: it moves under the
+             order block first (moves run before removals), and order/view.phtml prints its
+             CHILDREN (links other modules add next to the order actions), never the block. -->
+        <move element="sales.order.info.buttons" destination="sales.order.view" as="order_buttons"/>
+        <!-- The order status feed link is part of the actions row (OrderActions::getRssUrl()). -->
+        <referenceBlock name="sales.order.info.buttons.rss" remove="true"/>
         <!-- order/view.phtml renders the visible status history itself (show_comments) -->
         <referenceBlock name="order.comments" remove="true"/>
         <move element="sales.order.view" destination="content" before="hyperion.account.shell.close"/>

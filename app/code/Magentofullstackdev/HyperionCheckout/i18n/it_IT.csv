@@ -4,8 +4,8 @@
 "Add New Address","Aggiungi nuovo indirizzo"
 "Add gift options","Aggiungi opzioni regalo"
 Apply,Applica
-"Authorise the payment with PayPal, then place your order.","Autorizza il pagamento con PayPal, poi conferma l'ordine."
-"Authorise the payment with the PayPal button before placing your order.","Autorizza il pagamento con il pulsante PayPal prima di confermare l'ordine."
+"Authorize the payment with PayPal, then place your order.","Autorizza il pagamento con PayPal, poi conferma l'ordine."
+"Authorize the payment with the PayPal button before placing your order.","Autorizza il pagamento con il pulsante PayPal prima di confermare l'ordine."
 "Billing Address","Indirizzo di fatturazione"
 "Calculating shipping…","Calcolo della spedizione…"
 Cancel,Annulla
@@ -49,7 +49,6 @@ Hyperion,Hyperion
 "Last Name",Cognome
 "Loading PayPal...","Caricamento di PayPal..."
 "Loading the secure card form...","Caricamento del modulo sicuro della carta..."
-Loading…,Caricamento…
 MM/YY,MM/AA
 "Magentofullstackdev_HyperionCheckout Vite manifest not found. Looked at: (a) pub/static/%1 (b) %2. Run `npm run build:checkout` inside /frontend and `bin/magento setup:static-content:deploy -f`.","Manifest Vite di Magentofullstackdev_HyperionCheckout non trovato. Percorsi controllati: (a) pub/static/%1 (b) %2. Esegui `npm run build:checkout` in /frontend e `bin/magento setup:static-content:deploy -f`."
 "Magentofullstackdev_HyperionCheckout manifest is missing a CSS asset for entry ""%1"".","Nel manifest di Magentofullstackdev_HyperionCheckout manca la risorsa CSS per la voce ""%1""."
@@ -67,8 +66,8 @@ Password,Password
 PayPal,PayPal
 "PayPal account {email}","Account PayPal {email}"
 "PayPal could not be loaded. Try again or choose another payment method.","Non è stato possibile caricare PayPal. Riprova oppure scegli un altro metodo di pagamento."
-"PayPal payment authorised by {email}. Place your order to complete it.","Pagamento PayPal autorizzato da {email}. Conferma l'ordine per completarlo."
-"PayPal payment authorised. Place your order to complete it.","Pagamento PayPal autorizzato. Conferma l'ordine per completarlo."
+"PayPal payment authorized by {email}. Place your order to complete it.","Pagamento PayPal autorizzato da {email}. Conferma l'ordine per completarlo."
+"PayPal payment authorized. Place your order to complete it.","Pagamento PayPal autorizzato. Conferma l'ordine per completarlo."
 Payment,Pagamento
 "Payment Method","Metodo di pagamento"
 "Payment methods","Metodi di pagamento"
@@ -110,8 +109,8 @@ State/Province,Provincia
 "Street Address","Via e numero"
 "Street address line {n}","Indirizzo riga {n}"
 "Terms and Conditions","Termini e condizioni"
-"The PayPal payment could not be authorised. Please try again.","Non è stato possibile autorizzare il pagamento con PayPal. Riprova."
-"The PayPal payment was cancelled. You can try again or choose another payment method.","Il pagamento PayPal è stato annullato. Puoi riprovare oppure scegliere un altro metodo di pagamento."
+"The PayPal payment could not be authorized. Please try again.","Non è stato possibile autorizzare il pagamento con PayPal. Riprova."
+"The PayPal payment was canceled. You can try again or choose another payment method.","Il pagamento PayPal è stato annullato. Puoi riprovare oppure scegliere un altro metodo di pagamento."
 "The gift message couldn't be saved. Please try again.","Impossibile salvare il messaggio regalo. Riprova."
 "The gift message has been removed.","Il messaggio regalo è stato rimosso."
 "The gift message has been saved.","Il messaggio regalo è stato salvato."
@@ -122,7 +121,6 @@ State/Province,Provincia
 "The selected shipping method is not available for this address.","Il metodo di spedizione selezionato non è disponibile per questo indirizzo."
 "This card is already stored in your account. Pick it from your stored cards or use another one.","Questa carta è già salvata nel tuo account. Selezionala tra le carte salvate oppure usane un'altra."
 "This is a required field.","Campo obbligatorio."
-"This payment method ({code}) is not yet supported in the new checkout. Please contact support.","Questo metodo di pagamento ({code}) non è ancora supportato. Contatta l'assistenza."
 "This promo code is not valid.","Questo codice promozionale non è valido."
 To,A
 "Try again",Riprova
@@ -130,7 +128,7 @@ To,A
 "Use another PayPal account","Usa un altro account PayPal"
 "VAT Number","Partita IVA"
 "We can't estimate the shipping right now. Please try again.","Al momento non è possibile calcolare la spedizione. Riprova."
-"We couldn't initialise the checkout. Please refresh the page.","Non è stato possibile inizializzare la cassa. Ricarica la pagina."
+"We couldn't initialize the checkout. Please refresh the page.","Non è stato possibile inizializzare la cassa. Ricarica la pagina."
 "What is PayPal?","Che cos'è PayPal?"
 "When enabled, the /checkout page renders the Hyperion Lit one-step
                         checkout. When disabled, stock Magento Knockout checkout is served.
@@ -140,7 +138,7 @@ To,A
 "You will be redirected to PayPal to complete your payment.","Verrai reindirizzato su PayPal per completare il pagamento."
 "Your card could not be processed. Check the details or use another card.","Non è stato possibile elaborare la carta. Controlla i dati oppure usa un'altra carta."
 "Your card could not be verified. Please try again with another form of payment.","Non è stato possibile verificare la carta. Riprova con un altro metodo di pagamento."
-"Your order total changed. Please authorise the payment with PayPal again.","Il totale dell'ordine è cambiato. Autorizza di nuovo il pagamento con PayPal."
+"Your order total changed. Please authorize the payment with PayPal again.","Il totale dell'ordine è cambiato. Autorizza di nuovo il pagamento con PayPal."
 "Your order total is still being calculated. Please wait a moment and try again.","Il totale dell'ordine è ancora in fase di calcolo. Attendi un momento e riprova."
 "Your stored payment method could not be used. Please choose another payment method.","Non è stato possibile usare il metodo di pagamento salvato. Scegli un altro metodo di pagamento."
 "Zip/Postal Code",CAP
@@ -153,7 +151,6 @@ To,A
 "Google Pay could not be loaded. Try again or choose another payment method.","Non è stato possibile caricare Google Pay. Riprova oppure scegli un altro metodo di pagamento."
 "Google Pay is not available in this browser. Please choose another payment method.","Google Pay non è disponibile in questo browser. Scegli un altro metodo di pagamento."
 "The Google Pay payment could not be completed. Please try again.","Non è stato possibile completare il pagamento con Google Pay. Riprova."
-"Pay with the Google Pay button to place your order.","Paga con il pulsante Google Pay per confermare l'ordine."
 Total,Totale
 Tax,Imposte
 Discount,Sconto
@@ -227,4 +224,47 @@ FPT,FPT
 "Some items in your cart need attention before you can check out.","Alcuni articoli nel carrello richiedono la tua attenzione prima di poter procedere all'acquisto."
 "Cart Estimate Requests per 10 Seconds","Richieste di stima del carrello per 10 secondi"
 "Budget of one client for the shipping estimate of the cart page (hyperion/cart/estimate). 0 disables the limit.","Budget di un client per la stima della spedizione nella pagina del carrello (hyperion/cart/estimate). 0 disabilita il limite."
+"Cart Summary Requests per 10 Seconds","Richieste di riepilogo del carrello per 10 secondi"
+"Budget of one client for the cart summary that express buttons read (hyperion/cart/summary). 0 disables the limit.","Budget di un client per il riepilogo del carrello letto dai pulsanti di pagamento rapido (hyperion/cart/summary). 0 disabilita il limite."
 "Back to Cart","Torna al carrello"
+"This step could not be completed. Please try again.","Non è stato possibile completare questo passaggio. Riprova."
+"This step did not answer in time. Please try again.","Questo passaggio non ha risposto in tempo. Riprova."
+"A part of the checkout could not check your order. Reload the page.","Una parte della cassa non è riuscita a verificare l'ordine. Ricarica la pagina."
+"Your order cannot be placed yet.","Non è ancora possibile effettuare l'ordine."
+"The checkout could not prepare your request. Reload the page.","La cassa non è riuscita a preparare la richiesta. Ricarica la pagina."
+"A required part of the checkout could not be loaded. Reload the page.","Non è stato possibile caricare una parte necessaria della cassa. Ricarica la pagina."
+"Your order was placed, redirecting...","L'ordine è stato effettuato, reindirizzamento in corso..."
+Continue,Continua
+"This payment method is no longer available. Please choose another one.","Questo metodo di pagamento non è più disponibile. Scegline un altro."
+"Payment methods updated.","Metodi di pagamento aggiornati."
+"This payment method could not be loaded.","Non è stato possibile caricare questo metodo di pagamento."
+"No checkout renderer serves this method.","Nessun renderer della cassa gestisce questo metodo."
+"The renderer of this method could not be loaded.","Non è stato possibile caricare il renderer di questo metodo."
+"The renderer of this method was written for another checkout version.","Il renderer di questo metodo è stato scritto per un'altra versione della cassa."
+"The renderer of this method stopped with an error.","Il renderer di questo metodo si è interrotto con un errore."
+"Complete the delivery options.","Completa le opzioni di consegna."
+"This delivery option could not be loaded.","Non è stato possibile caricare questa opzione di consegna."
+"Delivery address replaced by the selected pickup point","Indirizzo di consegna sostituito dal punto di ritiro selezionato"
+"Please check the format of this field.","Controlla il formato di questo campo."
+"Use at most {max} characters.","Usa al massimo {max} caratteri."
+"Order comment","Commento all'ordine"
+"{count} characters left","{count} caratteri rimanenti"
+"Sign up for our newsletter","Iscriviti alla nostra newsletter"
+"Enter a valid {label}.","Inserisci un valore valido per {label}."
+"Hidden payment methods","Metodi di pagamento nascosti"
+"Active payment methods that no checkout renderer serves are not shown to shoppers.","I metodi di pagamento attivi che nessun renderer della cassa gestisce non vengono mostrati agli acquirenti."
+"Let Shoppers Add a Comment","Consenti agli acquirenti di aggiungere un commento"
+"A text field above Place Order. The comment is added to the order history, visible to the customer.","Un campo di testo sopra Effettua l'ordine. Il commento viene aggiunto alla cronologia dell'ordine, visibile al cliente."
+"Maximum Length","Lunghezza massima"
+"Newsletter Opt-in","Iscrizione alla newsletter"
+"Offer the Newsletter at Checkout","Proponi la newsletter alla cassa"
+"Needs Magento_Newsletter. Guests see it only when guest subscription is allowed; subscribed customers never see it.","Richiede Magento_Newsletter. Gli ospiti la vedono solo se l'iscrizione degli ospiti è consentita; i clienti già iscritti non la vedono mai."
+"Ticked by Default","Selezionata per impostazione predefinita"
+"A box ticked in advance is not valid consent under the GDPR. Keep No unless your market allows it.","Una casella già selezionata non costituisce un consenso valido ai sensi del GDPR. Lascia No a meno che il tuo mercato non lo consenta."
+"No check has run since the payment methods were last saved.","Nessun controllo è stato eseguito dall'ultimo salvataggio dei metodi di pagamento."
+"No active payment method is hidden from shoppers.","Nessun metodo di pagamento attivo è nascosto agli acquirenti."
+"Checked at","Verificato il"
+"Run bin/magento hyperion:checkout:payments to refresh.","Esegui bin/magento hyperion:checkout:payments per aggiornare."
+"and %1 more","e altri %1"
+"Hyperion Checkout: %1 active payment method(s) have no checkout renderer and are hidden from shoppers: %2. Details: Stores > Configuration > Hyperion Theme > Checkout.","Hyperion Checkout: metodi di pagamento attivi senza renderer della cassa, nascosti agli acquirenti (%1): %2. Dettagli: Negozi > Configurazione > Hyperion Theme > Cassa."
+"Order summary updated. {total}","Riepilogo ordine aggiornato. {total}"

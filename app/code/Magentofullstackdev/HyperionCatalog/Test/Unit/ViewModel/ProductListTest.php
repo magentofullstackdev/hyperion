@@ -69,6 +69,54 @@ class ProductListTest extends TestCase
         );
     }
 
+    public function testTilesShowNoSwatchesWhileTheListingSettingIsOff(): void
+    {
+        $swatchConfig = $this->createMock(SwatchConfig::class);
+        $swatchConfig->expects(self::never())->method('isConfigurableWithSwatches');
+
+        $viewModel = $this->swatchViewModel($swatchConfig, false);
+
+        self::assertFalse($viewModel->isConfigurableWithSwatches($this->createStub(Product::class)));
+    }
+
+    public function testTilesAskTheSwatchConfigWhileTheListingSettingIsOn(): void
+    {
+        $swatchConfig = $this->createMock(SwatchConfig::class);
+        $swatchConfig->expects(self::once())->method('isConfigurableWithSwatches')->willReturn(true);
+
+        $viewModel = $this->swatchViewModel($swatchConfig, true);
+
+        self::assertTrue($viewModel->isConfigurableWithSwatches($this->createStub(Product::class)));
+    }
+
+    /**
+     * A view model with the given swatch config and `catalog/frontend/show_swatches_in_product_list`.
+     */
+    private function swatchViewModel(SwatchConfig $swatchConfig, bool $showSwatches): ProductList
+    {
+        $scopeConfig = $this->createStub(ScopeConfigInterface::class);
+        $scopeConfig->method('isSetFlag')->willReturnCallback(
+            static fn (string $path): bool => $path === 'catalog/frontend/show_swatches_in_product_list' && $showSwatches
+        );
+
+        return new ProductList(
+            $this->createStub(ImageHelper::class),
+            $this->priceRender,
+            $this->createStub(CartHelper::class),
+            $this->createStub(PostHelper::class),
+            $this->createStub(UrlInterface::class),
+            $this->createStub(Escaper::class),
+            $this->createStub(LoggerInterface::class),
+            $swatchConfig,
+            $this->createStub(CompareHelper::class),
+            $this->createStub(WishlistHelper::class),
+            $this->createStub(SwatchAttributesProvider::class),
+            $scopeConfig,
+            $this->createStub(Availability::class),
+            $this->degradedResponse
+        );
+    }
+
     public function testNoFailureBeforeAnyPriceRenders(): void
     {
         self::assertFalse($this->viewModel->hasPriceRenderFailed());

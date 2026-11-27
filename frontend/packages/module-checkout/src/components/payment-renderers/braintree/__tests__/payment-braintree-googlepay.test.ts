@@ -3,30 +3,20 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const placeOrder = vi.fn<() => Promise<number | 'placed-unconfirmed' | null>>();
-vi.mock('../../../../store/flow-actions.js', () => ({
-    flowActions: () => ({ placeOrder }),
-}));
-vi.mock('../../../../utils/navigate.js', () => ({ navigateTo: vi.fn() }));
-// The gate is read from the real store; the flush of the pending saves is a double.
-vi.mock('../../checkout-gate.js', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../checkout-gate.js')>()),
-    prepareCheckout: vi.fn(async () => null),
-}));
+import type { Mock } from 'vitest';
 
 import enUS from '../../../../i18n/en_US.json' with { type: 'json' };
 import { resetFlowSelectorsForTests } from '../../../../store/flow-selectors.js';
 import type { Store } from '../../../../store/index.js';
 import { setActiveCatalogForTests, t } from '../../../../utils/i18n.js';
-import { navigateTo } from '../../../../utils/navigate.js';
-import { prepareCheckout } from '../../checkout-gate.js';
-import { getPaymentRenderer } from '../../registry.js';
-import { PaymentBraintreeGooglepay, getGooglePayAuthorisation } from '../payment-braintree-googlepay.js';
+import type { MockContext } from '../../__tests__/mock-context.js';
+import { PaymentBraintreeGooglepay } from '../payment-braintree-googlepay.js';
 import {
     DEVICE_DATA,
     installBraintreeDouble,
     installCheckoutConfig,
     installStore,
+    mountBraintreeElement,
     uninstallBraintreeDouble,
     type BraintreeDouble,
 } from './helpers.js';
@@ -41,15 +31,26 @@ const PAYMENT_DATA = {
     },
 };
 
-function renderer(): NonNullable<ReturnType<typeof getPaymentRenderer>> {
-    const found = getPaymentRenderer('braintree_googlepay');
-    if (!found) throw new Error('braintree_googlepay renderer is not registered');
-    return found;
+let mock: MockContext;
+let currentStore: Store;
+/** `context.placeOrder()` of the element: the checkout's order pipeline. */
+let placeOrder: Mock;
+/** `context.requestCheckoutValidation()`: the flush of the pending saves and the gate. */
+let prepareCheckout: Mock;
+
+/** The payment data the element handed to the order pipeline. */
+function placedData(): Record<string, unknown> | undefined {
+    return (placeOrder.mock.calls[placeOrder.mock.calls.length - 1]?.[0] as { additional_data?: Record<string, unknown> } | undefined)?.additional_data;
 }
 
 async function mount(sdk: BraintreeDouble): Promise<PaymentBraintreeGooglepay> {
-    const el = document.createElement('payment-braintree-googlepay');
-    document.body.appendChild(el);
+    const mounted = mountBraintreeElement<PaymentBraintreeGooglepay>('hc-payment-braintree-googlepay', 'braintree_googlepay', currentStore);
+    mock = mounted.mock;
+    placeOrder = mock.spies.placeOrder;
+    placeOrder.mockResolvedValue({ status: 'placed', orderId: 42 });
+    prepareCheckout = mock.spies.requestCheckoutValidation;
+    prepareCheckout.mockResolvedValue(true);
+    const el = mounted.element;
     await vi.waitFor(() => expect(sdk.googlePay.isReadyToPay).toHaveBeenCalled());
     await el.updateComplete;
     return el;
@@ -67,7 +68,7 @@ async function pay(sdk: BraintreeDouble): Promise<void> {
     await vi.waitFor(() => expect(placeOrder).toHaveBeenCalled());
 }
 
-describe('<payment-braintree-googlepay>', () => {
+describe('<hc-payment-braintree-googlepay>', () => {
     let sdk: BraintreeDouble;
     let store: Store;
 
@@ -75,6 +76,7 @@ describe('<payment-braintree-googlepay>', () => {
         setActiveCatalogForTests(enUS);
         installCheckoutConfig();
         store = installStore();
+        currentStore = store;
         // The quote carries a confirmed flat rate and offers Google Pay: the gate is open.
         store.availableShippingMethods.set([{
             carrier_code: 'flatrate',
@@ -105,11 +107,6 @@ describe('<payment-braintree-googlepay>', () => {
             liabilityShifted: true,
             liabilityShiftPossible: true,
         });
-        placeOrder.mockReset();
-        placeOrder.mockResolvedValue(42);
-        vi.mocked(prepareCheckout).mockReset();
-        vi.mocked(prepareCheckout).mockResolvedValue(null);
-        vi.mocked(navigateTo).mockClear();
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
     });
 
@@ -119,12 +116,13 @@ describe('<payment-braintree-googlepay>', () => {
         vi.restoreAllMocks();
     });
 
-    it('owns Place Order and refuses the checkout button until the sheet authorised a payment', async () => {
-        expect(renderer().ownsPlaceOrder?.()).toBe(true);
-        await expect(renderer().beforePlaceOrder?.()).rejects.toThrow(
-            t('Hyperion_Checkout::braintree_googlepay_not_authorised')
-        );
-        expect(sdk.loader).not.toHaveBeenCalled();
+    it('owns Place Order and has no data for the checkout button: only its own button places the order', async () => {
+        sdk.loader.mockReturnValue(new Promise(() => undefined));
+        const { element } = mountBraintreeElement<PaymentBraintreeGooglepay>('hc-payment-braintree-googlepay', 'braintree_googlepay', currentStore);
+        expect(element.ownsPlaceOrder).toBe(true);
+        expect((element as unknown as Record<string, unknown>)['getPaymentData']).toBeUndefined();
+        expect(PaymentBraintreeGooglepay.canMakePayment({ config: { isActive: true, clientToken: 'token' } })).toBe(true);
+        expect(PaymentBraintreeGooglepay.canMakePayment({ config: { isActive: true } })).toBe(false);
     });
 
     it('loads the Braintree component and pay.js, asks Google whether it can pay and renders the button', async () => {
@@ -182,12 +180,12 @@ describe('<payment-braintree-googlepay>', () => {
         expect(request).toMatchObject({
             transactionInfo: {
                 currencyCode: 'EUR',
-                totalPrice: '56.29',
+                totalPrice: '36.81',
                 totalPriceStatus: 'FINAL',
                 totalPriceLabel: 'Total',
                 displayItems: [
-                    { type: 'LINE_ITEM', label: 'Chaz Kangeroo Hoodie-S-Black', price: '52.00' },
-                    { type: 'LINE_ITEM', label: 'Tax', price: '4.29' },
+                    { type: 'LINE_ITEM', label: 'Joust Duffle Bag', price: '34.00' },
+                    { type: 'LINE_ITEM', label: 'Tax', price: '2.81' },
                 ],
             },
             emailRequired: false,
@@ -202,15 +200,14 @@ describe('<payment-braintree-googlepay>', () => {
         expect(sdk.threeDSecure.verifyCard).toHaveBeenCalledWith(expect.objectContaining({
             nonce: 'googlepay_nonce_fixture',
             bin: '411111',
-            amount: '56.29',
+            amount: '36.81',
         }));
-        expect(store.paymentMethodData.get()['braintree_googlepay']).toEqual({
+        expect(placedData()).toEqual({
             payment_method_nonce: 'googlepay_3ds_nonce',
             device_data: DEVICE_DATA,
             is_network_tokenized: false,
         });
-        expect(getGooglePayAuthorisation()).toEqual(store.paymentMethodData.get()['braintree_googlepay']);
-        expect(navigateTo).toHaveBeenCalledWith('/checkout/onepage/success');
+        expect(placeOrder).toHaveBeenCalledTimes(1);
     });
 
     it('skips 3D Secure for a network tokenized card and never offers to store it', async () => {
@@ -224,7 +221,7 @@ describe('<payment-braintree-googlepay>', () => {
         await pay(sdk);
 
         expect(sdk.threeDSecure.verifyCard).not.toHaveBeenCalled();
-        expect(store.paymentMethodData.get()['braintree_googlepay']).toEqual({
+        expect(placedData()).toEqual({
             payment_method_nonce: 'googlepay_token_nonce',
             device_data: DEVICE_DATA,
             is_network_tokenized: true,
@@ -241,7 +238,7 @@ describe('<payment-braintree-googlepay>', () => {
             cardAddChallengeRequested: true,
             challengeRequested: false,
         }));
-        expect(store.paymentMethodData.get()['braintree_googlepay']).toMatchObject({
+        expect(placedData()).toMatchObject({
             is_network_tokenized: false,
             is_active_payment_token_enabler: true,
         });
@@ -266,12 +263,11 @@ describe('<payment-braintree-googlepay>', () => {
         expect(placeOrder).not.toHaveBeenCalled();
     });
 
-    it('drops the single use nonce when the order fails and shows the 3D Secure failure', async () => {
-        placeOrder.mockResolvedValue(null);
+    it('pays again with a new nonce after a failed order, and shows the 3D Secure failure', async () => {
         const el = await mountReady(sdk);
+        placeOrder.mockResolvedValue({ status: 'failed', message: 'The card was declined.' });
         await pay(sdk);
-        await vi.waitFor(() => expect(getGooglePayAuthorisation()).toBeNull());
-        expect(navigateTo).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('false'));
 
         sdk.threeDSecure.verifyCard.mockResolvedValue({ nonce: 'x', liabilityShifted: false, liabilityShiftPossible: true });
         sdk.googlePayButton.element.click();
@@ -279,7 +275,6 @@ describe('<payment-braintree-googlepay>', () => {
             t('Hyperion_Checkout::braintree_3ds_failed')
         ));
         expect(placeOrder).toHaveBeenCalledTimes(1);
-        expect(getGooglePayAuthorisation()).toBeNull();
     });
 
     it('passes the merchant id to Google and Braintree in production only', async () => {
@@ -294,30 +289,32 @@ describe('<payment-braintree-googlepay>', () => {
     });
 
     it('keeps the button busy once the order exists, and releases it when the order failed', async () => {
-        placeOrder.mockImplementationOnce(async () => null);
         const el = await mountReady(sdk);
+        placeOrder.mockImplementationOnce(async () => ({ status: 'failed' }));
         await pay(sdk);
         await vi.waitFor(() => expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('false'));
 
         placeOrder.mockImplementationOnce(async () => {
             store.isPlacingOrder.set(true);
             store.orderPlaced.set(true);
-            return 42;
+            return { status: 'placed', orderId: 42 };
         });
         sdk.googlePayButton.element.click();
-        await vi.waitFor(() => expect(navigateTo).toHaveBeenCalledTimes(1));
+        await vi.waitFor(() => expect(placeOrder).toHaveBeenCalledTimes(2));
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
 
         expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('true');
     });
 
-    it('continues on the success page for an order the quote confirmed after its answer was lost', async () => {
-        placeOrder.mockResolvedValue('placed-unconfirmed');
-        await mountReady(sdk);
+    it('stays busy for an order the quote confirmed after its answer was lost', async () => {
+        const el = await mountReady(sdk);
+        placeOrder.mockResolvedValue({ status: 'placed' });
         await pay(sdk);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
 
-        await vi.waitFor(() => expect(navigateTo).toHaveBeenCalledTimes(1));
+        expect(el.querySelector('[data-googlepay-button]')?.getAttribute('aria-busy')).toBe('true');
     });
 
     it('does not open the sheet while the order is being updated and says so', async () => {
@@ -353,10 +350,10 @@ describe('<payment-braintree-googlepay>', () => {
         await mountReady(sdk);
         store.shippingDirty.set(true);
         // Like the flow: the banner is cleared when the flush starts.
-        vi.mocked(prepareCheckout).mockImplementation(async () => {
+        prepareCheckout.mockImplementation(async () => {
             store.globalError.set(null);
             store.shippingDirty.set(false);
-            return null;
+            return true;
         });
 
         sdk.googlePayButton.element.click();
@@ -373,7 +370,11 @@ describe('<payment-braintree-googlepay>', () => {
     it('shows what is still missing after the pending edits were saved', async () => {
         await mountReady(sdk);
         store.shippingDirty.set(true);
-        vi.mocked(prepareCheckout).mockResolvedValue('The store is temporarily unavailable.');
+        // Like the checkout: what is still missing goes to the banner.
+        prepareCheckout.mockImplementation(async () => {
+            store.globalError.set('The store is temporarily unavailable.');
+            return false;
+        });
 
         sdk.googlePayButton.element.click();
 

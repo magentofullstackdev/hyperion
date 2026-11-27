@@ -71,6 +71,8 @@ $qtyRules = $stockVm->getQtyInputAttributes($product);
 $qtyIncrement = $stockVm->getQtyIncrements($product);
 $lowStockVisible = $isAvailable && $stockVm->isLowStockVisible($product);
 $stockQtyLeft = $lowStockVisible ? $stockVm->getStockQtyLeft($product) : 0.0;
+// "Display Products Availability in Stock on Storefront": the In stock / Out of stock row.
+$stockStatusDisplayed = $stockVm->isStockStatusDisplayed();
 $qtyText = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 2, '.', ''), '0'), '.');
 $hasFileOption = false;
 foreach ($product->getOptions() ?: [] as $customOption) {
@@ -268,6 +270,9 @@ try {
                     </div>
                 <?php endif; ?>
             </hyperion-gallery>
+            <?php /* Extension points: the containers of catalog_product_view.xml print no wrapper, so an
+                     empty one adds nothing to the page. */ ?>
+            <?= $block->getChildHtml('media_after') ?>
         </div>
 
         <?php /* -- Info column -------------------------------- */ ?>
@@ -290,6 +295,7 @@ try {
                 <?php /* Reviews summary (stars + count or "be the first") */ ?>
                 <?= $block->getReviewsSummaryHtml($product, false, true) ?>
             </header>
+            <?= $block->getChildHtml('info_top') ?>
 
             <?php /* -- Price ----------------------------------- */ ?>
             <?php /* The schema.org Offer (price, priceCurrency, availability) is emitted by the price
@@ -301,6 +307,7 @@ try {
                  aria-live="polite">
                 <?= /* @noEscape */ $priceHtml ?>
             </div>
+            <?= $block->getChildHtml('info_after_price') ?>
 
             <?php /* -- Quantity discounts ---------------------- */ ?>
             <?php $tierPrices = $pricing?->getTierPrices($product) ?? []; ?>
@@ -339,6 +346,7 @@ try {
                     override layout handle. Rendered above the add-to-cart
                     so the shopper can audition trailers before buying. */ ?>
             <?= $block->getChildHtml('samples') ?>
+            <?= $block->getChildHtml('info_before_addtocart') ?>
 
             <?php /* Persistent notification target for HTMX swaps.
                     Emitted as <hyperion-notification> (Lit component) so
@@ -415,6 +423,8 @@ try {
                     <?= $block->getChildHtml('type_bundle_options') ?>
                     <?= $block->getChildHtml('type_grouped_options') ?>
                     <?= $block->getChildHtml('custom_options') ?>
+                    <?php /* Inputs that must post with the cart add. */ ?>
+                    <?= $block->getChildHtml('form_additional') ?>
 
                     <?php /* A grouped product has one quantity per associated product instead. */ ?>
                     <div class="flex items-center gap-3<?= $isGrouped ? ' hidden' : '' ?>">
@@ -428,7 +438,6 @@ try {
                                <?php if ($qtyRules['max'] > 0): ?>max="<?= $escaper->escapeHtmlAttr($qtyText($qtyRules['max'])) ?>"<?php endif; ?>
                                <?php if ($qtyRules['step'] > 0): ?>step="<?= $escaper->escapeHtmlAttr($qtyText($qtyRules['step'])) ?>"<?php endif; ?>
                                inputmode="numeric"
-                               aria-label="<?= $escaper->escapeHtmlAttr(__('Quantity')) ?>"
                                class="w-20 px-3 py-2 text-sm border border-subtle rounded-lg bg-surface
                                       text-secondary
                                       focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary">
@@ -470,13 +479,19 @@ try {
                     </p>
                 </noscript>
                 <?php if (!$isCartConfigure): ?>
-                    <?php /* PayPal smart buttons (theme Magento_Paypal/layout/catalog_product_view.xml) */ ?>
-                    <?= $block->getChildHtml('paypal_buttons') ?>
+                    <?php /* Express buttons: container hyperion.express.product */ ?>
+                    <?= $block->getChildHtml('express') ?>
+                    <?= $block->getChildHtml('info_after_addtocart') ?>
                 <?php endif; ?>
             <?php else: ?>
-                <p class="rounded-lg border border-subtle py-3 text-center text-sm font-medium text-muted">
-                    <?= $escaper->escapeHtml(__('Out of stock')) ?>
-                </p>
+                <?php /* The stock row below says "Out of stock"; without it (availability not displayed)
+                         this box takes the place of the button, so the message is printed once. */ ?>
+                <?php if (!$stockStatusDisplayed): ?>
+                    <p class="rounded-lg border border-subtle py-3 text-center text-sm font-medium text-muted"
+                       data-hyperion-out-of-stock>
+                        <?= $escaper->escapeHtml(__('Out of stock')) ?>
+                    </p>
+                <?php endif; ?>
                 <?= $block->getChildHtml('productalert_stock') ?>
             <?php endif; ?>
 
@@ -557,16 +572,21 @@ try {
                 <?= $block->getChildHtml('sendfriend') ?>
             </div>
 
-            <?php /* -- Stock + price alerts -------------------- */ ?>
-            <div class="flex items-center gap-2 text-sm">
+            <?php /* -- Stock + price alerts --------------------
+                    The availability follows the inventory setting; the "Only N left" notices
+                    follow their own threshold, as in core. */ ?>
+            <?php if ($stockStatusDisplayed || ($isAvailable && ($lowStockVisible || $isConfigurable))): ?>
+            <div class="flex items-center gap-2 text-sm" data-hyperion-stock-status>
                 <?php if ($isAvailable): ?>
-                    <svg class="w-4 h-4 text-success" fill="none" stroke="currentColor"
-                         stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                    </svg>
-                    <span class="text-success font-medium">
-                        <?= $escaper->escapeHtml(__('In Stock')) ?>
-                    </span>
+                    <?php if ($stockStatusDisplayed): ?>
+                        <svg class="w-4 h-4 text-success" fill="none" stroke="currentColor"
+                             stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span class="text-success font-medium">
+                            <?= $escaper->escapeHtml(__('In Stock')) ?>
+                        </span>
+                    <?php endif; ?>
                     <?php if ($lowStockVisible): ?>
                         <span class="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning-strong"
                               data-hyperion-low-stock="<?= $escaper->escapeHtmlAttr($qtyText($stockQtyLeft)) ?>">
@@ -587,13 +607,15 @@ try {
                          stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
-                    <span class="text-error font-medium">
-                        <?= $escaper->escapeHtml(__('Out of Stock')) ?>
+                    <span class="text-error font-medium" data-hyperion-out-of-stock>
+                        <?= $escaper->escapeHtml(__('Out of stock')) ?>
                     </span>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
 
             <?= $block->getChildHtml('productalert_price') ?>
+            <?= $block->getChildHtml('info_extra') ?>
 
         </div>
     </div>
@@ -625,6 +647,23 @@ try {
     $reviewsHtml = trim((string) $block->getChildHtml('reviews.tab'));
     if ($reviewsHtml) {
         $tabs[] = ['label' => __('Reviews'), 'html' => $reviewsHtml];
+    }
+    // Extension tabs: every child of the `hyperion.product.tabs` container that carries a `title`
+    // argument and prints something becomes one more tab (the skeleton below iterates the same list).
+    $layout = $block->getLayout();
+    foreach ($layout->getChildNames('hyperion.product.tabs') as $tabChildName) {
+        $tabBlock = $layout->getBlock($tabChildName);
+        if (!$tabBlock instanceof \Magento\Framework\View\Element\AbstractBlock) {
+            continue;
+        }
+        $tabTitle = trim((string) $tabBlock->getData('title'));
+        if ($tabTitle === '') {
+            continue;
+        }
+        $tabHtml = trim((string) $layout->renderElement($tabChildName));
+        if ($tabHtml !== '') {
+            $tabs[] = ['label' => $tabTitle, 'html' => $tabHtml];
+        }
     }
     ?>
     <hyperion-tabs class="block border-t border-subtle pt-8">

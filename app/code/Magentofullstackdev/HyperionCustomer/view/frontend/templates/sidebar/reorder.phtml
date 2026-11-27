@@ -3,120 +3,81 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 declare(strict_types=1);
 /**
- * Hyperion "Recently Ordered" sidebar widget -- server-rendered.
+ * "Recently Ordered" sidebar of the account pages (block `hyperion.reorder.sidebar`
+ * in `hyperion.account.sidebar`, config `sales/reorder/allow`).
  *
- * Replaces the Luma Knockout binder that fetched last-ordered items
- * via the customer-data section. When the customer has no orders the
- * block returns an empty string, letting the parent `div.sidebar.main`
- * collapse via its `empty:hidden` utility -- so a first-time visitor
- * sees no widget rail at all.
+ * Server rendered from the customer session: the account handles are private
+ * and the block is uncacheable. The ticked order items post to
+ * `checkout/cart/addgroup`, which adds them to the cart and redirects back.
+ * Without purchase rights the list stays, as links, without the form controls.
  *
- * Data comes from the Hyperion SidebarWidgets view-model injected via
- * the Magento_Theme default.xml referenceBlock. Individual items
- * expose the first order's line items; checking boxes and clicking
- * "Add to Cart" submits the selected skus to the
- * `checkout/cart/addgroup` endpoint the native block already exposes.
- *
- * @var \Magento\Framework\View\Element\Template $block
- * @var \Magentofullstackdev\HyperionCustomer\ViewModel\SidebarWidgets|null $vm
+ * @var \Magentofullstackdev\HyperionCustomer\Block\Sidebar\Reorder $block
  * @var \Magento\Framework\Escaper $escaper
+ * @var \Magentofullstackdev\HyperionCore\Model\ViewModelRegistry $viewModels
  */
-
-$vm = $block->getData('sidebar_widgets');
-if (!$vm || !$vm->isLoggedIn() || !$viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase()) {
-    return;
-}
-
-$orders = $vm->getRecentOrders();
-if (!$orders) {
-    return;
-}
-
-// Flatten order items across the customer's recent orders -- dedupe by
-// product id so the same SKU ordered twice only shows up once.
-$items = [];
-foreach ($orders as $order) {
-    try {
-        foreach ($order->getAllVisibleItems() as $item) {
-            $pid = (int) $item->getProductId();
-            if ($pid <= 0 || isset($items[$pid])) {
-                continue;
-            }
-            $items[$pid] = $item;
-            if (count($items) >= 5) {
-                break 2;
-            }
-        }
-    } catch (\Throwable $e) {
-        $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\TemplateLogger::class)->warning('reorder sidebar: skipped order', $e);
-        continue;
-    }
-}
+$items = $viewModels->require(\Magentofullstackdev\HyperionCustomer\ViewModel\SidebarWidgets::class)
+    ->getReorderItems();
 if (!$items) {
     return;
 }
-$formKey = $block->getBlockHtml('formkey');
+$canPurchase = $viewModels->require(\Magentofullstackdev\HyperionCore\ViewModel\Purchase::class)->canPurchase();
 ?>
-<section class="bg-surface border border-subtle rounded-xl p-4 space-y-3"
-         aria-labelledby="hyperion-reorder-heading">
-
-    <header class="flex items-center justify-between gap-2">
-        <h2 id="hyperion-reorder-heading"
-            class="text-sm font-bold uppercase tracking-wider text-secondary">
-            <?= $escaper->escapeHtml(__('Recently Ordered')) ?>
-        </h2>
-        <a href="<?= $escaper->escapeUrl($block->getUrl('sales/order/history')) ?>"
-           class="text-xs font-medium text-primary hover:text-primary-hover hover:underline">
-            <?= $escaper->escapeHtml(__('View All')) ?>
-        </a>
-    </header>
-
-    <form method="post"
-          action="<?= $escaper->escapeUrl($block->getUrl('checkout/cart/addgroup', ['_secure' => true])) ?>"
-          class="space-y-3">
-        <?= /* @noEscape */ $formKey ?>
-
-        <ul role="list" class="space-y-2">
-            <?php foreach ($items as $item):
-                $product = $item->getProduct();
-                $saleable = $product && $product->isSaleable();
-            ?>
-                <li class="flex items-start gap-2 text-sm">
-                    <input type="checkbox"
-                           name="order_items[]"
-                           id="reorder-item-<?= (int) $item->getId() ?>"
-                           value="<?= (int) $item->getId() ?>"
-                           <?= $saleable ? '' : 'disabled' ?>
-                           class="mt-0.5 h-4 w-4 shrink-0 rounded border-subtle text-primary
-                                  focus:outline-none focus:ring-2 focus:ring-primary">
-                    <label for="reorder-item-<?= (int) $item->getId() ?>"
-                           class="flex-1 leading-snug">
-                        <?php if ($product): ?>
-                            <a href="<?= $escaper->escapeUrl($product->getProductUrl()) ?>"
-                               class="text-secondary hover:text-primary transition-colors">
-                                <?= $escaper->escapeHtml($item->getName()) ?>
-                            </a>
-                        <?php else: ?>
-                            <span class="text-secondary">
-                                <?= $escaper->escapeHtml($item->getName()) ?>
-                            </span>
-                        <?php endif; ?>
-                    </label>
+<section class="bg-surface rounded-xl border border-subtle p-4 mb-6"
+         aria-labelledby="hyperion-reorder-sidebar-heading"
+         data-hyperion-reorder-sidebar>
+    <h2 id="hyperion-reorder-sidebar-heading" class="text-base font-semibold text-secondary mb-2">
+        <?= $escaper->escapeHtml(__('Recently Ordered')) ?>
+    </h2>
+    <?php if ($canPurchase): ?>
+    <form method="post" action="<?= $escaper->escapeUrl($block->getFormActionUrl()) ?>">
+        <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+    <?php endif; ?>
+        <ol class="divide-y divide-subtle">
+            <?php foreach ($items as $item): ?>
+                <?php $inputId = 'hyperion-reorder-item-' . (int) $item['id']; ?>
+                <li class="flex items-start gap-2 py-2 text-sm">
+                    <?php if ($canPurchase): ?>
+                        <input type="checkbox"
+                               name="order_items[]"
+                               id="<?= $escaper->escapeHtmlAttr($inputId) ?>"
+                               value="<?= (int) $item['id'] ?>"
+                               class="mt-0.5 h-4 w-4 shrink-0 rounded border-subtle text-primary
+                                      focus:outline-none focus:ring-2 focus:ring-primary"
+                               <?= $item['saleable'] ? '' : 'disabled' ?>>
+                        <label for="<?= $escaper->escapeHtmlAttr($inputId) ?>"
+                               class="min-w-0 flex-1 leading-snug text-secondary">
+                            <?= $escaper->escapeHtml($item['name']) ?>
+                            <?php if (!$item['saleable']): ?>
+                                <span class="block text-xs text-muted"><?= $escaper->escapeHtml(__('Out of stock')) ?></span>
+                            <?php endif; ?>
+                        </label>
+                    <?php else: ?>
+                        <span class="min-w-0 flex-1 leading-snug text-secondary">
+                            <?= $escaper->escapeHtml($item['name']) ?>
+                        </span>
+                    <?php endif; ?>
+                    <?php if ($item['url'] !== ''): ?>
+                        <a href="<?= $escaper->escapeUrl($item['url']) ?>"
+                           class="shrink-0 text-xs font-medium text-primary hover:underline">
+                            <?= $escaper->escapeHtml(__('View')) ?>
+                            <span class="sr-only"><?= $escaper->escapeHtml($item['name']) ?></span>
+                        </a>
+                    <?php endif; ?>
                 </li>
             <?php endforeach; ?>
-        </ul>
-
+        </ol>
+    <?php if ($canPurchase): ?>
         <button type="submit"
-                class="inline-flex w-full items-center justify-center gap-1 px-3 py-2
-                       rounded-lg bg-primary text-on-primary text-sm font-semibold
-                       hover:bg-primary-hover hover:shadow-md transition-all
-                       focus:outline-none focus:ring-2 focus:ring-primary">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2"
-                 viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
-            </svg>
+                class="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-primary px-3 py-2
+                       text-sm font-semibold text-on-primary hover:bg-primary-hover
+                       focus:outline-none focus:ring-2 focus:ring-primary"
+                data-hyperion-reorder-sidebar-submit>
             <?= $escaper->escapeHtml(__('Add to Cart')) ?>
         </button>
     </form>
+    <?php endif; ?>
+    <a href="<?= $escaper->escapeUrl($block->getUrl('sales/order/history')) ?>"
+       class="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+        <?= $escaper->escapeHtml(__('View All')) ?>
+    </a>
 </section>

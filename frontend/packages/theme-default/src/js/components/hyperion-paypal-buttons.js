@@ -2,17 +2,29 @@
 // Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
 
 /**
- * hyperion-paypal-buttons -- PayPal Express Checkout smart buttons.
+ * hyperion-paypal-buttons -- PayPal Express Checkout smart buttons, the
+ * first-party `paypal_express` entry of the express button pool.
  *
  * Replaces Magento_Paypal's RequireJS widgets (`js/in-context/button`,
  * `product-express-checkout`, `express-checkout-smart-buttons`) on the
- * cart page, in the mini-cart drawer and on the product page. The
- * requests are the core ones:
+ * cart page, in the mini-cart drawer and on the product page. Created by
+ * `<hyperion-express-slot>`, which sets the properties of an express element
+ * before connecting it:
+ *
+ *   context    the ExpressContext (lib/express-context.js)
+ *   options    the button configuration from
+ *              HyperionCheckout\ViewModel\PaypalExpress: sdkUrl,
+ *              dataAttributes, styles, getTokenUrl, onAuthorizeUrl,
+ *              onCancelUrl, quoteId, customerId, button, declined
+ *   placement  `cart` | `minicart` | `product`
+ *
+ * Its messages are entry phrases (`context.t()`). The requests are the core
+ * ones:
  *
  *   onClick      guest checkout not allowed, product options missing:
  *                the click is rejected with a message, no PayPal window.
- *   createOrder  product context only: post the add-to-cart form first
- *                (same request as the Add to Cart button, so options,
+ *   createOrder  product placement only: `context.addCurrentProductToCart()`
+ *                first (same request as the Add to Cart button, so options,
  *                swatches and quantities are honored and validated);
  *                then POST `getTokenUrl` with `quote_id`, `customer_id`,
  *                `form_key`, `button` and hand the token to PayPal.
@@ -21,28 +33,20 @@
  *                (the PayPal review page, or the success page).
  *   onCancel     GET `onCancelUrl` (drops the token), toast the message.
  *
- * Attributes:
- *   context          `cart` | `minicart` | `product`
- *   config           JSON from HyperionCheckout\ViewModel\PaypalExpress:
- *                    sdkUrl, dataAttributes, styles, getTokenUrl,
- *                    onAuthorizeUrl, onCancelUrl, quoteId, customerId,
- *                    button, declined
- *   form             selector of the add-to-cart form (product context)
- *   sign-in-message  shown when `declined` (guest checkout not allowed)
- *   options-message  shown when a configurable option is not chosen
- *   error-message    generic failure
- *   cancel-message   fallback when the server sends no cancel message
- *   busy-message     shown while the approval is being processed
+ * The SDK is loaded by lib/paypal-sdk.js after the context's loading
+ * policy: the box near the viewport and the page loaded, a shopper engaged,
+ * an idle slot.
  *
- * The SDK is loaded by lib/paypal-sdk.js: not before the element is near
- * the viewport and the page has finished loading.
- *
- * Events (bubbling, composed): `hyperion-paypal-ready` once the buttons
- * are rendered, `hyperion-paypal-error` with `{ message }`.
+ * Events (bubbling, composed): `hyperion-express:ready` once the buttons
+ * are rendered, `hyperion-express:unavailable` when there is nothing to
+ * render (no configuration, PayPal not eligible, the SDK failed), and
+ * `hyperion-express:error` with `{ message }` for an SDK error.
  */
 
 import { html, nothing } from 'lit';
 import { HyperionLightElement } from '@magentofullstackdev/hyperion-shared/lit';
+import { loadPaypalSdk, readCookie, drainMessages } from '../lib/paypal-sdk.js';
+import { productForm, productFormProblem } from '../lib/express-context.js';
 
 // Resolve `value` against the page and return the absolute URL when it is
 // same-origin, null otherwise (a JSON answer must not send the shopper to
@@ -56,18 +60,12 @@ function resolveSameOriginUrl(value) {
         return null;
     }
 }
-import {
-    loadPaypalSdk,
-    whenWanted,
-    whenEngaged,
-    whenPageIdle,
-    readCookie,
-    notify,
-    drainMessages,
-} from '../lib/paypal-sdk.js';
 
-const DEFAULT_FORM = '#product_addtocart_form';
-const SUPER_ATTRIBUTE_SELECTOR = '[data-hyperion-super]';
+const SIGN_IN_MESSAGE = 'To check out, please sign in with your email address.';
+const OPTIONS_MESSAGE = 'You need to choose options for your item.';
+const ERROR_MESSAGE = 'Something went wrong with your request. Please try again later.';
+const CANCEL_MESSAGE = 'Express Checkout has been canceled.';
+const BUSY_MESSAGE = 'Submitting order information...';
 const CONTAINER_SELECTOR = '[data-hyperion-paypal-container]';
 const REQUEST_HEADERS = {
     Accept: 'application/json',
@@ -83,31 +81,23 @@ class HandledError extends Error {
 }
 
 export class HyperionPaypalButtons extends HyperionLightElement {
+    /** Major of the extension API this element was written for. */
+    static hyperionApi = '1';
+
     static properties = {
-        context: { type: String },
-        config: { type: String },
-        form: { type: String },
-        signInMessage: { type: String, attribute: 'sign-in-message' },
-        optionsMessage: { type: String, attribute: 'options-message' },
-        errorMessage: { type: String, attribute: 'error-message' },
-        cancelMessage: { type: String, attribute: 'cancel-message' },
-        busyMessage: { type: String, attribute: 'busy-message' },
+        context: { attribute: false },
+        options: { attribute: false },
+        placement: { type: String },
         _busy: { state: true },
     };
 
     constructor() {
         super();
-        this.context = 'cart';
-        this.config = '';
-        this.form = DEFAULT_FORM;
-        this.signInMessage = 'To check out, please sign in with your email address.';
-        this.optionsMessage = 'Please choose the product options first.';
-        this.errorMessage = 'Something went wrong with your request. Please try again later.';
-        this.cancelMessage = 'Express Checkout has been canceled.';
-        this.busyMessage = 'Processing your PayPal approval...';
+        this.context = null;
+        this.options = null;
+        this.placement = 'cart';
         this._busy = false;
         this._settings = null;
-        this._waiting = null;
         this._buttons = null;
         this._fundingSource = '';
         this._failureShown = false;
@@ -118,43 +108,56 @@ export class HyperionPaypalButtons extends HyperionLightElement {
         return html`
             <div data-hyperion-paypal-container></div>
             ${this._busy
-                ? html`<p class="mt-2 text-center text-xs text-muted" role="status">${this.busyMessage}</p>`
+                ? html`<p class="mt-2 text-center text-xs text-muted" role="status">${this._t(BUSY_MESSAGE)}</p>`
                 : nothing}
         `;
     }
 
     connectedCallback() {
         super.connectedCallback();
-        this._settings = this._parseConfig();
-        if (!this._settings) return;
         const connection = ++this._connection;
-        this._waiting = whenWanted(this);
-        this._waiting
-            .then(() => whenEngaged())
-            .then(() => whenPageIdle())
+        this._settings = this._readSettings();
+        if (!this._settings || !this.context) {
+            this._signal('hyperion-express:unavailable');
+            return;
+        }
+        Promise.resolve()
+            .then(() => this.context.whenWanted())
+            .then(() => this.context.whenEngaged())
+            .then(() => this.context.whenPageIdle())
             .then(() => (connection === this._connection
                 ? loadPaypalSdk(this._settings.sdkUrl, this._settings.dataAttributes)
                 : null))
             .then((paypal) => (paypal && connection === this._connection ? this._renderButtons(paypal) : null))
-            .catch((error) => this._report(error));
+            .catch((error) => {
+                this._report(error);
+                if (connection === this._connection) this._signal('hyperion-express:unavailable');
+            });
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
         this._connection++;
-        this._waiting?.cancel();
-        this._waiting = null;
         this._closeButtons();
     }
 
-    _parseConfig() {
-        if (!this.config) return null;
-        try {
-            const parsed = JSON.parse(this.config);
-            return parsed && typeof parsed === 'object' && parsed.sdkUrl ? parsed : null;
-        } catch (_e) {
-            return null;
-        }
+    _readSettings() {
+        const options = this.options;
+        return options && typeof options === 'object' && typeof options.sdkUrl === 'string' && options.sdkUrl !== ''
+            ? options
+            : null;
+    }
+
+    _t(source) {
+        return this.context && typeof this.context.t === 'function' ? this.context.t(source) : source;
+    }
+
+    _signal(type, detail = {}) {
+        this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true, detail }));
+    }
+
+    _notify(message, tone) {
+        if (this.context && typeof this.context.notify === 'function') this.context.notify(message, tone);
     }
 
     _closeButtons() {
@@ -168,7 +171,10 @@ export class HyperionPaypalButtons extends HyperionLightElement {
     async _renderButtons(paypal) {
         await this.updateComplete;
         const container = this.querySelector(CONTAINER_SELECTOR);
-        if (!container || typeof paypal.Buttons !== 'function') return;
+        if (!container || typeof paypal.Buttons !== 'function') {
+            this._signal('hyperion-express:unavailable');
+            return;
+        }
         const buttons = paypal.Buttons({
             style: this._settings.styles || {},
             onClick: (data, actions) => this._onClick(data, actions),
@@ -177,10 +183,13 @@ export class HyperionPaypalButtons extends HyperionLightElement {
             onCancel: () => this._onCancel(),
             onError: (error) => this._onError(error),
         });
-        if (typeof buttons.isEligible === 'function' && !buttons.isEligible()) return;
+        if (typeof buttons.isEligible === 'function' && !buttons.isEligible()) {
+            this._signal('hyperion-express:unavailable');
+            return;
+        }
         this._buttons = buttons;
         await buttons.render(container);
-        this.dispatchEvent(new CustomEvent('hyperion-paypal-ready', { bubbles: true, composed: true }));
+        this._signal('hyperion-express:ready');
     }
 
     // --- onClick -----------------------------------------------------------
@@ -203,23 +212,13 @@ export class HyperionPaypalButtons extends HyperionLightElement {
     /** @returns {{ message: string } | null} */
     _findProblem() {
         if (this._settings.declined) {
-            return { message: this.signInMessage };
+            return { message: this._t(SIGN_IN_MESSAGE) };
         }
-        if (this.context !== 'product') return null;
-        const form = this._productForm();
-        if (!form) return { message: this.errorMessage };
-        const missing = [...form.querySelectorAll(SUPER_ATTRIBUTE_SELECTOR)].some((input) => !input.value);
-        if (missing) return { message: this.optionsMessage };
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return { message: this.optionsMessage };
-        }
+        if (this.placement !== 'product') return null;
+        const problem = productFormProblem(productForm(this.closest('hyperion-express-slot')));
+        if (problem === 'missing-form') return { message: this._t(ERROR_MESSAGE) };
+        if (problem === 'options') return { message: this._t(OPTIONS_MESSAGE) };
         return null;
-    }
-
-    _productForm() {
-        const form = document.querySelector(this.form || DEFAULT_FORM);
-        return form instanceof HTMLFormElement ? form : null;
     }
 
     // --- createOrder -------------------------------------------------------
@@ -229,7 +228,7 @@ export class HyperionPaypalButtons extends HyperionLightElement {
         if (problem) {
             throw this._fail(problem.message, 'warning');
         }
-        if (this.context === 'product') {
+        if (this.placement === 'product') {
             await this._addProductToCart();
         }
         let result;
@@ -239,72 +238,36 @@ export class HyperionPaypalButtons extends HyperionLightElement {
                 credentials: 'same-origin',
                 headers: REQUEST_HEADERS,
                 body: new URLSearchParams({
-                    quote_id: this.context === 'product' ? '' : String(this._settings.quoteId ?? ''),
-                    customer_id: this.context === 'product' ? '' : String(this._settings.customerId ?? ''),
+                    quote_id: this.placement === 'product' ? '' : String(this._settings.quoteId ?? ''),
+                    customer_id: this.placement === 'product' ? '' : String(this._settings.customerId ?? ''),
                     form_key: readCookie('form_key'),
                     button: String(this._settings.button ?? 1),
                 }),
             });
             result = await response.json();
         } catch (_e) {
-            throw this._fail(this.errorMessage);
+            throw this._fail(this._t(ERROR_MESSAGE));
         }
         if (!result || !result.success || !result.token) {
             // The controller also queued the message for the next page.
             drainMessages();
-            throw this._fail(result?.error_message || this.errorMessage);
+            throw this._fail(result?.error_message || this._t(ERROR_MESSAGE));
         }
         return result.token;
     }
 
     /**
-     * Post the add-to-cart form the way its own button does. With HTMX the
-     * response also refreshes the header badge and shows the toast.
+     * Post the add to cart form through the context, the way its own
+     * button does. With htmx the response also refreshes the header badge
+     * and shows the toast.
      */
     async _addProductToCart() {
-        const form = this._productForm();
-        const status = await this._submitForm(form);
-        if (status < 200 || status >= 300) {
-            // 422: the response carried the reason and it is on screen already.
-            if (status !== 422) throw this._fail(this.errorMessage);
-            this._failureShown = true;
-            throw new HandledError('add to cart rejected');
-        }
-        document.dispatchEvent(new CustomEvent('hyperion:cart-changed'));
-    }
-
-    /** @returns {Promise<number>} HTTP status of the add-to-cart request */
-    _submitForm(form) {
-        const url = form.getAttribute('action') || '';
-        const htmx = window.htmx;
-        if (htmx && typeof htmx.ajax === 'function') {
-            return new Promise((resolve) => {
-                const onAfterRequest = (event) => {
-                    if (event.detail?.elt !== form) return;
-                    form.removeEventListener('htmx:afterRequest', onAfterRequest);
-                    resolve(event.detail?.xhr?.status ?? 0);
-                };
-                form.addEventListener('htmx:afterRequest', onAfterRequest);
-                Promise.resolve(htmx.ajax('POST', url, { source: form })).catch(() => {
-                    form.removeEventListener('htmx:afterRequest', onAfterRequest);
-                    resolve(0);
-                });
-            });
-        }
-        const data = new FormData(form);
-        data.set('form_key', readCookie('form_key') || String(data.get('form_key') ?? ''));
-        return fetch(url, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'HX-Request': 'true' },
-            body: data,
-        }).then(async (response) => {
-            if (response.status === 422) {
-                const body = new DOMParser().parseFromString(await response.text(), 'text/html');
-                notify(body.querySelector('[data-hyperion-notification]')?.textContent?.trim() || this.errorMessage);
-            }
-            return response.status;
-        }).catch(() => 0);
+        const added = await this.context.addCurrentProductToCart();
+        if (added?.ok) return;
+        if (added?.message) throw this._fail(added.message);
+        // The refusal and its reason are on screen already.
+        this._failureShown = true;
+        throw new HandledError('add to cart rejected');
     }
 
     // --- onApprove / onCancel / onError ------------------------------------
@@ -326,22 +289,22 @@ export class HyperionPaypalButtons extends HyperionLightElement {
             const result = await response.json();
             if (!result || result.success === false || !result.redirectUrl) {
                 drainMessages();
-                throw this._fail(result?.error_message || this.errorMessage);
+                throw this._fail(result?.error_message || this._t(ERROR_MESSAGE));
             }
             // The answer comes from the store, but a redirect target is only
             // ever followed when it stays on this origin.
             const redirectUrl = resolveSameOriginUrl(result.redirectUrl);
             if (!redirectUrl) {
-                throw this._fail(this.errorMessage);
+                throw this._fail(this._t(ERROR_MESSAGE));
             }
             if (actions && typeof actions.redirect === 'function') {
                 await actions.redirect(redirectUrl);
             } else {
-                window.location.assign(redirectUrl);
+                this.context.redirect(redirectUrl);
             }
         } catch (error) {
             this._busy = false;
-            if (!error?.handled) this._fail(this.errorMessage);
+            if (!error?.handled) this._fail(this._t(ERROR_MESSAGE));
         }
     }
 
@@ -363,7 +326,7 @@ export class HyperionPaypalButtons extends HyperionLightElement {
         } catch (_e) {
             message = '';
         }
-        notify(message || this.cancelMessage, tone);
+        this._notify(message || this._t(CANCEL_MESSAGE), tone);
     }
 
     _onError(error) {
@@ -371,7 +334,8 @@ export class HyperionPaypalButtons extends HyperionLightElement {
         // PayPal wraps what createOrder threw, so the flag is kept here.
         if (this._failureShown || error?.handled) return;
         this._report(error);
-        notify(this.errorMessage);
+        // The slot shows the message of an error event in the page toast.
+        this._signal('hyperion-express:error', { message: this._t(ERROR_MESSAGE) });
     }
 
     // --- Feedback ----------------------------------------------------------
@@ -379,12 +343,7 @@ export class HyperionPaypalButtons extends HyperionLightElement {
     /** Toast the message and return the error to throw. */
     _fail(message, tone = 'error') {
         this._failureShown = true;
-        notify(message, tone);
-        this.dispatchEvent(new CustomEvent('hyperion-paypal-error', {
-            bubbles: true,
-            composed: true,
-            detail: { message },
-        }));
+        this._notify(message, tone);
         return new HandledError(message);
     }
 

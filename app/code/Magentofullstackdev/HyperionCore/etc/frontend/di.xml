@@ -143,6 +143,59 @@
             </argument>
         </arguments>
     </type>
+    <!--
+        Themes that count as Hyperion for Model\Design\ThemeScope (children of a listed theme
+        count too). Declared in this scope only: add an item here, never in a global di.xml.
+    -->
+    <type name="Magentofullstackdev\HyperionCore\Model\Design\ThemeScope">
+        <arguments>
+            <argument name="themes" xsi:type="array">
+                <item name="hyperion" xsi:type="string">Magentofullstackdev/hyperion</item>
+            </argument>
+        </arguments>
+    </type>
+    <!--
+        Cache identities of the blocks third parties place in the extension containers of the
+        block cached product view and product lists: merged into the parent's identities, so its
+        block cache entry is cleaned with the child's entity. Items: parent block name => child
+        aliases, or the element name of a container nested deeper. The per tile `details.renderers`
+        list is left out (its renderers show the tile's product, whose tags the list already carries).
+    -->
+    <type name="Magentofullstackdev\HyperionCore\Model\Cache\ContainerIdentities">
+        <arguments>
+            <argument name="containers" xsi:type="array">
+                <item name="hyperion.product.view" xsi:type="array">
+                    <item name="media_after" xsi:type="string">media_after</item>
+                    <item name="info_top" xsi:type="string">info_top</item>
+                    <item name="info_after_price" xsi:type="string">info_after_price</item>
+                    <item name="info_before_addtocart" xsi:type="string">info_before_addtocart</item>
+                    <item name="form_additional" xsi:type="string">form_additional</item>
+                    <item name="express" xsi:type="string">express</item>
+                    <item name="info_after_addtocart" xsi:type="string">info_after_addtocart</item>
+                    <item name="info_extra" xsi:type="string">info_extra</item>
+                    <item name="tabs" xsi:type="string">tabs</item>
+                    <!-- bundle products: core's options top container, moved under the bundle options block -->
+                    <item name="product_info_bundle_options_top" xsi:type="string">product.info.bundle.options.top</item>
+                </item>
+                <item name="category.products.list" xsi:type="array">
+                    <item name="additional" xsi:type="string">additional</item>
+                    <item name="addto" xsi:type="string">addto</item>
+                </item>
+                <item name="search_result_list" xsi:type="array">
+                    <item name="additional" xsi:type="string">additional</item>
+                    <item name="addto" xsi:type="string">addto</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magento\Catalog\Block\Product\View">
+        <plugin name="hyperion_core_container_identities"
+                type="Magentofullstackdev\HyperionCore\Plugin\Catalog\Block\Product\ContainerIdentitiesPlugin"/>
+    </type>
+    <type name="Magento\Catalog\Block\Product\ListProduct">
+        <plugin name="hyperion_core_container_identities"
+                type="Magentofullstackdev\HyperionCore\Plugin\Catalog\Block\Product\ContainerIdentitiesPlugin"/>
+    </type>
     <!-- A generated meta description for the pages that have none, set right before the head renders;
          the render blocking marker of the pages that paint their fold from an inline critical sheet. -->
     <type name="Magento\Framework\View\Page\Config\Renderer">

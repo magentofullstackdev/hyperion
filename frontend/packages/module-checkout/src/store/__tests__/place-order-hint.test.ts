@@ -11,7 +11,7 @@ vi.mock('../../store/flow-selectors.js', () => ({
 }));
 
 import { setCheckoutConfig } from '../../bootstrap-config.js';
-import { getCheckoutBlocker, prepareCheckout } from '../../components/payment-renderers/checkout-gate.js';
+import { requestCheckoutValidation } from '../../components/payment-host/pipeline.js';
 import type { RecaptchaConfig } from '../../types/captcha.js';
 import type { CheckoutConfig } from '../../types/config.js';
 import { t } from '../../utils/i18n.js';
@@ -28,6 +28,13 @@ import { placeOrderBlocker, placeOrderHint } from '../place-order-hint.js';
 import type { createSelectors } from '../selectors.js';
 
 type Selectors = ReturnType<typeof createSelectors>;
+
+/** What an element that owns Place Order reads before its wallet opens (`snapshot().blocker`). */
+function getCheckoutBlocker(): string | null {
+    return placeOrderHint(store, initFlowSelectors(), { skipPaymentReady: true });
+}
+
+let store: Store;
 
 const REQUIRED = { isRequired: true, isCaseSensitive: false, imageHeight: 50, imageWidth: 200 };
 
@@ -46,7 +53,6 @@ function configure(recaptcha?: RecaptchaConfig): void {
 }
 
 describe('security checks in the place order hint', () => {
-    let store: Store;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -124,7 +130,8 @@ describe('security checks in the place order hint', () => {
                 cancelOrder: vi.fn(),
             } as never);
 
-            expect(await prepareCheckout()).toBe('Enter the security code before paying.');
+            expect(await requestCheckoutValidation()).toBe(false);
+            expect(store.globalError.get()).toBe('Enter the security code before paying.');
         });
     });
 });

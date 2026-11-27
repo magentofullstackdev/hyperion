@@ -1,0 +1,33 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+/**
+ * A marker that shows where a container of the storefront prints its
+ * children. Session agnostic (store configuration only): it may sit in edge
+ * cached and block cached containers.
+ *
+ * Layout arguments: `marker` (the name printed), `markers` (the view model).
+ * Data set by the parent at render time: `product` (tile renderers),
+ * `order` (order history extra column).
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$markers = $block->getData('markers');
+if (!$markers instanceof \Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers || !$markers->isEnabled()) {
+    return;
+}
+$name = (string) $block->getData('marker');
+$text = (string) ($block->getData('text') ?: 'Sample marker: ' . $name);
+$product = $block->getData('product');
+$order = $block->getData('order');
+?>
+<span class="hyperion-sample-marker" style="display:inline-block;padding:2px 6px;border:1px dashed #0f766e;color:#0f766e;font-size:12px;line-height:16px"
+      data-hyperion-sample-marker="<?= $escaper->escapeHtmlAttr($name) ?>"
+    <?php if ($product instanceof \Magento\Catalog\Api\Data\ProductInterface): ?>
+      data-sku="<?= $escaper->escapeHtmlAttr((string) $product->getSku()) ?>"
+    <?php endif; ?>
+    <?php if ($order instanceof \Magento\Sales\Api\Data\OrderInterface): ?>
+      data-order="<?= $escaper->escapeHtmlAttr((string) $order->getIncrementId()) ?>"
+    <?php endif; ?>
+><?= $escaper->escapeHtml($text) ?></span>

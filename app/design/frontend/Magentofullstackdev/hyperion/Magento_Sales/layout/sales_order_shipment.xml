@@ -8,6 +8,10 @@
     <body>
         <!-- The account shell owns the heading; order/view.phtml renders date, status and actions -->
         <referenceBlock name="page.main.title" remove="true"/>
+        <!-- Core declares sales.order.info.buttons inside page.main.title: it moves under the
+             order block first (moves run before removals), and order/view.phtml prints its
+             CHILDREN (links other modules add next to the order actions), never the block. -->
+        <move element="sales.order.info.buttons" destination="sales.order.shipment" as="order_buttons"/>
         <move element="sales.order.shipment" destination="content" before="hyperion.account.shell.close"/>
         <move element="sales.order.info" destination="sales.order.shipment" as="info"/>
         <referenceBlock name="sales.order.shipment" template="Magento_Sales::order/view.phtml">

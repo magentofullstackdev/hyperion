@@ -15,6 +15,8 @@ use Magentofullstackdev\HyperionCore\Model\Cache\DegradedResponse;
  * Runs when the page body is complete: nothing can set the public headers
  * again after it, and the built-in cache reads them later, after the result
  * has rendered. See DegradedResponse for why this cannot happen at the failure.
+ *
+ * @internal
  */
 class DegradedResponsePlugin
 {

@@ -82,6 +82,17 @@ class Header extends Template
     }
 
     /**
+     * Width and height attributes of the logo image.
+     *
+     * @see \Magentofullstackdev\HyperionNavigation\Model\LogoResolver::getLogoDimensions()
+     * @return array{width: int, height: int}
+     */
+    public function getLogoDimensions(): array
+    {
+        return $this->logoResolver->getLogoDimensions();
+    }
+
+    /**
      * @return string
      */
     public function getLogoAlt(): string

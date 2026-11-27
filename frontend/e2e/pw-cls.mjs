@@ -13,9 +13,17 @@
 // the layout where it was, and the server rendered skeleton of the checkout
 // must put the contact card, the shipping card and the summary exactly where
 // the application renders them (entry script blocked vs mounted).
-// node e2e/pw-cls.mjs <baseUrl> [--only=<parts>] [--viewport=desktop|phone] [--dump=<file>] [--customer=<email>:<password>]
-//   --only      comma separated: pages, skeletons, motion, checkout-flow,
+// The cart page joins with its coupon form, desktop and phone, throttled:
+// closed (no code), open with an applied coupon (page load), still open after
+// a successful Cancel and open after a refused code (the htmx answers); no
+// state may shift the layout, and the Apply button keeps its width while its
+// request runs.
+// node e2e/pw-cls.mjs <baseUrl> [--only=<parts>] [--viewport=desktop|phone] [--dump=<file>] [--customer=<email>:<password>] [--coupon=<code>:<product path>]
+//   --only      comma separated: pages, skeletons, motion, coupon, checkout-flow,
 //               checkout-parity, checkout-customer (default: all of them)
+//   --coupon    a valid coupon code and the product its rule applies to
+//               (default: the Luma sample data coupon H20 on the Affirm Water
+//               Bottle, /affirm-water-bottle.html)
 //   --viewport  limits the checkout parts to one viewport
 //   --dump      writes every checkout measurement (layout shift entries with
 //               their sources, every rectangle of the skeleton and of the
@@ -36,7 +44,7 @@ if (!/^https?:\/\//.test(base)) {
 }
 // Options are written --name=value.
 const option = (name) => (process.argv.find((a) => a.startsWith(name + '=')) ?? '').slice(name.length + 1);
-const PARTS = ['pages', 'skeletons', 'motion', 'checkout-flow', 'checkout-parity', 'checkout-customer'];
+const PARTS = ['pages', 'skeletons', 'motion', 'coupon', 'checkout-flow', 'checkout-parity', 'checkout-customer'];
 const only = option('--only') ? option('--only').split(',').map((p) => p.trim()) : PARTS;
 if (only.some((p) => !PARTS.includes(p))) {
     console.error('--only takes: ' + PARTS.join(', '));
@@ -56,6 +64,10 @@ const check = (name, ok, detail = '') => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PAGES = ['/', u('/women/tops-women.html'), u('/women/tops-women.html?product_list_mode=list'), u('/radiant-tee.html'), u('/push-it-messenger-bag.html'), '/catalogsearch/result/?q=jacket', u('/women.html'), '/checkout/cart/', '/contact/'];
 const CATEGORY = u('/women/tops-women.html');
+const [COUPON_CODE, COUPON_PRODUCT] = (() => {
+    const [code, product] = (option('--coupon') || 'H20:/affirm-water-bottle.html').split(':');
+    return [code, u(product || '/affirm-water-bottle.html')];
+})();
 const PDP = u('/radiant-tee.html');
 
 const browser = await chromium.launch({ headless: true });
@@ -466,6 +478,120 @@ try {
         const settled = dimmed.filter((o) => Number(o) <= 0.61);
         check('motion: a grid swap dims the grid while loading and raises no page error', dimmed.length > 0 && settled.length >= dimmed.length / 2 && pageErrors.length === 0, `dimmed samples ${dimmed.length}, at 0.6: ${settled.length}, errors ${pageErrors.join(' | ')}`);
         await ctx.close();
+    }
+
+    if (want('coupon')) {
+        const lostClicks = [];
+        // ---- cart page, coupon form closed, open with an applied coupon, after a Cancel, open after a refused code;
+        // the Apply button keeps its width while its request runs
+        for (const mobile of [false, true]) {
+            const name = viewportName(mobile);
+            const ctx = await context(mobile);
+            const page = await ctx.newPage();
+            const problems = [];
+            watch(page, problems);
+            await observeShifts(page);
+            const couponState = () => page.evaluate(() => {
+                const host = document.querySelector('hyperion-coupon-form');
+                return { applied: host?.getAttribute('applied-coupon') ?? '', attempted: host?.getAttribute('attempted-code') ?? '' };
+            });
+            const loadCart = async () => {
+                await page.goto('about:blank');
+                await page.goto(base + '/checkout/cart/', { waitUntil: 'load' });
+                await sleep(5000);
+                return takeShifts(page);
+            };
+            const couponPost = () => page.waitForResponse((r) => r.url().includes('/checkout/cart/couponPost') && r.request().method() === 'POST', { timeout: 45000 }).catch(() => null);
+            const FORM = 'hyperion-coupon-form form[data-hyperion-coupon-form]';
+            // The submit button: its width and the busy state the component gives it while a request runs.
+            const buttonState = () => page.evaluate((form) => {
+                const button = document.querySelector(`${form} button[type="submit"]`);
+                return { width: button?.getBoundingClientRect().width ?? 0, disabled: !!button?.disabled, busy: button?.getAttribute('aria-busy') ?? '' };
+            }, FORM);
+            const fieldShown = () => page.evaluate((form) => document.querySelector(`${form} input[name="coupon_code"]`)?.closest('details')?.open === true, FORM);
+            // Clicks the submit button of the rendered form and waits for its answer; returns the time from the click to
+            // the answer in ms (a shift later than 500 ms after the click counts). With `holdMs` the answer is held
+            // back that long and the button is read while the request runs.
+            const submitForm = async ({ holdMs = 0 } = {}) => {
+                const hold = async (route) => { await sleep(holdMs); await route.continue(); };
+                if (holdMs) await page.route(/\/checkout\/cart\/couponPost/, hold);
+                await upgraded();
+                const before = await buttonState();
+                const answer = couponPost();
+                const clicked = Date.now();
+                await page.click(`${FORM} button[type="submit"]`);
+                let during = before;
+                if (holdMs) { await sleep(Math.min(300, holdMs / 2)); during = await buttonState(); }
+                await answer;
+                const elapsed = Date.now() - clicked;
+                if (holdMs) await page.unroute(/\/checkout\/cart\/couponPost/, hold);
+                await sleep(3000);
+                return { elapsed, before, during };
+            };
+            // The rendered form, not the server skeleton (removed when the component upgrades, a slow network delays it).
+            const upgraded = () => page.waitForSelector(FORM, { state: 'attached', timeout: 45000 });
+            const submitCode = async (code, options) => {
+                await upgraded();
+                if (!(await fieldShown())) {
+                    await page.click('hyperion-coupon-form summary');
+                    const opened = await page.waitForFunction((form) => document.querySelector(`${form} input[name="coupon_code"]`)?.closest('details')?.open === true, FORM, { timeout: 5000 }).then(() => true).catch(() => false);
+                    if (!opened) {
+                        // Reported, then opened by the script so the states after it are still measured.
+                        lostClicks.push(name);
+                        console.log(`NOTE  coupon form (${name}): a click on the summary did not open the form, opened by the script`);
+                        await page.evaluate(() => { const d = document.querySelector('hyperion-coupon-form details'); if (d) d.open = true; });
+                    }
+                }
+                // An opened form that closes again before the field can be typed into is reported too.
+                for (let attempt = 0; ; attempt++) {
+                    const filled = await page.fill(`${FORM} input[name="coupon_code"]`, code, { timeout: 5000 }).then(() => true).catch(() => false);
+                    if (filled) break;
+                    if (attempt === 2) throw new Error('the coupon field never became visible');
+                    lostClicks.push(name);
+                    console.log(`NOTE  coupon form (${name}): the open form closed before the field could be typed into: ${JSON.stringify(await page.evaluate(() => ({ open: document.querySelector('hyperion-coupon-form details')?.open, attrs: [...(document.querySelector('hyperion-coupon-form')?.attributes ?? [])].map((a) => a.name).join(' ') })))}`);
+                    await page.evaluate(() => { const d = document.querySelector('hyperion-coupon-form details'); if (d) d.open = true; });
+                }
+                return submitForm(options);
+            };
+            const score = (taken) => `counted ${taken.counted.reduce((a, e) => a + e.value, 0).toFixed(4)}, within the input window ${taken.input.reduce((a, e) => a + e.value, 0).toFixed(4)}`;
+            // The product of the coupon rule, added before the throttling starts.
+            await page.goto(base + COUPON_PRODUCT, { waitUntil: 'networkidle' });
+            await Promise.all([
+                page.waitForResponse((r) => /checkout\/cart\/add/.test(r.url()), { timeout: 30000 }),
+                page.click('#product_addtocart_form button[type="submit"]'),
+            ]);
+            await sleep(800);
+            await throttle(ctx, page);
+            const closed = await loadCart();
+            const closedState = await couponState();
+            check(`cls: cart page with the coupon form closed (${name}): no layout shift`, closedState.applied === '' && closed.counted.length === 0, `${score(closed)}${closed.counted.length ? ' ' + shiftSummary(closed.counted) : ''}`);
+            // The apply of the valid code is not measured for shifts: its answer is held back 1.5 s to read the width.
+            const widths = await submitCode(COUPON_CODE, { holdMs: 1500 });
+            // The reading counts only when the button shows the request running (disabled and aria-busy), so a request
+            // that has not started yet (a reCAPTCHA token, a slow chunk) cannot pass it.
+            check(`coupon form: the Apply button keeps its width while its request runs (${name})`, widths.before.width > 0 && widths.before.busy !== 'true' && widths.during.disabled && widths.during.busy === 'true' && Math.abs(widths.during.width - widths.before.width) < 0.5, JSON.stringify({ before: widths.before, during: widths.during }));
+            const applied = await loadCart();
+            const appliedState = await couponState();
+            check(`cls: cart page loaded with the applied coupon ${COUPON_CODE}, form open (${name}): no layout shift`, appliedState.applied.toUpperCase() === COUPON_CODE.toUpperCase() && applied.counted.length === 0, appliedState.applied === '' ? `the coupon was not applied: ${JSON.stringify(appliedState)}` : `${score(applied)}${applied.counted.length ? ' ' + shiftSummary(applied.counted) : ''}`);
+            // Cancel the coupon (the submit button of the applied form): the form stays open, nothing moves.
+            if (appliedState.applied !== '') {
+                await takeShifts(page);
+                const cancel = await submitForm();
+                const canceled = await takeShifts(page);
+                const canceledState = await couponState();
+                const open = await fieldShown();
+                check(`cls: coupon form after a successful Cancel (${name}): the form stays open, no layout shift`, canceledState.applied === '' && open && canceled.counted.length === 0, `${score(canceled)}, answer after ${cancel.elapsed} ms, open ${open}${canceled.counted.length ? ' ' + shiftSummary(canceled.counted) : ''}`);
+            }
+            // Then a code the store refuses.
+            await takeShifts(page);
+            const { elapsed: answerMs } = await submitCode('HYPERION-CLS-BOGUS');
+            const refused = await takeShifts(page);
+            const refusedState = await couponState();
+            check(`cls: coupon form open after a refused code (${name}): no layout shift outside the input window`, refusedState.attempted !== '' && refused.counted.length === 0, `${score(refused)}, answer after ${answerMs} ms${refused.counted.length ? ' ' + shiftSummary(refused.counted) : ''}`);
+            check(`cls: coupon states (${name}): no page errors, no HTTP 5xx`, problems.length === 0, problems.slice(0, 4).join(' | '));
+            check(`coupon form (${name}): a click on the summary opens the form and it stays open`, !lostClicks.includes(name), lostClicks.includes(name) ? 'the form was closed again, see the NOTE lines' : '');
+            await ctx.close();
+        }
     }
 
     // ---- checkout: the guest flow, step by step, desktop and phone, throttled

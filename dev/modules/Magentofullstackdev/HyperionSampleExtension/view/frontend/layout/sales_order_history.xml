@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    Order history extra column: the header cell and one cell per order (the
+    container hands the order to its children).
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <referenceContainer name="sales.order.history.extra.column.header">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.order.column.header"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">sales.order.history.extra.column.header</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                    <argument name="text" xsi:type="string" translate="true">Sample column</argument>
+                </arguments>
+            </block>
+        </referenceContainer>
+        <referenceBlock name="sales.order.history.extra.container">
+            <block class="Magento\Framework\View\Element\Template" name="hyperion.sample.marker.order.column"
+                   template="Magentofullstackdev_HyperionSampleExtension::marker.phtml">
+                <arguments>
+                    <argument name="marker" xsi:type="string">sales.order.history.extra.container</argument>
+                    <argument name="markers" xsi:type="object">Magentofullstackdev\HyperionSampleExtension\ViewModel\Markers</argument>
+                </arguments>
+            </block>
+        </referenceBlock>
+    </body>
+</page>

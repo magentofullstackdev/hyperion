@@ -10,8 +10,11 @@
  * Address Options through the core widget blocks, rendered with the Hyperion
  * widget templates. Children added by other modules are rendered where core
  * renders them: form_fields_before, customer.form.register.extra,
- * fieldset_create_info_additional (remote shopping assistance) and
- * form_additional_info (reCAPTCHA). customer.form.register.newsletter is left
+ * fieldset_create_info_additional (remote shopping assistance),
+ * customer_form_user_attributes and form_additional_info (reCAPTCHA). Without a
+ * customer_form_user_attributes / customer_form_address_user_attributes block,
+ * HyperionCustomer's form/user-attributes.phtml prints the user-defined
+ * attributes of the customer_account_create / customer_register_address forms. customer.form.register.newsletter is left
  * out on purpose: it only carries a RequireJS widget.
  *
  * The address fieldset renders when the block carries `show_address_fields`
@@ -42,6 +45,7 @@ $dob = $layout->createBlock(Dob::class);
 $taxvat = $layout->createBlock(Taxvat::class);
 $gender = $layout->createBlock(Gender::class);
 $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
+$passwordMinCharacterSets = (int) $block->getRequiredCharacterClassesNumber();
 ?>
 <div class="max-w-md mx-auto py-8">
     <div class="bg-surface rounded-2xl border border-subtle shadow-sm p-8">
@@ -107,7 +111,30 @@ $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
                 <?= $gender->setGender($formData->getGender())->toHtml() ?>
             <?php endif; ?>
 
-            <?= $block->getChildHtml('fieldset_create_info_additional') ?>
+            <?php
+            // Custom customer attributes: a block a module schedules under the core aliases wins;
+            // otherwise the generic renderer prints the user-defined attributes of the form, minus
+            // any field the hook children already rendered.
+            $additionalHtml = (string) $block->getChildHtml('fieldset_create_info_additional');
+            $userAttributesHtml = (string) $block->getChildHtml('customer_form_user_attributes');
+            ?>
+            <?= /* @noEscape */ $additionalHtml ?>
+            <?= /* @noEscape */ $userAttributesHtml ?>
+            <?php if (trim($userAttributesHtml) === ''): ?>
+                <?php $userAttributesBlock = $layout->createBlock(Template::class); ?>
+                <?php if ($userAttributesBlock instanceof Template): ?>
+                    <?= $userAttributesBlock
+                        ->setTemplate('Magentofullstackdev_HyperionCustomer::form/user-attributes.phtml')
+                        ->setData([
+                            'entity_type' => 'customer',
+                            'form_code' => 'customer_account_create',
+                            'entity' => $formData,
+                            'id_prefix' => 'customer-attribute-',
+                            'rendered_html' => $additionalHtml,
+                        ])
+                        ->toHtml() ?>
+                <?php endif; ?>
+            <?php endif; ?>
 
             <?php if ($block->getShowAddressFields()): ?>
                 <?php
@@ -280,6 +307,23 @@ $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
                             <?php $addressAttributes->setFieldIdFormat('address:%1$s')->setFieldNameFormat('address[%1$s]'); ?>
                             <?php $block->restoreSessionData($addressAttributes->getMetadataForm(), 'address'); ?>
                             <?= $addressAttributes->setShowContainer(false)->toHtml() ?>
+                        <?php else: ?>
+                            <?php $addressAttributesBlock = $layout->createBlock(Template::class); ?>
+                            <?php if ($addressAttributesBlock instanceof Template): ?>
+                                <?php /* CreatePost reads user-defined address attributes from `address[...]`
+                                         and saves them unfiltered: dates are posted as ISO. */ ?>
+                                <?= $addressAttributesBlock
+                                    ->setTemplate('Magentofullstackdev_HyperionCustomer::form/user-attributes.phtml')
+                                    ->setData([
+                                        'entity_type' => 'customer_address',
+                                        'form_code' => 'customer_register_address',
+                                        'entity' => new \Magento\Framework\DataObject((array) $formData->getData('address')),
+                                        'name_scope' => 'address',
+                                        'id_prefix' => 'address-attribute-',
+                                        'iso_dates' => true,
+                                    ])
+                                    ->toHtml() ?>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <input type="hidden" name="default_billing" value="1">
@@ -305,8 +349,19 @@ $minimumPasswordLength = (int) $block->getMinimumPasswordLength();
                                 'autocomplete' => 'new-password',
                                 'required' => true,
                                 'minlength' => $minimumPasswordLength,
+                                'described_by' => 'password-strength-hint',
+                                'attributes' => ['data-password-min-character-sets' => $passwordMinCharacterSets],
                             ])
                             ->toHtml() ?>
+                        <p id="password-strength-hint" class="mt-1 text-xs text-muted">
+                            <?= $escaper->escapeHtml(__('Minimum length: %1 characters.', $minimumPasswordLength)) ?>
+                            <?php if ($passwordMinCharacterSets > 0): ?>
+                                <?= $escaper->escapeHtml(__(
+                                    'Minimum of different classes of characters in password is %1. Classes of characters: Lower Case, Upper Case, Digits, Special Characters.',
+                                    $passwordMinCharacterSets
+                                )) ?>
+                            <?php endif; ?>
+                        </p>
                     </div>
                     <div>
                         <label for="password-confirmation" class="block text-sm font-medium text-secondary mb-1">

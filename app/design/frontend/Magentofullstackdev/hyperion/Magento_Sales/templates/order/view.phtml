@@ -30,6 +30,15 @@ $backUrl = $block->getBackUrl();
 $trackingHtml = $order->getTracksCollection()->count() ? $block->getChildHtml('tracking-info-link') : '';
 $comments = $block->getData('show_comments') ? $order->getVisibleStatusHistory() : [];
 $showOrderDate = $block->getData('show_order_date') !== false;
+// Extension point: the CHILDREN of core's `sales.order.info.buttons` (links other modules add
+// next to the order actions), never the block itself, whose template prints core's reorder and
+// print links as `data-post` widgets. The customer order pages move the block under this one
+// (alias `order_buttons`); the guest pages keep core's title area, which prints them itself.
+// The page is private: children may read the session.
+$orderButtons = $block->getChildBlock('order_buttons');
+$extraActionsHtml = $orderButtons instanceof \Magento\Framework\View\Element\AbstractBlock
+    ? trim((string) $orderButtons->getChildHtml())
+    : '';
 ?>
 <section class="space-y-6" aria-labelledby="hyperion-account-heading">
 
@@ -52,6 +61,12 @@ $showOrderDate = $block->getData('show_order_date') !== false;
                              bg-primary/10 text-primary border border-primary/30">
                     <?= $escaper->escapeHtml($order->getStatusLabel()) ?>
                 </span>
+            <?php endif; ?>
+            <?php if ($extraActionsHtml !== ''): ?>
+                <div class="flex items-center gap-3 flex-wrap text-sm font-medium [&_a]:text-primary [&_a:hover]:underline"
+                     data-hyperion-order-extra-actions>
+                    <?= /* @noEscape -- rendered blocks */ $extraActionsHtml ?>
+                </div>
             <?php endif; ?>
         </div>
     </div>

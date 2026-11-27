@@ -1,0 +1,11 @@
+{
+    "extends": "../../../tsconfig.base.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "allowJs": true,
+        "checkJs": true,
+        "allowImportingTsExtensions": true,
+        "types": ["node"]
+    },
+    "include": ["*.js", "*.d.ts", "__tests__/**/*.js", "__tests__/**/*.ts", "../extension-api.d.ts"]
+}

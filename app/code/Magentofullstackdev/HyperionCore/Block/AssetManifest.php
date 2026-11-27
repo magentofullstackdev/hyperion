@@ -70,6 +70,9 @@ class AssetManifest extends Template implements ArgumentInterface
      *
      * Falls back to /static/frontend/Magentofullstackdev/hyperion/assets/<name>.js when
      * the manifest is unavailable.
+     *
+     * @api
+     * @since 0.9.0
      */
     public function getAssetUrl(string $entryName): string
     {
@@ -101,6 +104,9 @@ class AssetManifest extends Template implements ArgumentInterface
      * file can't be read: the caller skips the inline `<style>` (a noop
      * `<style></style>` is still a parse cost) and, for a typed page,
      * falls back to the synchronous stylesheet link.
+     *
+     * @api
+     * @since 0.9.0
      */
     public function getCriticalCss(string $type = ''): string
     {
@@ -144,6 +150,9 @@ class AssetManifest extends Template implements ArgumentInterface
      * `"css": ["assets/entry.abc.css"]` alongside JS entries).
      *
      * @return string[] public URLs, empty array when none or manifest missing
+     *
+     * @api
+     * @since 0.9.0
      */
     public function getEntryCssUrls(string $entryName): array
     {
@@ -250,7 +259,7 @@ class AssetManifest extends Template implements ArgumentInterface
     private function toPublicUrl(string $relative): string
     {
         $relative = ltrim($relative, '/');
-        // Magento's static-content deploy materialises theme assets at
+        // Magento's static-content deploy materializes theme assets at
         // `pub/static/frontend/<vendor>/<theme>/<locale>/...`. The
         // workspace's Vite build writes its source into `web/`, and the
         // deploy mirrors `web/` into the locale subdir. Include the

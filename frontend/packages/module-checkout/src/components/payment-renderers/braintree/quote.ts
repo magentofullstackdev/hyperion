@@ -3,22 +3,11 @@
 
 /**
  * Quote values the Braintree renderers send to the gateway, read from the
- * store the same way `flow-actions.ts::placeOrder` reads them.
+ * quote of the first-party context (`context.firstParty.quote()`), the
+ * same values the order request reads.
  */
 import type { Address } from '../../../types/address.js';
-import { getStore } from '../../../store/index.js';
-
-export function getBillingAddress(): Address | null {
-    const store = getStore();
-    return store.billingSameAsShipping.get() && !store.isVirtual.get()
-        ? store.shippingAddress.get()
-        : store.billingAddress.get();
-}
-
-export function getShippingAddress(): Address | null {
-    const store = getStore();
-    return store.isVirtual.get() ? null : store.shippingAddress.get();
-}
+import type { FirstPartyQuote } from '../first-party.js';
 
 /** Core helper `format-amount.js`. */
 export function formatAmount(value: unknown): string {
@@ -27,12 +16,12 @@ export function formatAmount(value: unknown): string {
 }
 
 /** The gateway charges the base currency amount, like the core renderers. */
-export function getBaseGrandTotal(): string {
-    return formatAmount(getStore().totals.get()?.base_grand_total);
+export function getBaseGrandTotal(quote: FirstPartyQuote): string {
+    return formatAmount(quote.totals?.base_grand_total);
 }
 
-export function getBaseCurrencyCode(): string {
-    return getStore().totals.get()?.base_currency_code ?? '';
+export function getBaseCurrencyCode(quote: FirstPartyQuote): string {
+    return quote.totals?.base_currency_code ?? '';
 }
 
 export function regionCodeOf(address: Address): string | undefined {

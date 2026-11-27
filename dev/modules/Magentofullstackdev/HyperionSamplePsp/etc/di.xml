@@ -1,0 +1,162 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 Sergiu Ro - magentofullstackdev
+-->
+<!--
+    The payment methods, built on the gateway framework. Global scope: the
+    order is placed through REST (webapi_rest area) and invoiced from the
+    admin, so the methods must exist in every area. Nothing here touches a
+    Hyperion pool (those live in etc/frontend/di.xml only).
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- Card: authorize with the fake nonce, capture on invoice, vault authorize for stored cards. -->
+    <virtualType name="HyperionSampleCardConfig" type="Magento\Payment\Gateway\Config\Config">
+        <arguments>
+            <argument name="methodCode" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::CARD</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardConfigValueHandler" type="Magento\Payment\Gateway\Config\ConfigValueHandler">
+        <arguments>
+            <argument name="configInterface" xsi:type="object">HyperionSampleCardConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardActiveValueHandler" type="Magentofullstackdev\HyperionSamplePsp\Gateway\Config\ActiveValueHandler">
+        <arguments>
+            <argument name="gatewayConfig" xsi:type="object">HyperionSampleCardConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardValueHandlerPool" type="Magento\Payment\Gateway\Config\ValueHandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="default" xsi:type="string">HyperionSampleCardConfigValueHandler</item>
+                <item name="active" xsi:type="string">HyperionSampleCardActiveValueHandler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardCommandPool" type="Magento\Payment\Gateway\Command\CommandPool">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="authorize" xsi:type="string">Magentofullstackdev\HyperionSamplePsp\Gateway\Command\AuthorizeCommand</item>
+                <item name="capture" xsi:type="string">Magentofullstackdev\HyperionSamplePsp\Gateway\Command\CaptureCommand</item>
+                <item name="vault_authorize" xsi:type="string">Magentofullstackdev\HyperionSamplePsp\Gateway\Command\VaultAuthorizeCommand</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardCommandManager" type="Magento\Payment\Gateway\Command\CommandManager">
+        <arguments>
+            <argument name="commandPool" xsi:type="object">HyperionSampleCardCommandPool</argument>
+        </arguments>
+    </virtualType>
+    <type name="Magento\Payment\Gateway\Command\CommandManagerPool">
+        <arguments>
+            <argument name="executors" xsi:type="array">
+                <item name="hyperion_sample_card" xsi:type="string">HyperionSampleCardCommandManager</item>
+            </argument>
+        </arguments>
+    </type>
+    <virtualType name="HyperionSampleCardFacade" type="Magento\Payment\Model\Method\Adapter">
+        <arguments>
+            <argument name="code" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::CARD</argument>
+            <argument name="formBlockType" xsi:type="string">Magento\Payment\Block\Form</argument>
+            <argument name="infoBlockType" xsi:type="string">Magento\Payment\Block\Info</argument>
+            <argument name="valueHandlerPool" xsi:type="object">HyperionSampleCardValueHandlerPool</argument>
+            <argument name="commandPool" xsi:type="object">HyperionSampleCardCommandPool</argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Stored cards: core's vault method over the card facade. -->
+    <virtualType name="HyperionSampleCardVaultConfig" type="Magento\Payment\Gateway\Config\Config">
+        <arguments>
+            <argument name="methodCode" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::CARD_VAULT</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardVaultValueHandler" type="VaultPaymentDefaultValueHandler">
+        <arguments>
+            <argument name="configInterface" xsi:type="object">HyperionSampleCardVaultConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardVaultValueHandlerPool" type="VaultPaymentValueHandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="default" xsi:type="string">HyperionSampleCardVaultValueHandler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleCardVaultFacade" type="Magento\Vault\Model\Method\Vault">
+        <arguments>
+            <argument name="config" xsi:type="object">HyperionSampleCardVaultConfig</argument>
+            <argument name="valueHandlerPool" xsi:type="object">HyperionSampleCardVaultValueHandlerPool</argument>
+            <argument name="vaultProvider" xsi:type="object">HyperionSampleCardFacade</argument>
+            <argument name="code" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::CARD_VAULT</argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Hosted page: no gateway call at order time, the return controller registers the payment. -->
+    <virtualType name="HyperionSampleRedirectConfig" type="Magento\Payment\Gateway\Config\Config">
+        <arguments>
+            <argument name="methodCode" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::REDIRECT</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleRedirectConfigValueHandler" type="Magento\Payment\Gateway\Config\ConfigValueHandler">
+        <arguments>
+            <argument name="configInterface" xsi:type="object">HyperionSampleRedirectConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleRedirectActiveValueHandler" type="Magentofullstackdev\HyperionSamplePsp\Gateway\Config\ActiveValueHandler">
+        <arguments>
+            <argument name="gatewayConfig" xsi:type="object">HyperionSampleRedirectConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleRedirectValueHandlerPool" type="Magento\Payment\Gateway\Config\ValueHandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="default" xsi:type="string">HyperionSampleRedirectConfigValueHandler</item>
+                <item name="active" xsi:type="string">HyperionSampleRedirectActiveValueHandler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleRedirectFacade" type="Magento\Payment\Model\Method\Adapter">
+        <arguments>
+            <argument name="code" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::REDIRECT</argument>
+            <argument name="formBlockType" xsi:type="string">Magento\Payment\Block\Form</argument>
+            <argument name="infoBlockType" xsi:type="string">Magento\Payment\Block\Info</argument>
+            <argument name="valueHandlerPool" xsi:type="object">HyperionSampleRedirectValueHandlerPool</argument>
+        </arguments>
+    </virtualType>
+
+    <!-- Declarative form: the reference travels in additional_data (Observer\FormDataAssignObserver). -->
+    <virtualType name="HyperionSampleFormConfig" type="Magento\Payment\Gateway\Config\Config">
+        <arguments>
+            <argument name="methodCode" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::FORM</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleFormConfigValueHandler" type="Magento\Payment\Gateway\Config\ConfigValueHandler">
+        <arguments>
+            <argument name="configInterface" xsi:type="object">HyperionSampleFormConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleFormActiveValueHandler" type="Magentofullstackdev\HyperionSamplePsp\Gateway\Config\ActiveValueHandler">
+        <arguments>
+            <argument name="gatewayConfig" xsi:type="object">HyperionSampleFormConfig</argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleFormValueHandlerPool" type="Magento\Payment\Gateway\Config\ValueHandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="default" xsi:type="string">HyperionSampleFormConfigValueHandler</item>
+                <item name="active" xsi:type="string">HyperionSampleFormActiveValueHandler</item>
+            </argument>
+        </arguments>
+    </virtualType>
+    <virtualType name="HyperionSampleFormFacade" type="Magento\Payment\Model\Method\Adapter">
+        <arguments>
+            <argument name="code" xsi:type="const">Magentofullstackdev\HyperionSamplePsp\Model\Config::FORM</argument>
+            <argument name="formBlockType" xsi:type="string">Magento\Payment\Block\Form</argument>
+            <argument name="infoBlockType" xsi:type="string">Magento\Payment\Block\Info</argument>
+            <argument name="valueHandlerPool" xsi:type="object">HyperionSampleFormValueHandlerPool</argument>
+        </arguments>
+    </virtualType>
+</config>

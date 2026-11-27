@@ -17,8 +17,14 @@ namespace Magentofullstackdev\HyperionCore\Model;
  *   * Be permitted to set a public, edge-cacheable `Cache-Control` via
  *     Magentofullstackdev\HyperionCore\Model\CacheHeaders::applyPublic().
  *
- * The list is wired by DI in etc/di.xml so new HTMX endpoints can opt in
- * without code changes.
+ * The list is the `paths` argument, declared in etc/frontend/di.xml only
+ * (an argument of the same name in another scope would replace it), so a new
+ * htmx endpoint opts in with one item. A prefix matches on a path segment
+ * boundary: `/hyperion/category/filter` matches itself and
+ * `/hyperion/category/filter/id/5`, never `/hyperion/category/filterx`.
+ *
+ * @api
+ * @since 0.9.0
  */
 class PublicRouteRegistry
 {
@@ -31,8 +37,9 @@ class PublicRouteRegistry
     }
 
     /**
-     * Returns true when the given request path starts with any registered
-     * prefix. Empty or invalid input returns false defensively.
+     * Returns true when the given request path is a registered prefix or
+     * continues it with a new path segment. Empty or invalid input returns
+     * false defensively.
      *
      * @param string $pathInfo
      * @return bool
@@ -46,7 +53,7 @@ class PublicRouteRegistry
             if (!is_string($prefix) || $prefix === '') {
                 continue;
             }
-            if (str_starts_with($pathInfo, $prefix)) {
+            if ($this->matchesPrefix($pathInfo, $prefix)) {
                 return true;
             }
         }
@@ -54,10 +61,29 @@ class PublicRouteRegistry
     }
 
     /**
+     * The registered path prefixes.
+     *
      * @return string[]
      */
     public function getPaths(): array
     {
         return array_values(array_filter($this->paths, 'is_string'));
+    }
+
+    /**
+     * A prefix ending with "/" is a segment boundary already; any other one
+     * matches the exact path or the path followed by "/".
+     *
+     * @param string $pathInfo
+     * @param string $prefix
+     * @return bool
+     */
+    private function matchesPrefix(string $pathInfo, string $prefix): bool
+    {
+        if (str_ends_with($prefix, '/')) {
+            return str_starts_with($pathInfo, $prefix);
+        }
+
+        return $pathInfo === $prefix || str_starts_with($pathInfo, $prefix . '/');
     }
 }

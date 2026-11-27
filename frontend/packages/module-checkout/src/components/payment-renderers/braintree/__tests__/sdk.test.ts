@@ -6,19 +6,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     BRAINTREE_SDK_VERSION,
     BraintreeSdkLoadError,
+    GOOGLE_PAY_LIBRARY_URL,
     braintreeScriptUrl,
     loadBraintreeModule,
-    loadScriptOnce,
-    setScriptLoaderForTests,
+    loadGooglePayLibrary,
 } from '../sdk.js';
 
 const CLIENT_URL = `https://js.braintreegateway.com/web/${BRAINTREE_SDK_VERSION}/js/client.min.js`;
 
 describe('Braintree SDK loader', () => {
     afterEach(() => {
-        setScriptLoaderForTests(null);
         delete window.braintree;
-        document.head.querySelectorAll('script').forEach((el) => el.remove());
+        delete window.google;
     });
 
     it('pins the SDK version of PayPal_Braintree 4.8', () => {
@@ -37,55 +36,38 @@ describe('Braintree SDK loader', () => {
         }
     });
 
-    it('requests a script once and shares the promise between callers', async () => {
+    it('loads the script through the context loader and answers the module it registered', async () => {
         const create = vi.fn();
-        const loader = vi.fn(async () => { window.braintree = { client: { create } }; });
-        setScriptLoaderForTests(loader);
+        const loadScript = vi.fn(async () => { window.braintree = { client: { create } }; });
 
-        const [first, second] = await Promise.all([
-            loadBraintreeModule('client'),
-            loadBraintreeModule('client'),
-        ]);
-        const third = await loadBraintreeModule('client');
+        const client = await loadBraintreeModule({ loadScript }, 'client');
 
-        expect(loader).toHaveBeenCalledTimes(1);
-        expect(loader).toHaveBeenCalledWith(CLIENT_URL);
-        expect(first.create).toBe(create);
-        expect(second).toBe(first);
-        expect(third).toBe(first);
+        expect(loadScript).toHaveBeenCalledWith(CLIENT_URL);
+        expect(client.create).toBe(create);
     });
 
-    it('rejects when the script fails and retries on the next call', async () => {
-        const loader = vi.fn()
-            .mockRejectedValueOnce(new BraintreeSdkLoadError(CLIENT_URL))
+    it('rejects when the script fails, and a later call asks the loader again', async () => {
+        const loadScript = vi.fn()
+            .mockRejectedValueOnce(new Error('network'))
             .mockImplementationOnce(async () => { window.braintree = { client: { create: vi.fn() } }; });
-        setScriptLoaderForTests(loader);
 
-        await expect(loadBraintreeModule('client')).rejects.toBeInstanceOf(BraintreeSdkLoadError);
-        await expect(loadBraintreeModule('client')).resolves.toBeDefined();
-        expect(loader).toHaveBeenCalledTimes(2);
+        await expect(loadBraintreeModule({ loadScript }, 'client')).rejects.toBeInstanceOf(BraintreeSdkLoadError);
+        await expect(loadBraintreeModule({ loadScript }, 'client')).resolves.toBeDefined();
+        expect(loadScript).toHaveBeenCalledTimes(2);
     });
 
     it('rejects when the script loaded but did not register its module', async () => {
-        setScriptLoaderForTests(vi.fn().mockResolvedValue(undefined));
-        await expect(loadBraintreeModule('hosted-fields')).rejects.toBeInstanceOf(BraintreeSdkLoadError);
+        await expect(loadBraintreeModule({ loadScript: vi.fn().mockResolvedValue(undefined) }, 'hosted-fields'))
+            .rejects.toBeInstanceOf(BraintreeSdkLoadError);
     });
 
-    it('injects an async script tag and settles on its load event', async () => {
-        const pending = loadScriptOnce(CLIENT_URL);
-        const tag = document.head.querySelector<HTMLScriptElement>(`script[src="${CLIENT_URL}"]`);
-        expect(tag).not.toBeNull();
-        expect(tag?.async).toBe(true);
-        tag?.dispatchEvent(new Event('load'));
-        await expect(pending).resolves.toBeUndefined();
-        expect(loadScriptOnce(CLIENT_URL)).toBe(pending);
-        expect(document.head.querySelectorAll(`script[src="${CLIENT_URL}"]`)).toHaveLength(1);
-    });
-
-    it('removes the tag and rejects on a script error', async () => {
-        const pending = loadScriptOnce(CLIENT_URL);
-        document.head.querySelector(`script[src="${CLIENT_URL}"]`)?.dispatchEvent(new Event('error'));
-        await expect(pending).rejects.toBeInstanceOf(BraintreeSdkLoadError);
-        expect(document.head.querySelector(`script[src="${CLIENT_URL}"]`)).toBeNull();
+    it('loads the Google Pay API through the same loader', async () => {
+        const PaymentsClient = class {};
+        const loadScript = vi.fn(async () => { window.google = { payments: { api: { PaymentsClient } } } as never; });
+        const google = await loadGooglePayLibrary({ loadScript });
+        expect(loadScript).toHaveBeenCalledWith(GOOGLE_PAY_LIBRARY_URL);
+        expect(google.payments.api.PaymentsClient).toBe(PaymentsClient);
+        await expect(loadGooglePayLibrary({ loadScript: vi.fn().mockRejectedValue(new Error('blocked')) }))
+            .rejects.toBeInstanceOf(BraintreeSdkLoadError);
     });
 });

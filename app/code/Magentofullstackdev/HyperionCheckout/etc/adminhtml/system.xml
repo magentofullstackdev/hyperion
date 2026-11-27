@@ -14,10 +14,11 @@
     change asks for new rates) and `.../preselect` (which rate is selected for a
     shopper who has not chosen one).
 
-    One field joins the Security group of the Hyperion Theme section
-    (Magentofullstackdev_HyperionCore):
-    `hyperion/security/cart_estimate_limit` (the request budget of the cart
-    page's shipping estimate).
+    Two fields join the Anti-Abuse Shield group (`security`) of the Hyperion Theme section
+    (Magentofullstackdev_HyperionCore), both request budgets of the rate
+    limiter: `hyperion/security/cart_estimate_limit` (the cart page's shipping
+    estimate) and `hyperion/security/cart_summary_limit` (the cart summary
+    that express buttons read).
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
@@ -102,6 +103,41 @@
                     <comment>Used when the shopper has not chosen a method and more than one is offered. A single offered method is always selected.</comment>
                 </field>
             </group>
+            <group id="payment" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Payment methods</label>
+                <field id="unsupported_methods" translate="label" sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Hidden payment methods</label>
+                    <frontend_model>Magentofullstackdev\HyperionCheckout\Block\Adminhtml\System\Config\UnsupportedMethods</frontend_model>
+                    <comment>Active payment methods that no checkout renderer serves are not shown to shoppers.</comment>
+                </field>
+            </group>
+            <group id="order_comment" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Order Comment</label>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Let Shoppers Add a Comment</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>A text field above Place Order. The comment is added to the order history, visible to the customer.</comment>
+                </field>
+                <field id="max_length" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Maximum Length</label>
+                    <validate>validate-digits validate-digits-range digits-range-1-5000</validate>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+            <group id="newsletter" translate="label" type="text" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Newsletter Opt-in</label>
+                <field id="enabled" translate="label comment" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Offer the Newsletter at Checkout</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Needs Magento_Newsletter. Guests see it only when guest subscription is allowed; subscribed customers never see it.</comment>
+                </field>
+                <field id="checked_by_default" translate="label comment" type="select" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Ticked by Default</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>A box ticked in advance is not valid consent under the GDPR. Keep No unless your market allows it.</comment>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
         </section>
         <section id="hyperion">
             <group id="security">
@@ -115,6 +151,18 @@
                     <label>Cart Estimate Requests per 10 Seconds</label>
                     <validate>validate-zero-or-greater validate-digits</validate>
                     <comment>Budget of one client for the shipping estimate of the cart page (hyperion/cart/estimate). 0 disables the limit.</comment>
+                    <depends><field id="rate_limit_enabled">1</field></depends>
+                </field>
+                <field id="cart_summary_limit"
+                       translate="label comment"
+                       type="text"
+                       sortOrder="36"
+                       showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Cart Summary Requests per 10 Seconds</label>
+                    <validate>validate-zero-or-greater validate-digits</validate>
+                    <comment>Budget of one client for the cart summary that express buttons read (hyperion/cart/summary). 0 disables the limit.</comment>
                     <depends><field id="rate_limit_enabled">1</field></depends>
                 </field>
             </group>

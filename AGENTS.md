@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this repository. Paths below are re
 
 ## Read First
 
-Read [CLAUDE.md](./CLAUDE.md) for architecture rules and conventions; it is tool agnostic despite its name. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/development.md](./docs/development.md) for setup, quality gates and release procedures. Consult [ARCHITECTURE.md](./ARCHITECTURE.md) when a change crosses module boundaries.
+Read [CLAUDE.md](./CLAUDE.md) for architecture rules and conventions; it is tool agnostic despite its name. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [docs/development.md](./docs/development.md) for setup, quality gates and release procedures. Consult [ARCHITECTURE.md](./ARCHITECTURE.md) when a change crosses module boundaries, and [docs/extensions.md](./docs/extensions.md) for the extension pools, slots and containers other modules use.
 
 ## Project Structure
 

@@ -13,6 +13,13 @@ use Psr\Log\LoggerInterface;
  * The first rule that restricts wins and provides the notice. A rule
  * that throws is logged and ignored (the store keeps selling), so a
  * broken optional module never hides every Add to Cart button.
+ *
+ * Public contract: the `restrictions` argument (etc/frontend/di.xml, items
+ * are objects implementing RestrictionInterface), `canPurchase()` and
+ * `getMessage()`. Templates ask ViewModel\Purchase instead.
+ *
+ * @api
+ * @since 0.9.0
  */
 class Availability
 {

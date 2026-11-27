@@ -148,7 +148,7 @@
 "Order Summary","Підсумок замовлення"
 "Order items","Товари замовлення"
 "Order status","Статус замовлення"
-"Out of Stock","Немає в наявності"
+"Out of stock","Немає в наявності"
 "Pagination","Пагінація"
 "Payment Method","Спосіб оплати"
 "Personal information","Особисті дані"
@@ -318,3 +318,4 @@
 "Bank Routing Number","Маршрутний номер банку"
 "Are you sure you want to delete this ACH Direct Debit account number ending in: %1?","Ви впевнені, що хочете видалити цей рахунок прямого дебетування ACH, номер якого закінчується на: %1?"
 "Shopping cart, items: %1","Кошик, товарів: %1"
+"There are no feeds available.","Немає доступних стрічок."

@@ -164,6 +164,23 @@ class CaptchaConfigProviderTest extends TestCase
         );
     }
 
+    public function testTheRecaptchaClientIsNeededOnlyWhenAnActionIsProtected(): void
+    {
+        self::assertFalse($this->provider($this->recaptcha([]), $this->captchaHelper())->hasRecaptcha());
+        self::assertTrue(
+            $this->provider($this->recaptcha(['coupon_code' => self::V3]), $this->captchaHelper())->hasRecaptcha()
+        );
+        $braintree = ['siteKey' => 'site-key-bt', 'action' => 'braintree'] + self::V3;
+        self::assertFalse(
+            $this->provider($this->recaptcha(['braintree' => $braintree]), $this->captchaHelper())->hasRecaptcha(),
+            'the Braintree form counts only with the Braintree module'
+        );
+        self::assertTrue(
+            $this->provider($this->recaptcha(['braintree' => $braintree]), $this->captchaHelper(), true)
+                ->hasRecaptcha()
+        );
+    }
+
     public function testTheJsonOfTheActionsIsAMapKeyedByAction(): void
     {
         $checkbox = [

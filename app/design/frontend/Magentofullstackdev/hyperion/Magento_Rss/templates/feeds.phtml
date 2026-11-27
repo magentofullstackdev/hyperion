@@ -1,0 +1,58 @@
+<?php
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Sergiu Ro -- magentofullstackdev
+declare(strict_types=1);
+/**
+ * RSS feed list (`/rss/`, block `rss.feeds`): the feeds without a
+ * group under "Miscellaneous Feeds", then one headed list per group (the
+ * category feeds), each entry a link to its feed.
+ *
+ * @var \Magento\Rss\Block\Feeds $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$misc = [];
+$groups = [];
+foreach ($block->getFeeds() as $feed) {
+    if (isset($feed['group'])) {
+        $groups[] = ['label' => (string) $feed['group'], 'feeds' => (array) ($feed['feeds'] ?? [])];
+    } elseif (isset($feed['link'])) {
+        $misc[] = $feed;
+    }
+}
+if ($misc) {
+    array_unshift($groups, ['label' => (string) __('Miscellaneous Feeds'), 'feeds' => $misc]);
+}
+$rssIcon = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"'
+    . ' aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round"'
+    . ' d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>';
+?>
+<div class="space-y-6" data-hyperion-rss-feeds>
+    <?php if (!$groups): ?>
+        <p class="text-sm text-muted"><?= $escaper->escapeHtml(__('There are no feeds available.')) ?></p>
+    <?php endif; ?>
+    <?php foreach ($groups as $index => $group): ?>
+        <?php $headingId = 'hyperion-rss-group-' . (int) $index; ?>
+        <section class="bg-surface border border-subtle rounded-xl p-5"
+                 aria-labelledby="<?= $escaper->escapeHtmlAttr($headingId) ?>">
+            <h2 id="<?= $escaper->escapeHtmlAttr($headingId) ?>"
+                class="text-lg font-semibold text-secondary mb-3">
+                <?= $escaper->escapeHtml($group['label']) ?>
+            </h2>
+            <ul class="divide-y divide-subtle">
+                <?php foreach ($group['feeds'] as $feed): ?>
+                    <?php if (!isset($feed['link'], $feed['label'])) {
+                        continue;
+                    } ?>
+                    <li class="py-2">
+                        <a href="<?= $escaper->escapeUrl((string) $feed['link']) ?>"
+                           class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                           data-hyperion-rss-feed>
+                            <?= /* @noEscape */ $rssIcon ?>
+                            <?= $escaper->escapeHtml((string) $feed['label']) ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </section>
+    <?php endforeach; ?>
+</div>

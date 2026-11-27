@@ -42,6 +42,7 @@ class Footer extends Template implements IdentityInterface
     private const XML_PATH_TERMS = 'hyperion/footer/terms_cms_identifier';
     private const XML_PATH_PRIVACY = 'hyperion/footer/privacy_cms_identifier';
     private const XML_PATH_COPYRIGHT = 'design/footer/copyright';
+    private const XML_PATH_CONTACT_ENABLED = 'contact/contact/enabled';
 
     /**
      * The about block of the current store: null until asked, false when there is none.
@@ -169,6 +170,17 @@ class Footer extends Template implements IdentityInterface
     }
 
     /**
+     * Width and height attributes of the logo image.
+     *
+     * @see \Magentofullstackdev\HyperionNavigation\Model\LogoResolver::getLogoDimensions()
+     * @return array{width: int, height: int}
+     */
+    public function getLogoDimensions(): array
+    {
+        return $this->logoResolver->getLogoDimensions();
+    }
+
+    /**
      * @return string
      */
     public function getLogoAlt(): string
@@ -237,10 +249,21 @@ class Footer extends Template implements IdentityInterface
     }
 
     /**
+     * The contact page URL, empty while "Enable Contact Us" is off (the page answers 404 then).
+     *
      * @return string
      */
     public function getContactUrl(): string
     {
+        try {
+            if (!$this->scopeConfig->isSetFlag(self::XML_PATH_CONTACT_ENABLED, ScopeInterface::SCOPE_STORE)) {
+                return '';
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('Hyperion Footer: failed to read the contact setting: ' . $e->getMessage());
+            return '';
+        }
+
         return $this->getUrl('contact');
     }
 
@@ -325,7 +348,7 @@ class Footer extends Template implements IdentityInterface
                 if (!$child instanceof AbstractBlock || !method_exists($child, 'getHref')) {
                     continue;
                 }
-                $label = trim((string) $child->getData('label'));
+                $label = $this->linkLabel($child);
                 $url = (string) $child->getHref();
                 if ($label === '' || $url === '') {
                     continue;
@@ -343,6 +366,21 @@ class Footer extends Template implements IdentityInterface
             $this->logger->error('Hyperion Footer: failed to collect the service links: ' . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * The label of a link block: its own getLabel() when the class declares one (a label computed
+     * by the block, without a `label` argument), the `label` layout argument otherwise. The child
+     * is never rendered for it.
+     *
+     * @param AbstractBlock $link
+     * @return string
+     */
+    private function linkLabel(AbstractBlock $link): string
+    {
+        $label = method_exists($link, 'getLabel') ? trim((string) $link->getLabel()) : '';
+
+        return $label !== '' ? $label : trim((string) $link->getData('label'));
     }
 
     /**

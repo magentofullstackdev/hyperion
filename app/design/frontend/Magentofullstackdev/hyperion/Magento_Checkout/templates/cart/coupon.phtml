@@ -16,26 +16,28 @@ declare(strict_types=1);
  * `sales_rule_coupon_request`, added by the cart layouts, and the
  * `coupon_code` reCAPTCHA core's `Magento_ReCaptchaCheckoutSalesRule`
  * mounts here, see the theme layouts under
- * Magento_ReCaptchaCheckoutSalesRule/) are rendered inside an inert
- * <template>: the component moves them into its own <form> after the
- * first render, so <hyperion-recaptcha> gates the submit and the fields
- * `captcha[sales_rule_coupon_request]` and `g-recaptcha-response` are part
- * of the HTMX request body. The HTMX answer (CouponPostPlugin) renders
- * this very template again, children included: a new CAPTCHA image after
- * every attempt.
+ * Magento_ReCaptchaCheckoutSalesRule/) are printed once, inside the
+ * skeleton form below.
+ *
+ * The skeleton is the form the component renders, box for box and class
+ * for class, in the state the server knows: closed, open with the applied
+ * coupon, or open with a refused code and its message. It holds the
+ * element's final geometry until the chunk arrives, so the upgrade moves
+ * nothing, and it is a working plain form meanwhile and without scripting
+ * (it posts through the standard browser navigation path, a required
+ * CAPTCHA answer posts with the code). At its upgrade the component moves
+ * the children into its own <form> (so <hyperion-recaptcha> gates the
+ * HTMX submit and the fields `captcha[sales_rule_coupon_request]` and
+ * `g-recaptcha-response` are part of the request body) and drops the
+ * skeleton. The HTMX answer (CouponPostPlugin) renders this very template
+ * again, children included: a new CAPTCHA image after every attempt.
  *
  * A refused code comes back as `attempted-code` and `error-message`: the
- * component renders open, with the code in the field and the message
- * under it.
- *
- * Without scripting the noscript fallback below keeps the coupon form
- * usable as a plain HTML form that posts through the standard browser
- * navigation path (the children are printed inside it, a required CAPTCHA
- * answer posts with the code). It is left out of an HTMX answer: htmx
- * parses a fragment with scripting off, so the fallback would become a
- * second real form with a second `coupon_code` field. The `remove` flag is
- * only sent in cancel mode: core's reCAPTCHA observer skips the check
- * whenever the parameter is present.
+ * form renders open, with the code in the field and the message under it.
+ * The message line is printed empty otherwise: the open form always
+ * reserves its height, so a message arriving or going moves nothing.
+ * The `remove` flag is only sent in cancel mode: core's reCAPTCHA observer
+ * skips the check whenever the parameter is present.
  *
  * @var \Magentofullstackdev\HyperionCheckout\Block\Cart\Coupon $block
  * @var \Magento\Framework\Escaper $escaper
@@ -46,6 +48,15 @@ $formKey = $block->getFormKey();
 $childrenHtml = trim((string) $block->getChildHtml());
 $attemptedCode = $appliedCoupon === '' ? $block->getAttemptedCode() : '';
 $attemptError = $attemptedCode !== '' ? $block->getAttemptError() : '';
+// The answer to the form's own request (apply or cancel, CouponPostPlugin)
+// renders it open: it must not collapse and move the page when it arrives.
+// Other cart answers that print this block (a quantity change, the estimator)
+// leave it as the coupon state says.
+$request = $block->getRequest();
+$isCouponAnswer = $request instanceof \Magento\Framework\App\Request\Http
+    && strtolower($request->getFullActionName()) === 'checkout_cart_couponpost';
+$isOpen = $appliedCoupon !== '' || $attemptedCode !== '' || $isCouponAnswer;
+$headingLabel = (string) __('Apply Discount Code');
 ?>
 <hyperion-coupon-form
         id="hyperion-coupon-form"
@@ -53,40 +64,66 @@ $attemptError = $attemptedCode !== '' ? $block->getAttemptError() : '';
         applied-coupon="<?= $escaper->escapeHtmlAttr($appliedCoupon) ?>"
         action-url="<?= $escaper->escapeHtmlAttr($actionUrl) ?>"
         form-key="<?= $escaper->escapeHtmlAttr($formKey) ?>"
+        <?php if ($isCouponAnswer): ?>expanded<?php endif; ?>
         <?php if ($attemptedCode !== ''): ?>
             attempted-code="<?= $escaper->escapeHtmlAttr($attemptedCode) ?>"
             error-message="<?= $escaper->escapeHtmlAttr($attemptError) ?>"
         <?php endif; ?>
-        heading-label="<?= $escaper->escapeHtmlAttr(__('Apply Discount Code')) ?>"
+        heading-label="<?= $escaper->escapeHtmlAttr($headingLabel) ?>"
         placeholder-label="<?= $escaper->escapeHtmlAttr(__('Enter discount code')) ?>"
         apply-label="<?= $escaper->escapeHtmlAttr(__('Apply Discount')) ?>"
         cancel-label="<?= $escaper->escapeHtmlAttr(__('Cancel Coupon')) ?>"
         input-label="<?= $escaper->escapeHtmlAttr(__('Discount code')) ?>">
-    <?php if ($childrenHtml !== ''): ?>
-        <template data-hyperion-coupon-children><?= /* @noEscape */ $childrenHtml ?></template>
-    <?php endif; ?>
-    <?php if (!$block->isHtmxRequest()): ?>
-    <noscript>
-        <section class="bg-surface rounded-xl border border-subtle p-4">
-            <form method="post" action="<?= $escaper->escapeUrl($actionUrl) ?>" class="flex flex-wrap items-stretch gap-2 min-w-0">
+    <section class="bg-surface rounded-xl border border-subtle p-4"
+             aria-label="<?= $escaper->escapeHtmlAttr($headingLabel) ?>"
+             data-hyperion-coupon-skeleton>
+        <details class="group"<?php if ($isOpen): ?> open<?php endif; ?>>
+            <summary class="flex cursor-pointer items-center justify-between select-none">
+                <span class="text-sm font-semibold text-primary hover:text-primary-hover transition-colors">
+                    <?= $escaper->escapeHtml($headingLabel) ?>
+                </span>
+                <svg class="w-4 h-4 text-muted transition-transform group-open:rotate-180"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </summary>
+            <form method="post" action="<?= $escaper->escapeUrl($actionUrl) ?>" class="mt-3 flex flex-col gap-2">
                 <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($formKey) ?>">
                 <?php if ($appliedCoupon !== ''): ?>
                     <input type="hidden" name="remove" value="1">
                 <?php endif; ?>
-                <input type="text" name="coupon_code"
-                       value="<?= $escaper->escapeHtmlAttr($appliedCoupon) ?>"
-                       placeholder="<?= $escaper->escapeHtmlAttr(__('Enter discount code')) ?>"
-                       aria-label="<?= $escaper->escapeHtmlAttr(__('Discount code')) ?>"
-                       class="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface border border-subtle text-secondary">
-                <button type="submit"
-                        class="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-on-primary border border-primary hover:bg-primary-hover">
-                    <?= $escaper->escapeHtml($appliedCoupon !== '' ? __('Cancel Coupon') : __('Apply Discount')) ?>
-                </button>
-                <?php if ($childrenHtml !== ''): ?>
-                    <div class="basis-full"><?= /* @noEscape */ $childrenHtml ?></div>
+                <div class="flex items-stretch gap-2 min-w-0">
+                    <input type="text"
+                           name="coupon_code"
+                           value="<?= $escaper->escapeHtmlAttr($appliedCoupon !== '' ? $appliedCoupon : $attemptedCode) ?>"
+                           placeholder="<?= $escaper->escapeHtmlAttr(__('Enter discount code')) ?>"
+                           class="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface border border-subtle text-secondary
+                                  focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary
+                                  aria-[invalid=true]:border-error"
+                           <?php if ($appliedCoupon !== ''): ?>readonly<?php endif; ?>
+                           <?php if ($attemptedCode !== ''): ?>aria-invalid="true"<?php endif; ?>
+                           <?php if ($attemptError !== ''): ?>aria-describedby="hyperion-coupon-error"<?php endif; ?>
+                           aria-label="<?= $escaper->escapeHtmlAttr(__('Discount code')) ?>">
+                    <?php if ($appliedCoupon !== ''): ?>
+                        <button type="submit"
+                                class="relative shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors bg-surface-raised border border-subtle text-secondary hover:border-primary hover:text-primary">
+                            <span><?= $escaper->escapeHtml(__('Cancel Coupon')) ?></span>
+                        </button>
+                    <?php else: ?>
+                        <button type="submit"
+                                class="relative shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition-colors bg-primary text-on-primary border border-primary hover:bg-primary-hover">
+                            <span><?= $escaper->escapeHtml(__('Apply Discount')) ?></span>
+                        </button>
+                    <?php endif; ?>
+                </div>
+                <?php /* Always printed: the open form reserves the message line (see the component). */ ?>
+                <?php if ($attemptError !== ''): ?>
+                    <p id="hyperion-coupon-error" class="min-h-10 text-sm text-error sm:min-h-5" data-hyperion-coupon-message data-hyperion-coupon-error><?= $escaper->escapeHtml($attemptError) ?></p>
+                <?php else: ?>
+                    <p class="min-h-10 text-sm text-error sm:min-h-5" data-hyperion-coupon-message></p>
                 <?php endif; ?>
+                <div data-coupon-extra-slot class="empty:hidden"><?= /* @noEscape */ $childrenHtml ?></div>
             </form>
-        </section>
-    </noscript>
-    <?php endif; ?>
+        </details>
+    </section>
 </hyperion-coupon-form>
