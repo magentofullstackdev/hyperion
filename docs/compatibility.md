@@ -42,7 +42,7 @@ level 5 and four scripts: `pw-suite.mjs`, `pw-a11y.mjs`, `pw-cls.mjs` and
 | 1 | Magento Open Source 2.4.9 (MariaDB, OpenSearch 3) | 8.4 | 7.7 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | all green, counts below | 1410 (PHPUnit 12) | 0 | 0 |
 | 1 | Magento Open Source 2.4.9, same install, JS, CSS and HTML minification on | 8.4 | 7.7 | Composer, copied, `setup:static-content:deploy` | production | `0.9.0-beta.7` | 2026-11-25 | 86 / 86 | all green, the full battery with the counts of the row above | 1383 (PHPUnit 12) | 0 | 0 |
 | 1 | Mage-OS 4.0.0 (MariaDB 12.3, OpenSearch 3.9, Valkey 8.1) | 8.5 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | all green, see the note on counts below | 1410 (PHPUnit 12) | 0 | 0 |
-| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.6` | 2026-11-20 | 86 / 86 | all green, see the note on counts below | 926 (PHPUnit 12) | 0 | 0 |
+| 1 | Magento Open Source 2.4.9 (MariaDB 12.3, OpenSearch 3.9, Valkey 9) | 8.5 | 8 | Composer, from the published Composer repository, clean install on Luma sample data | developer (battery), production (checked by hand) | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | all green, see the note on counts below | 1410 (PHPUnit 12) | 0 | 0 |
 | 2 | Magento Open Source 2.4.8-p5 | 8.3 | 7.6 | Composer, copied, clean install on Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 65, `pw-listing-state` 26 | 1410 (PHPUnit 10) | 0 | not in the smoke battery |
 | 2 | Mage-OS 3.6.0 (OpenSearch 3.9, Valkey 8.1) | 8.4 | 7.7 | Composer, copied, `create-project` from repo.mage-os.org + Luma sample data | developer | `0.9.0-beta.7` | 2026-11-27 | 86 / 86 | smoke set: `pw-a11y` 19, `pw-cls` 65, `pw-listing-state` 26 | 1410 (PHPUnit 12) | 0 | not in the smoke battery |
 
@@ -52,12 +52,13 @@ subject).
 
 The Magento 2.4.9 / PHP 8.5 / Varnish 8 row is an install that takes the
 packages from the published Composer repository, so its battery runs after
-the publication of a release: the full battery passed there on 2026-11-20,
-on the published `0.9.0-beta.6` packages. Four scripts count fewer checks
+the publication of a release: the full battery passed there on 2026-11-27,
+on the published `0.9.0-beta.7` packages. Six scripts count fewer checks
 than on the first row because that install has no reCAPTCHA v3 keys and no
-active Braintree method (`pw-cart-features.mjs` 89, `pw-fallback-pages.mjs`
-67, `pw-checkout-flow.mjs` 160 without the Braintree card orders,
-`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped). Production mode
+active Braintree method (`pw-cart-features.mjs` 101, `pw-fallback-pages.mjs`
+87, `pw-checkout-flow.mjs` 160 without the Braintree card orders,
+`pw-captcha.mjs` 96 with the reCAPTCHA v3 parts skipped,
+`pw-payment-api.mjs` 135, `pw-extension-points.mjs` 209). Production mode
 was checked by hand on a storefront deployed from the same packages (home,
 category, product, cart, search, checkout and sign-in pages: no console
 error, no failed request).
@@ -81,14 +82,14 @@ the same way; the checkout shows that refusal at the CAPTCHA field on both.
 On that row the Open Graph and JSON-LD checks ran against the platform SEO
 module, see "Mage-OS 4.0 SEO module" below.
 
-One row was not run again for `0.9.0-beta.7`: the row of the published
-Composer repository (its battery runs after the publication) shows its
-`0.9.0-beta.6` run. The production mode row is a run of 2026-11-25 on a
+Every row was run for `0.9.0-beta.7`; the row of the published Composer
+repository ran after the publication, on the published packages. The
+production mode row is a run of 2026-11-25 on a
 build of this release that lacked its last changes (the persistent cart
 rules for SOAP, GraphQL, the gift message and the cart estimator, the
 writer of a handed-over checkout draft, the express add with "redirect
 to cart" on, the admin field of the cart summary limit): they have unit
-tests and are part of the runs of the other four rows, and every template
+tests and are part of the runs of the other five rows, and every template
 passed Magento's HTML minifier on 2026-11-27. The first Magento 2.4.9 row
 and the Mage-OS 4.0 row are one full battery each on the release tree
 (on the first row `pw-shipping-extensions.mjs` ran once more by itself
